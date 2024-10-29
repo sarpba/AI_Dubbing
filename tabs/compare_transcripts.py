@@ -2,6 +2,7 @@
 import os
 import json
 import base64
+import re  # Új import hozzáadva
 from .utils import normalize_text, escape_html_text
 
 def compare_transcripts_whisperx(proj_name, workdir="workdir"):
@@ -32,6 +33,29 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
 
         if not json_files:
             return "Nincs található JSON fájl a transcripts_split könyvtárban."
+
+        # Új függvény az időbélyeg kiolvasásához
+        def get_timestamp(filename):
+            """
+            Kivonja az időbélyeget a fájlnévből és visszaadja azt másodpercben.
+
+            Példa fájlnév: 00-00-20.230-00-00-23.632_SPEAKER_15.json
+
+            Args:
+                filename (str): A fájlnév.
+
+            Returns:
+                float: Az időbélyeg másodpercben.
+            """
+            match = re.match(r'(\d{2})-(\d{2})-(\d{2}\.\d+)-', filename)
+            if match:
+                hours, minutes, seconds = match.groups()
+                return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+            else:
+                return 0  # Ha nincs egyezés, a fájl elejére kerül
+
+        # Rendezés az időbélyeg alapján
+        json_files = sorted(json_files, key=get_timestamp)
 
         # Initialize HTML table
         html_content = """
@@ -184,4 +208,3 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
 
     except Exception as e:
         return f"Hiba történt az összehasonlítás során: {str(e)}"
-

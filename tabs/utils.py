@@ -30,11 +30,16 @@ def get_available_gpus():
         return []
 
 
-import sys
+def ensure_directory(path):
+    """
+    Biztosítja, hogy a megadott könyvtár létezik. Ha nem, létrehozza.
+    """
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 def run_script(cmd, shell=False):
     """
-    Egy külső script futtatása és a kimenet olvasása.
+    Egy külső script futtatása és a kimenet olvasása soronként.
 
     Args:
         cmd (list vagy str): A futtatni kívánt parancs. Lehet list vagy str.
@@ -46,7 +51,6 @@ def run_script(cmd, shell=False):
     if shell and isinstance(cmd, list):
         cmd = ' '.join(cmd)
 
-    # A bufsize=1 és universal_newlines=True beállítása a valós idejű kimenetért
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
@@ -57,7 +61,7 @@ def run_script(cmd, shell=False):
         universal_newlines=True
     )
     try:
-        for line in iter(process.stdout.readline, ''):
+        for line in process.stdout:
             yield line.rstrip()
     except Exception as e:
         yield f"\nHiba történt a script futtatása közben: {e}"
@@ -68,7 +72,6 @@ def run_script(cmd, shell=False):
             yield f"\nScript végrehajtása sikertelen, kilépési kód: {return_code}"
         else:
             yield f"\nScript végrehajtása sikeresen befejeződött."
-
 
 
 def normalize_text(text):

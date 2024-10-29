@@ -2,3 +2,5 @@
 workdir/
 tabs/__pycache__
 info.txt
+TTS/model_270000_hun.pt
+TTS/vocab.txt

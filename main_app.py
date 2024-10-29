@@ -222,7 +222,7 @@ with gr.Blocks() as demo:
 
     # Tab 8: TTS Hangfájlok Generálása
     with gr.Tab("8. TTS Hangfájlok Generálása"):
-        gr.Markdown("## TTS hangfájlok generálása a F5-TTS segítségével")
+        gr.Markdown("## TTS hangfájlok generálása a f5-tts_infer-cli parancs segítségével")
 
         with gr.Row():
             proj_name_step8 = gr.Dropdown(label="Projekt kiválasztása", choices=list_projects(), interactive=True)
@@ -325,4 +325,3 @@ with gr.Blocks() as demo:
 
 # Alkalmazás indítása
 demo.launch()
-

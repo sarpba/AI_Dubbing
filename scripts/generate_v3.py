@@ -123,8 +123,8 @@ def process_task(args, task, gpu_id):
             print(f"Error: Generated text file does not exist: {gen_text_path}. Skipping.")
             return
         with open(gen_text_path, 'r', encoding='utf-8') as f:
-            gen_text = f.read().strip()
-        task['gen_text'] = gen_text
+            gen_text = f.read().strip().lower()           
+        task['gen_text'] = "... " + gen_text
     elif args.gen_text_file:
         task['gen_text'] = None  # Will be handled via '-f' flag
     # Else, gen_text is already provided via '-t'
