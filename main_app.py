@@ -245,17 +245,6 @@ with gr.Blocks() as demo:
         with gr.Row():
             proj_name_step9 = gr.Dropdown(label="Projekt kiválasztása", choices=list_projects(), interactive=True)
 
-        with gr.Row():
-            merge_chunks_button = gr.Button("Chunks Egyesítése Indítása")
-
-        output9 = gr.Textbox(label="Eredmény", lines=20)
-
-        merge_chunks_button.click(
-            merge_chunks,
-            inputs=[proj_name_step9],
-            outputs=output9
-        )
-
         gr.Markdown("## Audio illesztés és hangerő normalizálás")
 
         with gr.Row():
@@ -276,6 +265,16 @@ with gr.Blocks() as demo:
             outputs=output9_adjust
         )
 
+        with gr.Row():
+            merge_chunks_button = gr.Button("Chunks Egyesítése Indítása")
+
+        output9 = gr.Textbox(label="Eredmény", lines=20)
+
+        merge_chunks_button.click(
+            merge_chunks,
+            inputs=[proj_name_step9],
+            outputs=output9
+        )
     # Tab 10: Audio Integrálása a Videóba
     with gr.Tab("10. Audio Integrálása a Videóba"):
         gr.Markdown("## Audio fájl integrálása a videóba a megadott nyelvi címkével")
