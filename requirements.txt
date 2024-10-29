@@ -1,0 +1,5 @@
+gradio
+moviepy
+pydub
+deepl
+
