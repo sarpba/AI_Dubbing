@@ -1,5 +1,5 @@
-# AI_sync
-semi-automatic video synchronization
+# HEAVY WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or dayleater.
+It's a hobby project. I'll just a little maintan.
 
 At the moment It run on linux only with anaconda.
 
