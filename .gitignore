@@ -1,0 +1,4 @@
+# Kizárt könyvtárak
+workdir/
+tabs/__pycache__
+info.txt

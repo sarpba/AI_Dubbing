@@ -121,7 +121,7 @@ def tts_generation(proj_name, workdir="workdir", logdir="LOG"):
 
                 # Logolás megkezdése
                 # Az idézőjelek a szövegek körül, hogy kezeljük a szóközöket
-                start_message = f"Futtatás: {' '.join(cmd[:7])}" -s \"{split_text}\" -t \"{normalized_translate_text}\" {' '.join(cmd[8:])}"
+                start_message = f"Futtatás: {' '.join(cmd[:7])} -s \"{split_text}\" -t \"{normalized_translate_text}\" {' '.join(cmd[8:])}"
                 log_file.write(start_message + '\n')
                 log_file.flush()
                 yield start_message

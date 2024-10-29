@@ -1,4 +1,5 @@
 # main_app.py
+import os
 import gradio as gr
 from tabs import (
     upload_and_extract_audio,
@@ -14,6 +15,19 @@ from tabs import (
     tts_generation,  # Új import
     # Importáld a további tab modulokat itt
 )
+
+
+# A kívánt könyvtár munkakönyvtár
+directory = "workdir"
+
+# Ellenőrzi, hogy a könyvtár létezik-e
+if not os.path.exists(directory):
+    os.makedirs(directory)
+    print(f'"{directory}" könyvtár létrehozva.')
+else:
+    print(f'"{directory}" könyvtár már létezik.')
+
+
 from tabs.utils import list_projects, get_available_gpus
 
 def dummy_function(*args, **kwargs):
@@ -54,7 +68,7 @@ with gr.Blocks() as demo:
             hf_token = gr.Textbox(label="Hugging Face Token", type="password", placeholder="Add meg a Hugging Face tokened")
 
         with gr.Row():
-            device_selection = gr.Dropdown(label="Eszköz", choices=["cpu", "cuda"], value="cpu")
+            device_selection = gr.Dropdown(label="Eszköz", choices=["cpu", "cuda"], value="cuda")
             device_index_selection = gr.Dropdown(
                 label="GPU index",
                 choices=[str(i) for i in get_available_gpus()],
