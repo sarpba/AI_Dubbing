@@ -1,4 +1,4 @@
-# HEAVY WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or dayleater.
+# HEAVY WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
 It's a hobby project. I'll just a little maintan.
 
 At the moment It run on linux only with anaconda.
