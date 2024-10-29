@@ -75,7 +75,7 @@ def worker(gpu_id, task_queue, hf_token):
             start_datetime = datetime.datetime.now()
 
             # 1. Load the WhisperX model
-            model = whisperx.load_model("large-v3", device=device, compute_type="float16")
+            model = whisperx.load_model("large-v2", device=device, compute_type="float16")
 
             # 2. Load and transcribe the audio
             audio = whisperx.load_audio(audio_file)
