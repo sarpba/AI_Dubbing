@@ -9,6 +9,7 @@ conda  create -n F5-TTS python=3.10 && conda activate F5-TTS
 conda install git
 pip install torch==2.3.0+cu118 torchaudio==2.3.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
 pip install git+https://github.com/SWivid/F5-TTS.git
+pip install -r requirements.txt
 ```
 
 Prepare AI_sync anaconda enviroment:
