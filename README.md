@@ -1,4 +1,6 @@
-# WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
+# a semi-automatic video synchronization system 
+WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
+
 
 The project uses the following AI models:
 
