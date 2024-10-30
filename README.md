@@ -1,10 +1,10 @@
-# HEAVY WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
+# WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
 
 The project uses the following AI models:
 
-OpenAI Whisper-large-v2
-Pyannote Speaker Diarization 3.1
-Facebookresearch demucs
+OpenAI Whisper
+Pyannote Speaker Diarization
+Facebookresearch demucs MDXnet
 SWivid F5-TTS
 
 It's a hobby project. I'll just a little maintan.
@@ -49,4 +49,4 @@ todo:
 - change the TTS run method a faster on (with multigpu support)
 ...
 
-License: ...
+License: MIT
