@@ -1,4 +1,5 @@
-# a semi-automatic video synchronization system 
+# AI-sync is a semi-automatic video synchronization system.
+
 WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
 
 
