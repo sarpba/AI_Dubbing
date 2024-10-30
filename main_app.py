@@ -17,15 +17,23 @@ from tabs import (
 )
 
 
-# A kívánt könyvtár munkakönyvtár
-directory = "workdir"
+# A kívánt könyvtárak a gyökérben
+work_directory = "workdir"
+tts_directory = "TTS"
 
-# Ellenőrzi, hogy a könyvtár létezik-e
-if not os.path.exists(directory):
-    os.makedirs(directory)
-    print(f'"{directory}" könyvtár létrehozva.')
+# Ellenőrzi, hogy a workdir könyvtár létezik-e
+if not os.path.exists(work_directory):
+    os.makedirs(work_directory)
+    print(f'"{work_directory}" könyvtár létrehozva.')
 else:
-    print(f'"{directory}" könyvtár már létezik.')
+    print(f'"{work_directory}" könyvtár már létezik.')
+
+# Ellenőrzi, hogy a TTS könyvtár létezik-e
+if not os.path.exists(tts_directory):
+    os.makedirs(tts_directory)
+    print(f'"{tts_directory}" könyvtár létrehozva.')
+else:
+    print(f'"{tts_directory}" könyvtár már létezik.')
 
 
 from tabs.utils import list_projects, get_available_gpus
