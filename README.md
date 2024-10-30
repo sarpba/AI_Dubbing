@@ -50,7 +50,7 @@ todo:
 
 - make a manual correction tab, for change automatic translate or base audio fi need.
 - need a good working normaliser metod which is with multilang moduls (change numbers and spacial characters to words, because the finetuned modells not heandle it good)
-- change the TTS run method a faster on (with multigpu support)
+- change the TTS run method to a faster methode (with multigpu support)
 ...
 
 License: MIT
