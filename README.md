@@ -2,9 +2,9 @@
 
 The project uses the following AI models:
 
-OpenAI Whisper
-Pyannote Speaker Diarization
-Facebookresearch demucs MDXnet
+OpenAI Whisper, 
+Pyannote Speaker Diarization, 
+Facebookresearch demucs MDXnet, 
 SWivid F5-TTS
 
 It's a hobby project. I'll just a little maintan.
