@@ -1,0 +1,374 @@
+Átnevezve: workdir/Invasion_2.1/output/Invasion.2021.S02E01.WEB.h264_with_new_audio.mkv -> workdir/Invasion_2.1/output/Invasion.2021.S02E01.WEB.h264_with_new_audio_2024.10.31-21_35.mkv
+Eredeti audio codec: aac
+ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers
+  built with gcc 11 (Ubuntu 11.2.0-19ubuntu1)
+  configuration: --prefix=/usr --extra-version=0ubuntu0.22.04.1 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librabbitmq --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opencl --enable-opengl --enable-sdl2 --enable-pocketsphinx --enable-librsvg --enable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared
+  libavutil      56. 70.100 / 56. 70.100
+  libavcodec     58.134.100 / 58.134.100
+  libavformat    58. 76.100 / 58. 76.100
+  libavdevice    58. 13.100 / 58. 13.100
+  libavfilter     7.110.100 /  7.110.100
+  libswscale      5.  9.100 /  5.  9.100
+  libswresample   3.  9.100 /  3.  9.100
+  libpostproc    55.  9.100 / 55.  9.100
+Guessed Channel Layout for Input Stream #0.0 : stereo
+Input #0, wav, from 'workdir/Invasion_2.1/sync_merged/sync.wav':
+  Duration: 00:57:32.10, bitrate: 1411 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 44100 Hz, stereo, s16, 1411 kb/s
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_s16le (native) -> aac (native))
+Press [q] to stop, [?] for help
+Output #0, adts, to 'processed_audio.aac':
+  Metadata:
+    encoder         : Lavf58.76.100
+  Stream #0:0: Audio: aac (LC), 44100 Hz, stereo, fltp, 128 kb/s
+    Metadata:
+      encoder         : Lavc58.134.100 aac
+size=       0kB time=00:00:00.00 bitrate=N/A speed=   0x
+size=    1024kB time=00:01:10.77 bitrate= 118.5kbits/s speed= 142x
+size=    2304kB time=00:02:27.26 bitrate= 128.2kbits/s speed= 147x
+size=    3328kB time=00:03:43.39 bitrate= 122.0kbits/s speed= 149x
+size=    4608kB time=00:04:59.65 bitrate= 126.0kbits/s speed= 150x
+size=    5888kB time=00:06:17.34 bitrate= 127.8kbits/s speed= 151x
+size=    7168kB time=00:07:38.38 bitrate= 128.1kbits/s speed= 153x
+size=    8448kB time=00:08:54.91 bitrate= 129.4kbits/s speed= 153x
+size=    9728kB time=00:10:11.00 bitrate= 130.4kbits/s speed= 153x
+size=   10752kB time=00:11:27.03 bitrate= 128.2kbits/s speed= 153x
+size=   12032kB time=00:12:45.07 bitrate= 128.8kbits/s speed= 153x
+size=   13312kB time=00:14:02.46 bitrate= 129.4kbits/s speed= 153x
+size=   14592kB time=00:15:19.13 bitrate= 130.1kbits/s speed= 153x
+size=   15872kB time=00:16:36.11 bitrate= 130.5kbits/s speed= 153x
+size=   17152kB time=00:17:53.13 bitrate= 130.9kbits/s speed= 153x
+size=   18176kB time=00:19:10.64 bitrate= 129.4kbits/s speed= 153x
+size=   19456kB time=00:20:25.36 bitrate= 130.1kbits/s speed= 153x
+size=   20736kB time=00:21:39.87 bitrate= 130.7kbits/s speed= 153x
+size=   21760kB time=00:22:55.38 bitrate= 129.6kbits/s speed= 153x
+size=   23040kB time=00:24:12.71 bitrate= 129.9kbits/s speed= 153x
+size=   24320kB time=00:25:28.12 bitrate= 130.4kbits/s speed= 153x
+size=   25600kB time=00:26:44.17 bitrate= 130.7kbits/s speed= 153x
+size=   26624kB time=00:28:01.24 bitrate= 129.7kbits/s speed= 153x
+size=   27904kB time=00:29:16.56 bitrate= 130.1kbits/s speed= 153x
+size=   29184kB time=00:30:32.91 bitrate= 130.4kbits/s speed= 153x
+size=   30464kB time=00:31:49.21 bitrate= 130.7kbits/s speed= 153x
+size=   31488kB time=00:33:03.63 bitrate= 130.0kbits/s speed= 153x
+size=   32768kB time=00:34:21.53 bitrate= 130.2kbits/s speed= 153x
+size=   34048kB time=00:35:38.55 bitrate= 130.4kbits/s speed= 153x
+size=   35328kB time=00:36:55.97 bitrate= 130.6kbits/s speed= 153x
+size=   36608kB time=00:38:14.24 bitrate= 130.7kbits/s speed= 153x
+size=   37888kB time=00:39:33.07 bitrate= 130.8kbits/s speed= 153x
+size=   39168kB time=00:40:51.58 bitrate= 130.9kbits/s speed= 153x
+size=   40192kB time=00:42:09.53 bitrate= 130.2kbits/s speed= 153x
+size=   41472kB time=00:43:26.25 bitrate= 130.4kbits/s speed= 153x
+size=   42752kB time=00:44:41.60 bitrate= 130.6kbits/s speed= 153x
+size=   44032kB time=00:45:58.97 bitrate= 130.7kbits/s speed= 153x
+size=   45312kB time=00:47:16.43 bitrate= 130.9kbits/s speed= 153x
+size=   46336kB time=00:48:34.45 bitrate= 130.2kbits/s speed= 153x
+size=   47616kB time=00:49:52.93 bitrate= 130.3kbits/s speed= 153x
+size=   48896kB time=00:51:09.86 bitrate= 130.5kbits/s speed= 153x
+size=   50176kB time=00:52:26.21 bitrate= 130.6kbits/s speed= 153x
+size=   51456kB time=00:53:41.69 bitrate= 130.8kbits/s speed= 153x
+size=   52736kB time=00:54:59.25 bitrate= 130.9kbits/s speed= 153x
+size=   53760kB time=00:56:16.36 bitrate= 130.4kbits/s speed= 153x
+size=   55184kB time=00:57:32.08 bitrate= 131.0kbits/s speed= 154x
+video:0kB audio:54167kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: 1.876229%
+[aac @ 0x61ee90f6dfc0] Qavg: 177.605
+Feldolgozott audió fájl: processed_audio.aac
+ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers
+  built with gcc 11 (Ubuntu 11.2.0-19ubuntu1)
+  configuration: --prefix=/usr --extra-version=0ubuntu0.22.04.1 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librabbitmq --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opencl --enable-opengl --enable-sdl2 --enable-pocketsphinx --enable-librsvg --enable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared
+  libavutil      56. 70.100 / 56. 70.100
+  libavcodec     58.134.100 / 58.134.100
+  libavformat    58. 76.100 / 58. 76.100
+  libavdevice    58. 13.100 / 58. 13.100
+  libavfilter     7.110.100 /  7.110.100
+  libswscale      5.  9.100 /  5.  9.100
+  libswresample   3.  9.100 /  3.  9.100
+  libpostproc    55.  9.100 / 55.  9.100
+Input #0, matroska,webm, from 'workdir/Invasion_2.1/uploads/Invasion.2021.S02E01.WEB.h264.mkv':
+  Metadata:
+    encoder         : libebml v1.4.4 + libmatroska v1.7.1
+    creation_time   : 2023-08-23T04:31:08.000000Z
+    MOVIE/ENCODER   : Lavf56.25.101
+  Duration: 00:58:02.03, start: 0.000000, bitrate: 1051 kb/s
+  Stream #0:0(eng): Video: h264 (Constrained Baseline), yuv420p(progressive), 720x400 [SAR 4:3 DAR 12:5], 23.98 fps, 23.98 tbr, 1k tbn, 47.95 tbc (default)
+    Metadata:
+      BPS             : 888955
+      DURATION        : 00:58:01.979000000
+      NUMBER_OF_FRAMES: 83484
+      NUMBER_OF_BYTES : 386915735
+      _STATISTICS_WRITING_APP: mkvmerge v78.0 ('Running') 64-bit
+      _STATISTICS_WRITING_DATE_UTC: 2023-08-23 04:31:08
+      _STATISTICS_TAGS: BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES
+  Stream #0:1(eng): Audio: aac (LC), 48000 Hz, stereo, fltp (default)
+    Metadata:
+      BPS             : 160000
+      DURATION        : 00:58:02.026000000
+      NUMBER_OF_FRAMES: 163220
+      NUMBER_OF_BYTES : 69640533
+      _STATISTICS_WRITING_APP: mkvmerge v78.0 ('Running') 64-bit
+      _STATISTICS_WRITING_DATE_UTC: 2023-08-23 04:31:08
+      _STATISTICS_TAGS: BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES
+  Stream #0:2(hun): Subtitle: subrip (default)
+    Metadata:
+      BPS             : 46
+      DURATION        : 00:57:35.247000000
+      NUMBER_OF_FRAMES: 618
+      NUMBER_OF_BYTES : 20161
+      _STATISTICS_WRITING_APP: mkvmerge v78.0 ('Running') 64-bit
+      _STATISTICS_WRITING_DATE_UTC: 2023-08-23 04:31:08
+      _STATISTICS_TAGS: BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES
+  Stream #0:3(eng): Subtitle: subrip (default)
+    Metadata:
+      BPS             : 50
+      DURATION        : 00:55:49.058000000
+      NUMBER_OF_FRAMES: 614
+      NUMBER_OF_BYTES : 21137
+      _STATISTICS_WRITING_APP: mkvmerge v78.0 ('Running') 64-bit
+      _STATISTICS_WRITING_DATE_UTC: 2023-08-23 04:31:08
+      _STATISTICS_TAGS: BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES
+[aac @ 0x58c7107d0fc0] Estimating duration from bitrate, this may be inaccurate
+Input #1, aac, from 'processed_audio.aac':
+  Duration: 00:59:26.17, bitrate: 126 kb/s
+  Stream #1:0: Audio: aac (LC), 44100 Hz, stereo, fltp, 126 kb/s
+Multiple -c, -codec, -acodec, -vcodec, -scodec or -dcodec options specified for stream 2, only the last option '-c:a:1 aac' will be used.
+Stream mapping:
+  Stream #0:0 -> #0:0 (copy)
+  Stream #0:1 -> #0:1 (copy)
+  Stream #1:0 -> #0:2 (aac (native) -> aac (native))
+Press [q] to stop, [?] for help
+-async is forwarded to lavfi similarly to -af aresample=async=1:min_hard_comp=0.100000:first_pts=0.
+Output #0, matroska, to 'workdir/Invasion_2.1/output/Invasion.2021.S02E01.WEB.h264_with_new_audio.mkv':
+  Metadata:
+    MOVIE/ENCODER   : Lavf56.25.101
+    encoder         : Lavf58.76.100
+  Stream #0:0(eng): Video: h264 (Constrained Baseline) (H264 / 0x34363248), yuv420p(progressive), 720x400 [SAR 4:3 DAR 12:5], q=2-31, 23.98 fps, 23.98 tbr, 1k tbn, 1k tbc (default)
+    Metadata:
+      BPS             : 888955
+      DURATION        : 00:58:01.979000000
+      NUMBER_OF_FRAMES: 83484
+      NUMBER_OF_BYTES : 386915735
+      _STATISTICS_WRITING_APP: mkvmerge v78.0 ('Running') 64-bit
+      _STATISTICS_WRITING_DATE_UTC: 2023-08-23 04:31:08
+      _STATISTICS_TAGS: BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES
+  Stream #0:1(eng): Audio: aac (LC) ([255][0][0][0] / 0x00FF), 48000 Hz, stereo, fltp (default)
+    Metadata:
+      BPS             : 160000
+      DURATION        : 00:58:02.026000000
+      NUMBER_OF_FRAMES: 163220
+      NUMBER_OF_BYTES : 69640533
+      _STATISTICS_WRITING_APP: mkvmerge v78.0 ('Running') 64-bit
+      _STATISTICS_WRITING_DATE_UTC: 2023-08-23 04:31:08
+      _STATISTICS_TAGS: BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES
+  Stream #0:2(hun): Audio: aac (LC) ([255][0][0][0] / 0x00FF), 44100 Hz, stereo, fltp, 128 kb/s
+    Metadata:
+      encoder         : Lavc58.134.100 aac
+frame=    0 fps=0.0 q=-1.0 size=       2kB time=00:00:00.00 bitrate=N/A speed=   0x
+frame= 1662 fps=0.0 q=-1.0 size=   13568kB time=00:01:09.31 bitrate=1603.6kbits/s speed= 139x
+frame= 3413 fps=3413 q=-1.0 size=   21504kB time=00:02:22.35 bitrate=1237.5kbits/s speed= 142x
+frame= 5150 fps=3433 q=-1.0 size=   32000kB time=00:03:34.86 bitrate=1220.0kbits/s speed= 143x
+frame= 6907 fps=3453 q=-1.0 size=   42496kB time=00:04:48.10 bitrate=1208.3kbits/s speed= 144x
+frame= 8661 fps=3464 q=-1.0 size=   51968kB time=00:06:01.25 bitrate=1178.4kbits/s speed= 144x
+frame=10534 fps=3511 q=-1.0 size=   64000kB time=00:07:19.34 bitrate=1193.3kbits/s speed= 146x
+frame=12325 fps=3521 q=-1.0 size=   73984kB time=00:08:34.06 bitrate=1179.0kbits/s speed= 147x
+frame=14082 fps=3520 q=-1.0 size=   85504kB time=00:09:47.36 bitrate=1192.5kbits/s speed= 147x
+frame=15839 fps=3519 q=-1.0 size=   97024kB time=00:11:00.65 bitrate=1203.1kbits/s speed= 147x
+frame=17626 fps=3525 q=-1.0 size=  106240kB time=00:12:15.16 bitrate=1183.8kbits/s speed= 147x
+frame=19384 fps=3524 q=-1.0 size=  117760kB time=00:13:28.46 bitrate=1193.2kbits/s speed= 147x
+frame=21144 fps=3523 q=-1.0 size=  127232kB time=00:14:41.94 bitrate=1181.8kbits/s speed= 147x
+frame=22903 fps=3523 q=-1.0 size=  136960kB time=00:15:55.30 bitrate=1174.5kbits/s speed= 147x
+frame=24648 fps=3521 q=-1.0 size=  148480kB time=00:17:08.05 bitrate=1183.2kbits/s speed= 147x
+frame=26408 fps=3520 q=-1.0 size=  158976kB time=00:18:21.46 bitrate=1182.4kbits/s speed= 147x
+frame=28169 fps=3521 q=-1.0 size=  169728kB time=00:19:34.95 bitrate=1183.4kbits/s speed= 147x
+frame=29828 fps=3509 q=-1.0 size=  179200kB time=00:20:44.09 bitrate=1180.0kbits/s speed= 146x
+frame=31579 fps=3508 q=-1.0 size=  190208kB time=00:21:57.10 bitrate=1183.0kbits/s speed= 146x
+frame=33338 fps=3509 q=-1.0 size=  201216kB time=00:23:10.54 bitrate=1185.4kbits/s speed= 146x
+frame=35135 fps=3513 q=-1.0 size=  212992kB time=00:24:25.44 bitrate=1190.6kbits/s speed= 147x
+frame=36903 fps=3514 q=-1.0 size=  224512kB time=00:25:39.15 bitrate=1194.9kbits/s speed= 147x
+frame=38695 fps=3517 q=-1.0 size=  236544kB time=00:26:53.97 bitrate=1200.6kbits/s speed= 147x
+frame=40526 fps=3523 q=-1.0 size=  248064kB time=00:28:10.30 bitrate=1202.2kbits/s speed= 147x
+frame=42246 fps=3520 q=-1.0 size=  259840kB time=00:29:22.00 bitrate=1208.1kbits/s speed= 147x
+frame=44014 fps=3521 q=-1.0 size=  270080kB time=00:30:35.75 bitrate=1205.2kbits/s speed= 147x
+frame=45798 fps=3522 q=-1.0 size=  279552kB time=00:31:50.16 bitrate=1198.9kbits/s speed= 147x
+frame=47515 fps=3519 q=-1.0 size=  288000kB time=00:33:01.80 bitrate=1190.5kbits/s speed= 147x
+frame=49285 fps=3520 q=-1.0 size=  297984kB time=00:34:15.58 bitrate=1187.5kbits/s speed= 147x
+frame=51047 fps=3520 q=-1.0 size=  310528kB time=00:35:29.08 bitrate=1194.8kbits/s speed= 147x
+frame=52821 fps=3521 q=-1.0 size=  322048kB time=00:36:43.13 bitrate=1197.5kbits/s speed= 147x
+frame=54629 fps=3524 q=-1.0 size=  333312kB time=00:37:58.48 bitrate=1198.4kbits/s speed= 147x
+frame=56458 fps=3528 q=-1.0 size=  346368kB time=00:39:14.77 bitrate=1205.0kbits/s speed= 147x
+frame=58288 fps=3532 q=-1.0 size=  358400kB time=00:40:31.12 bitrate=1207.7kbits/s speed= 147x
+frame=60099 fps=3535 q=-1.0 size=  369920kB time=00:41:46.66 bitrate=1208.9kbits/s speed= 147x
+frame=61909 fps=3537 q=-1.0 size=  380416kB time=00:43:02.12 bitrate=1206.9kbits/s speed= 148x
+frame=63619 fps=3534 q=-1.0 size=  388352kB time=00:44:13.46 bitrate=1199.0kbits/s speed= 147x
+frame=65322 fps=3530 q=-1.0 size=  397824kB time=00:45:24.46 bitrate=1196.2kbits/s speed= 147x
+frame=67133 fps=3533 q=-1.0 size=  407296kB time=00:46:40.00 bitrate=1191.6kbits/s speed= 147x
+frame=68882 fps=3532 q=-1.0 size=  418304kB time=00:47:53.00 bitrate=1192.7kbits/s speed= 147x
+frame=70645 fps=3532 q=-1.0 size=  428032kB time=00:49:06.60 bitrate=1190.0kbits/s speed= 147x
+frame=72402 fps=3531 q=-1.0 size=  441088kB time=00:50:19.79 bitrate=1196.6kbits/s speed= 147x
+frame=74094 fps=3528 q=-1.0 size=  456192kB time=00:51:30.34 bitrate=1209.3kbits/s speed= 147x
+frame=75797 fps=3525 q=-1.0 size=  468992kB time=00:52:41.47 bitrate=1215.3kbits/s speed= 147x
+frame=77502 fps=3522 q=-1.0 size=  479232kB time=00:53:52.47 bitrate=1214.5kbits/s speed= 147x
+frame=79265 fps=3522 q=-1.0 size=  486912kB time=00:55:06.04 bitrate=1206.5kbits/s speed= 147x
+frame=81042 fps=3523 q=-1.0 size=  495360kB time=00:56:20.15 bitrate=1200.5kbits/s speed= 147x
+frame=83484 fps=3555 q=-1.0 Lsize=  503070kB time=00:58:02.00 bitrate=1183.6kbits/s speed= 148x
+video:377847kB audio:122211kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: 0.602212%
+[aac @ 0x58c710835640] Qavg: 293.475
+Új audiosáv hozzáadva a videóhoz: workdir/Invasion_2.1/output/Invasion.2021.S02E01.WEB.h264_with_new_audio.mkv
+Törölve a feldolgozott audió fájl: processed_audio.aac
+
+Script végrehajtása sikeresen befejeződött.
+INFO:speechbrain.utils.quirks:Applied quirks (see `speechbrain.utils.quirks`): [allow_tf32, disable_jit_profiling]
+INFO:speechbrain.utils.quirks:Excluded quirks specified by the `SB_DISABLE_QUIRKS` environment (comma-separated list): []
+/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/pyannote/audio/pipelines/speaker_verification.py:45: UserWarning: Module 'speechbrain.pretrained' was deprecated, redirecting to 'speechbrain.inference'. Please update your script. This is a change from SpeechBrain 1.0. See: https://github.com/speechbrain/speechbrain/releases/tag/v1.0.0
+  from speechbrain.pretrained import (
+Processing on GPU-0: workdir/Vesper/audio/vesper.2022.bdrip.x264-imprint.mp3
+No language specified, language will be first be detected for each audio file (increases inference time).
+Lightning automatically upgraded your loaded checkpoint from v1.5.4 to v2.3.3. To apply the upgrade to your files permanently, run `python -m pytorch_lightning.utilities.upgrade_checkpoint ../.cache/torch/whisperx-vad-segmentation.bin`
+INFO:torch.distributed.nn.jit.instantiator:Created a temporary directory at /tmp/tmpf_un1ip_
+INFO:torch.distributed.nn.jit.instantiator:Writing /tmp/tmpf_un1ip_/_remote_module_non_scriptable.py
+Model was trained with pyannote.audio 0.0.1, yours is 3.1.1. Bad things might happen unless you revert pyannote.audio to 0.x.
+Model was trained with torch 1.10.0+cu102, yours is 2.0.1+cu117. Bad things might happen unless you revert torch to 1.x.
+/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/pyannote/audio/utils/reproducibility.py:74: ReproducibilityWarning: TensorFloat-32 (TF32) has been disabled as it might lead to reproducibility issues and lower accuracy.
+It can be re-enabled by calling
+   >>> import torch
+   >>> torch.backends.cuda.matmul.allow_tf32 = True
+   >>> torch.backends.cudnn.allow_tf32 = True
+See https://github.com/pyannote/pyannote-audio/issues/1370 for more details.
+
+  warnings.warn(
+Detected language: en (0.77) in first 30s of audio...
+Transcription completed for workdir/Vesper/audio/vesper.2022.bdrip.x264-imprint.mp3
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Alignment completed for workdir/Vesper/audio/vesper.2022.bdrip.x264-imprint.mp3
+Diarization completed for workdir/Vesper/audio/vesper.2022.bdrip.x264-imprint.mp3
+Successfully processed on GPU-0:
+Processed file: workdir/Vesper/audio/vesper.2022.bdrip.x264-imprint.mp3,
+Audio length: 6845.65 s,
+Processing time: 258.70 s,
+Ratio: 26.46
+Start time: 2024.11.02 20:59
+End time: 2024.11.02 21:03
+
+
+Script végrehajtása sikeresen befejeződött.
+Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 8, in <module>
+    from demucs.pretrained import get_model
+ModuleNotFoundError: No module named 'demucs'
+
+Script végrehajtása sikertelen, kilépési kód: 1
+Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 8, in <module>
+    from demucs.pretrained import get_model
+ModuleNotFoundError: No module named 'demucs'
+
+Script végrehajtása sikertelen, kilépési kód: 1
+Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 8, in <module>
+    from demucs.pretrained import get_model
+ModuleNotFoundError: No module named 'demucs'
+
+Script végrehajtása sikertelen, kilépési kód: 1
+Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 8, in <module>
+    from demucs.pretrained import get_model
+ModuleNotFoundError: No module named 'demucs'
+
+Script végrehajtása sikertelen, kilépési kód: 1
+/home/sarpba/anaconda3/envs/sync_backup/lib/python3.10/site-packages/pyannote/audio/pipelines/speaker_verification.py:45: UserWarning: Module 'speechbrain.pretrained' was deprecated, redirecting to 'speechbrain.inference'. Please update your script. This is a change from SpeechBrain 1.0. See: https://github.com/speechbrain/speechbrain/releases/tag/v1.0.0
+  from speechbrain.pretrained import (
+Processing on GPU-0: workdir/Vesper/audio/vesper-fsr.mp3
+No language specified, language will be first be detected for each audio file (increases inference time).
+Lightning automatically upgraded your loaded checkpoint from v1.5.4 to v2.3.3. To apply the upgrade to your files permanently, run `python -m pytorch_lightning.utilities.upgrade_checkpoint ../.cache/torch/whisperx-vad-segmentation.bin`
+Model was trained with pyannote.audio 0.0.1, yours is 3.1.1. Bad things might happen unless you revert pyannote.audio to 0.x.
+Model was trained with torch 1.10.0+cu102, yours is 2.0.1+cu118. Bad things might happen unless you revert torch to 1.x.
+/home/sarpba/anaconda3/envs/sync_backup/lib/python3.10/site-packages/pyannote/audio/utils/reproducibility.py:74: ReproducibilityWarning: TensorFloat-32 (TF32) has been disabled as it might lead to reproducibility issues and lower accuracy.
+It can be re-enabled by calling
+   >>> import torch
+   >>> torch.backends.cuda.matmul.allow_tf32 = True
+   >>> torch.backends.cudnn.allow_tf32 = True
+See https://github.com/pyannote/pyannote-audio/issues/1370 for more details.
+
+  warnings.warn(
+Detected language: en (0.35) in first 30s of audio...
+Transcription completed for workdir/Vesper/audio/vesper-fsr.mp3
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Failed to align segment (" ¶¶"): no characters in this segment found in model dictionary, resorting to original...
+Alignment completed for workdir/Vesper/audio/vesper-fsr.mp3
+Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 8, in <module>
+    from demucs.pretrained import get_model
+ModuleNotFoundError: No module named 'demucs'
+
+Script végrehajtása sikertelen, kilépési kód: 1
+INFO:speechbrain.utils.quirks:Applied quirks (see `speechbrain.utils.quirks`): [allow_tf32, disable_jit_profiling]
+INFO:speechbrain.utils.quirks:Excluded quirks specified by the `SB_DISABLE_QUIRKS` environment (comma-separated list): []
+/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/pyannote/audio/pipelines/speaker_verification.py:45: UserWarning: Module 'speechbrain.pretrained' was deprecated, redirecting to 'speechbrain.inference'. Please update your script. This is a change from SpeechBrain 1.0. See: https://github.com/speechbrain/speechbrain/releases/tag/v1.0.0
+  from speechbrain.pretrained import (
+Processing on GPU-0: workdir/Invasion.S02E01/audio/Invasion.2021.S02E01.WEB.h264.mp3
+No language specified, language will be first be detected for each audio file (increases inference time).
+Lightning automatically upgraded your loaded checkpoint from v1.5.4 to v2.3.3. To apply the upgrade to your files permanently, run `python -m pytorch_lightning.utilities.upgrade_checkpoint ../.cache/torch/whisperx-vad-segmentation.bin`
+INFO:torch.distributed.nn.jit.instantiator:Created a temporary directory at /tmp/tmpxb4eswfh
+INFO:torch.distributed.nn.jit.instantiator:Writing /tmp/tmpxb4eswfh/_remote_module_non_scriptable.py
+Model was trained with pyannote.audio 0.0.1, yours is 3.1.1. Bad things might happen unless you revert pyannote.audio to 0.x.
+Model was trained with torch 1.10.0+cu102, yours is 2.0.1+cu118. Bad things might happen unless you revert torch to 1.x.
+/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/pyannote/audio/utils/reproducibility.py:74: ReproducibilityWarning: TensorFloat-32 (TF32) has been disabled as it might lead to reproducibility issues and lower accuracy.
+It can be re-enabled by calling
+   >>> import torch
+   >>> torch.backends.cuda.matmul.allow_tf32 = True
+   >>> torch.backends.cudnn.allow_tf32 = True
+See https://github.com/pyannote/pyannote-audio/issues/1370 for more details.
+
+  warnings.warn(
+Detected language: en (0.96) in first 30s of audio...
+Transcription completed for workdir/Invasion.S02E01/audio/Invasion.2021.S02E01.WEB.h264.mp3
+Alignment completed for workdir/Invasion.S02E01/audio/Invasion.2021.S02E01.WEB.h264.mp3
+Diarization completed for workdir/Invasion.S02E01/audio/Invasion.2021.S02E01.WEB.h264.mp3
+Successfully processed on GPU-0:
+Processed file: workdir/Invasion.S02E01/audio/Invasion.2021.S02E01.WEB.h264.mp3,
+Audio length: 3482.07 s,
+Processing time: 218.52 s,
+Ratio: 15.93
+Start time: 2024.11.03 06:01
+End time: 2024.11.03 06:04
+
+
+Script végrehajtása sikeresen befejeződött.
+Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 8, in <module>
+    from demucs.pretrained import get_model
+ModuleNotFoundError: No module named 'demucs'
+
+Script végrehajtása sikertelen, kilépési kód: 1
+2024-11-03 06:11:15,032 - INFO - Használt eszköz: cuda
+2024-11-03 06:11:15,032 - DEBUG - Kimeneti könyvtár létrehozva vagy már létezik: workdir/Vesper/speech_removed
+2024-11-03 06:11:15,032 - INFO - Demucs MDX modell betöltése...
+2024-11-03 06:11:17,231 - DEBUG - Modell letöltve.
+2024-11-03 06:11:19,338 - INFO - Modell betöltve és eszközre helyezve.
+2024-11-03 06:11:19,338 - INFO - Feldolgozás: workdir/Vesper/uploads/vesper-fsr.mkv
+2024-11-03 06:11:19,338 - INFO - Audio kivonása: workdir/Vesper/uploads/vesper-fsr.mkv -> workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:11:27,091 - DEBUG - Audio sikeresen kivonva: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:11:27,091 - INFO - Audio szétválasztása Demucs-szal: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:11:32,588 - DEBUG - Hangkimenet betöltve: workdir/Vesper/speech_removed/vesper-fsr_temp.wav, mintavételi frekvencia: 44100
+2024-11-03 06:11:34,868 - DEBUG - Waveform áthelyezve a(z) cuda eszközre.
+2024-11-03 06:13:12,093 - ERROR - Hiba történt a szétválasztás közben: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:13:12,093 - ERROR - Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 91, in separate_audio_demucs
+    estimates = apply_model(model, waveform.unsqueeze(0), device=device)
+  File "/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/demucs/apply.py", line 189, in apply_model
+    out = apply_model(sub_model, mix, **kwargs)
+  File "/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/demucs/apply.py", line 217, in apply_model
+    out += shifted_out[..., max_shift - offset:]
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 9.00 GiB (GPU 0; 23.68 GiB total capacity; 14.77 GiB already allocated; 6.60 GiB free; 14.83 GiB reserved in total by PyTorch) If reserved memory is >> allocated memory try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF
+
+2024-11-03 06:13:12,259 - DEBUG - Ideiglenes fájl törölve: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:13:12,259 - INFO - Feldolgozás kész.
+
+Script végrehajtása sikeresen befejeződött.

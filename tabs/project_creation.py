@@ -23,7 +23,7 @@ def upload_and_extract_audio(proj_name, video_path, workdir="workdir"):
 
         # Ellenőrizzük a fájl méretét (max 100MB)
         file_size = os.path.getsize(video_path)
-        max_size = 1000 * 1024 * 1024  # 1000MB
+        max_size = 2000 * 1024 * 1024  # 1000MB
         if file_size > max_size:
             return "A feltöltött fájl mérete meghaladja a 100MB-ot."
 
@@ -50,4 +50,3 @@ def upload_and_extract_audio(proj_name, video_path, workdir="workdir"):
         return f"Videó és audio sikeresen feltöltve és kivonva.\nAudio fájl elérhető itt: {audio_file_path}"
     except Exception as e:
         return f"Hiba történt a feltöltés vagy az audio kivonása során: {str(e)}"
-

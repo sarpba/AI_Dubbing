@@ -1,0 +1,23 @@
+2024-11-03 06:11:15,032 - INFO - Használt eszköz: cuda
+2024-11-03 06:11:15,032 - DEBUG - Kimeneti könyvtár létrehozva vagy már létezik: workdir/Vesper/speech_removed
+2024-11-03 06:11:15,032 - INFO - Demucs MDX modell betöltése...
+2024-11-03 06:11:17,231 - DEBUG - Modell letöltve.
+2024-11-03 06:11:19,338 - INFO - Modell betöltve és eszközre helyezve.
+2024-11-03 06:11:19,338 - INFO - Feldolgozás: workdir/Vesper/uploads/vesper-fsr.mkv
+2024-11-03 06:11:19,338 - INFO - Audio kivonása: workdir/Vesper/uploads/vesper-fsr.mkv -> workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:11:27,091 - DEBUG - Audio sikeresen kivonva: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:11:27,091 - INFO - Audio szétválasztása Demucs-szal: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:11:32,588 - DEBUG - Hangkimenet betöltve: workdir/Vesper/speech_removed/vesper-fsr_temp.wav, mintavételi frekvencia: 44100
+2024-11-03 06:11:34,868 - DEBUG - Waveform áthelyezve a(z) cuda eszközre.
+2024-11-03 06:13:12,093 - ERROR - Hiba történt a szétválasztás közben: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:13:12,093 - ERROR - Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 91, in separate_audio_demucs
+    estimates = apply_model(model, waveform.unsqueeze(0), device=device)
+  File "/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/demucs/apply.py", line 189, in apply_model
+    out = apply_model(sub_model, mix, **kwargs)
+  File "/home/sarpba/anaconda3/envs/sync/lib/python3.10/site-packages/demucs/apply.py", line 217, in apply_model
+    out += shifted_out[..., max_shift - offset:]
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 9.00 GiB (GPU 0; 23.68 GiB total capacity; 14.77 GiB already allocated; 6.60 GiB free; 14.83 GiB reserved in total by PyTorch) If reserved memory is >> allocated memory try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF
+
+2024-11-03 06:13:12,259 - DEBUG - Ideiglenes fájl törölve: workdir/Vesper/speech_removed/vesper-fsr_temp.wav
+2024-11-03 06:13:12,259 - INFO - Feldolgozás kész.

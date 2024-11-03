@@ -70,6 +70,8 @@ def add_audio_to_video(video_file, new_audio_file, language, codec, output_dir):
             '-map', '0:v',      # Map video from first input
             '-map', '0:a?',     # Map existing audio if present
             '-map', '1:a',      # Map new audio
+            '-async', '1',
+            '-vsync', '1',
             output_file
         ]
         subprocess.run(cmd, check=True)

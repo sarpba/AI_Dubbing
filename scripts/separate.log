@@ -1,0 +1,64 @@
+2024-11-02 21:24:06,847 - INFO - Használt eszköz: cuda
+2024-11-02 21:24:06,847 - DEBUG - Kimeneti könyvtár létrehozva vagy már létezik: ../workdir/Vesper/speech_removed/
+2024-11-02 21:24:06,847 - INFO - Demucs MDX modell betöltése...
+2024-11-02 21:24:09,074 - DEBUG - Modell letöltve.
+2024-11-02 21:24:10,594 - INFO - Modell betöltve és eszközre helyezve.
+2024-11-02 21:24:10,594 - DEBUG - Fájl kihagyva, nem videó: vesper.2022.bdrip.x264-imprint.mp3
+2024-11-02 21:24:10,594 - INFO - Feldolgozás kész.
+2024-11-02 21:24:45,932 - INFO - Használt eszköz: cuda
+2024-11-02 21:24:45,933 - DEBUG - Kimeneti könyvtár létrehozva vagy már létezik: ../workdir/Vesper/speech_removed/
+2024-11-02 21:24:45,933 - INFO - Demucs MDX modell betöltése...
+2024-11-02 21:24:48,180 - DEBUG - Modell letöltve.
+2024-11-02 21:24:49,602 - INFO - Modell betöltve és eszközre helyezve.
+2024-11-02 21:24:49,602 - INFO - Feldolgozás: ../workdir/Vesper/uploads/vesper.2022.bdrip.x264-imprint.mkv
+2024-11-02 21:24:49,602 - INFO - Audio kivonása: ../workdir/Vesper/uploads/vesper.2022.bdrip.x264-imprint.mkv -> ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:24:55,836 - DEBUG - Audio sikeresen kivonva: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:24:55,836 - INFO - Audio szétválasztása Demucs-szal: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:25:00,350 - DEBUG - Hangkimenet betöltve: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav, mintavételi frekvencia: 44100
+2024-11-02 21:25:02,269 - DEBUG - Waveform áthelyezve a(z) cuda eszközre.
+2024-11-02 21:26:27,052 - ERROR - Hiba történt a szétválasztás közben: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:26:27,053 - ERROR - Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 91, in separate_audio_demucs
+    estimates = apply_model(model, waveform.unsqueeze(0), device=device)
+  File "/home/sarpba/anaconda3/envs/F5-TTS/lib/python3.10/site-packages/demucs/apply.py", line 189, in apply_model
+    out = apply_model(sub_model, mix, **kwargs)
+  File "/home/sarpba/anaconda3/envs/F5-TTS/lib/python3.10/site-packages/demucs/apply.py", line 217, in apply_model
+    out += shifted_out[..., max_shift - offset:]
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 9.00 GiB. GPU 
+
+2024-11-02 21:26:27,223 - DEBUG - Ideiglenes fájl törölve: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:26:27,223 - INFO - Feldolgozás kész.
+2024-11-02 21:27:13,056 - INFO - Használt eszköz: cpu
+2024-11-02 21:27:13,056 - DEBUG - Kimeneti könyvtár létrehozva vagy már létezik: ../workdir/Vesper/speech_removed/
+2024-11-02 21:27:13,056 - INFO - Demucs MDX modell betöltése...
+2024-11-02 21:27:15,323 - DEBUG - Modell letöltve.
+2024-11-02 21:27:15,332 - INFO - Modell betöltve és eszközre helyezve.
+2024-11-02 21:27:15,332 - INFO - Feldolgozás: ../workdir/Vesper/uploads/vesper.2022.bdrip.x264-imprint.mkv
+2024-11-02 21:27:15,332 - INFO - Audio kivonása: ../workdir/Vesper/uploads/vesper.2022.bdrip.x264-imprint.mkv -> ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:27:21,623 - DEBUG - Audio sikeresen kivonva: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:27:21,623 - INFO - Audio szétválasztása Demucs-szal: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:27:26,469 - DEBUG - Hangkimenet betöltve: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav, mintavételi frekvencia: 44100
+2024-11-02 21:27:26,470 - DEBUG - Waveform áthelyezve a(z) cpu eszközre.
+2024-11-02 21:41:29,242 - INFO - Használt eszköz: cuda
+2024-11-02 21:41:29,243 - DEBUG - Kimeneti könyvtár létrehozva vagy már létezik: ../workdir/Vesper/speech_removed/
+2024-11-02 21:41:29,243 - INFO - Demucs MDX modell betöltése...
+2024-11-02 21:41:31,221 - DEBUG - Modell letöltve.
+2024-11-02 21:41:32,395 - INFO - Modell betöltve és eszközre helyezve.
+2024-11-02 21:41:32,395 - INFO - Feldolgozás: ../workdir/Vesper/uploads/vesper.2022.bdrip.x264-imprint.mkv
+2024-11-02 21:41:32,395 - INFO - Audio kivonása: ../workdir/Vesper/uploads/vesper.2022.bdrip.x264-imprint.mkv -> ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:41:38,215 - DEBUG - Audio sikeresen kivonva: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:41:38,215 - INFO - Audio szétválasztása Demucs-szal: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:41:42,442 - DEBUG - Hangkimenet betöltve: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav, mintavételi frekvencia: 44100
+2024-11-02 21:41:44,344 - DEBUG - Waveform áthelyezve a(z) cuda eszközre.
+2024-11-02 21:42:54,830 - ERROR - Hiba történt a szétválasztás közben: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:42:54,830 - ERROR - Traceback (most recent call last):
+  File "/home/sarpba/AI_sync/scripts/separate.py", line 91, in separate_audio_demucs
+    estimates = apply_model(model, waveform.unsqueeze(0), device=device)
+  File "/home/sarpba/anaconda3/envs/F5-TTS/lib/python3.10/site-packages/demucs/apply.py", line 189, in apply_model
+    out = apply_model(sub_model, mix, **kwargs)
+  File "/home/sarpba/anaconda3/envs/F5-TTS/lib/python3.10/site-packages/demucs/apply.py", line 217, in apply_model
+    out += shifted_out[..., max_shift - offset:]
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 9.00 GiB. GPU 
+
+2024-11-02 21:42:55,003 - DEBUG - Ideiglenes fájl törölve: ../workdir/Vesper/speech_removed/vesper.2022.bdrip.x264-imprint_temp.wav
+2024-11-02 21:42:55,003 - INFO - Feldolgozás kész.

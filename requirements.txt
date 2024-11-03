@@ -2,4 +2,5 @@ gradio
 moviepy
 pydub
 deepl
+demucsS
 
