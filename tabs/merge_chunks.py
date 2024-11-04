@@ -22,7 +22,7 @@ def merge_chunks(proj_name, workdir="workdir"):
 
         # Keresés a háttérzene fájlra
         speech_removed_dir = os.path.join(project_path, "speech_removed")
-        background_files = [f for f in os.listdir(speech_removed_dir) if f.endswith("_temp_non_speech.wav")]
+        background_files = [f for f in os.listdir(speech_removed_dir) if f.endswith("_non_speech.wav")]
 
         if not background_files:
             yield "Nem található háttérzene fájl a speech_removed könyvtárban."

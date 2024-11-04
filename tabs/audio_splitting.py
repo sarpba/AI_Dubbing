@@ -19,16 +19,16 @@ def split_audio(proj_name, audio_choice, workdir="workdir"):
         project_path = os.path.join(workdir, proj_name)
 
         # Kiválasztott audio fájl elérési útjának meghatározása
-        if audio_choice == "Teljes audio":
+        if audio_choice == "Full Audio":
             audio_dir = os.path.join(project_path, "audio")
             audio_files = [f for f in os.listdir(audio_dir) if f.lower().endswith(('.wav', '.mp3'))]
             if not audio_files:
-                yield "Nincs található teljes audio fájl a projektben."
+                yield "Nem található teljes audio fájl a projektben."
                 return
             selected_audio = os.path.join(audio_dir, audio_files[0])
-        elif audio_choice == "Beszéd eltávolított audio":
+        elif audio_choice == "Speech Only":
             audio_dir = os.path.join(project_path, "speech_removed")
-            audio_files = [f for f in os.listdir(audio_dir) if f.lower().endswith('_speech.wav') and not f.lower().endswith('non_speech.wav')]
+            audio_files = [f for f in os.listdir(audio_dir) if f.lower().endswith('_speech.wav') and not f.lower().endswith('_non_speech.wav')]
             if not audio_files:
                 yield "Nincs található beszéd eltávolított audio fájl a projektben."
                 return

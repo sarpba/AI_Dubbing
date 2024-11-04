@@ -70,7 +70,7 @@ def worker(gpu_id, task_queue):
 
             json_file = os.path.splitext(audio_file)[0] + ".json"
             if os.path.exists(json_file):
-                print(f"Már létezik: {json_file}, kihagyás a dolgozóban...")
+                print(f"Már létezik: {json_file}, kihagyás a feldolgozásból...")
                 continue
 
             try:

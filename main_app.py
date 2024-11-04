@@ -12,67 +12,67 @@ from tabs import (
     merge_chunks,
     integrate_audio,
     adjust_audio,
-    tts_generation,  # Új import
-    # Importáld a további tab modulokat itt
+    tts_generation,  # New import
+    # Import additional tab modules here
 )
 
 from tabs.utils import list_projects, get_available_gpus
 
-# A kívánt könyvtárak a gyökérben
+# Desired directories at the root
 work_directory = "workdir"
 tts_directory = "TTS"
 
-# Ellenőrzi, hogy a workdir könyvtár létezik-e
+# Check if the workdir directory exists
 if not os.path.exists(work_directory):
     os.makedirs(work_directory)
-    print(f'"{work_directory}" könyvtár létrehozva.')
+    print(f'"{work_directory}" directory created.')
 else:
-    print(f'"{work_directory}" könyvtár már létezik.')
+    print(f'"{work_directory}" directory already exists.')
 
-# Ellenőrzi, hogy a TTS könyvtár létezik-e
+# Check if the TTS directory exists
 if not os.path.exists(tts_directory):
     os.makedirs(tts_directory)
-    print(f'"{tts_directory}" könyvtár létrehozva.')
+    print(f'"{tts_directory}" directory created.')
 else:
-    print(f'"{tts_directory}" könyvtár már létezik.')
+    print(f'"{tts_directory}" directory already exists.')
 
 def dummy_function(*args, **kwargs):
-    return "Ez a funkció még nincs implementálva."
+    return "This function is not yet implemented."
 
 with gr.Blocks() as demo:
-    # Definiáljuk a kiválasztott projekt állapotát
+    # Define the selected project state
     selected_project = gr.State(value=None)
 
-    gr.Markdown("# Automatikus Film Szinkronizáló Alkalmazás")
+    gr.Markdown("# Automatic Movie Dubbing Application")
 
-    # Főablak: Projekt kiválasztása és új projekt létrehozása
+    # Main window: Project selection and new project creation
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Markdown("## Projekt Kezelés")
-            proj_name = gr.Textbox(label="Új Projekt Neve", placeholder="Add meg a projekt nevét")
-            video_input = gr.File(label="Film Feltöltése", type="filepath")
-            upload_button = gr.Button("Feltöltés és Audio Kivonása")
-            output1 = gr.Textbox(label="Eredmény", lines=1)
+            gr.Markdown("## Project Management")
+            proj_name = gr.Textbox(label="New Project Name", placeholder="Enter the project name")
+            video_input = gr.File(label="Upload Movie", type="filepath")
+            upload_button = gr.Button("Upload and Extract Audio")
+            output1 = gr.Textbox(label="Result", lines=1)
         with gr.Column(scale=2):
-            project_dropdown = gr.Dropdown(label="Kiválasztott Projekt", choices=list_projects(), value=None)
+            project_dropdown = gr.Dropdown(label="Selected Project", choices=list_projects(), value=None)
 
-    # Fülek: Minden fül "alablak" lesz, amely a kiválasztott projektet használja
-    with gr.Tab("2. Audiosáv beolvasása"):
-        gr.Markdown("## Transzkript készítése WhisperX segítségével")
-
-        with gr.Row():
-            hf_token = gr.Textbox(label="Hugging Face Token", type="password", placeholder="Add meg a Hugging Face tokened")
+    # Tabs: Each tab is a sub-window that uses the selected project
+    with gr.Tab("2. Read Audio Track"):
+        gr.Markdown("## Create Transcript with WhisperX")
 
         with gr.Row():
-            device_selection = gr.Dropdown(label="Eszköz", choices=["cpu", "cuda"], value="cuda")
+            hf_token = gr.Textbox(label="Hugging Face Token", type="password", placeholder="Enter your Hugging Face token")
+
+        with gr.Row():
+            device_selection = gr.Dropdown(label="Device", choices=["cpu", "cuda"], value="cuda")
             device_index_selection = gr.Dropdown(
-                label="GPU index",
+                label="GPU Index",
                 choices=[str(i) for i in get_available_gpus()],
                 value=str(get_available_gpus()[0]) if get_available_gpus() else "0",
                 visible=False
             )
 
-        # Dinamikus láthatóság beállítása
+        # Dynamic visibility setting
         def update_device_index_visibility(device):
             if device == "cuda":
                 return gr.update(visible=True)
@@ -86,9 +86,9 @@ with gr.Blocks() as demo:
         )
 
         with gr.Row():
-            transcribe_button = gr.Button("Transzkripció Indítása")
+            transcribe_button = gr.Button("Start Transcription")
 
-        output2 = gr.Textbox(label="Eredmény", lines=1)
+        output2 = gr.Textbox(label="Result", lines=1)
 
         transcribe_button.click(
             transcribe_audio_whisperx,
@@ -96,17 +96,17 @@ with gr.Blocks() as demo:
             outputs=output2
         )
 
-    with gr.Tab("3. Beszéd és Táttérhang Elválasztása"):
-        gr.Markdown("## Beszéd és táttérhang elválasztása")
+    with gr.Tab("3. Separate Speech and Background Sound"):
+        gr.Markdown("## Separate Speech and Background Sound")
 
         with gr.Row():
-            device_step3 = gr.Radio(label="Eszköz", choices=["cpu", "cuda"], value="cpu")
-            keep_full_audio_step3 = gr.Checkbox(label="Teljes audio fájl megtartása", value=False)
+            device_step3 = gr.Radio(label="Device", choices=["cpu", "cuda"], value="cpu")
+            keep_full_audio_step3 = gr.Checkbox(label="Keep Full Audio File", value=False)
 
         with gr.Row():
-            separate_button = gr.Button("Beszéd Leválasztás Indítása")
+            separate_button = gr.Button("Start Speech Separation")
 
-        output3 = gr.Textbox(label="Eredmény", lines=1)
+        output3 = gr.Textbox(label="Result", lines=1)
 
         separate_button.click(
             separate_audio,
@@ -114,20 +114,20 @@ with gr.Blocks() as demo:
             outputs=output3
         )
 
-    with gr.Tab("4. Audio Darabolás"):
-        gr.Markdown("## Audio darabolása JSON és audio fájlok alapján")
+    with gr.Tab("4. Audio Splitting"):
+        gr.Markdown("## Split Audio Based on JSON and Audio Files")
 
         with gr.Row():
             audio_choice = gr.Radio(
-                label="Darabolni kívánt audio fájl választása",
-                choices=["Teljes audio", "Beszéd eltávolított audio"],
-                value="Teljes audio"
+                label="Select Audio File to Split",
+                choices=["Full Audio", "Speech Only"],
+                value="Speech Only"
             )
 
         with gr.Row():
-            split_button = gr.Button("Audio Darabolása Indítása")
+            split_button = gr.Button("Start Audio Splitting")
 
-        output4 = gr.Textbox(label="Eredmény", lines=1)
+        output4 = gr.Textbox(label="Result", lines=1)
 
         split_button.click(
             split_audio,
@@ -135,13 +135,13 @@ with gr.Blocks() as demo:
             outputs=output4
         )
 
-    with gr.Tab("5. Audio Darabok Ellenőrzése"):
-        gr.Markdown("## Audio darabok ellenőrzése WhisperX-szel")
+    with gr.Tab("5. Verify Audio Chunks"):
+        gr.Markdown("## Verify Audio Chunks with WhisperX")
 
         with gr.Row():
-            verify_chunks_button = gr.Button("Beolvasás Indítása")
+            verify_chunks_button = gr.Button("Start Verification")
 
-        output5 = gr.Textbox(label="Eredmény", lines=1)
+        output5 = gr.Textbox(label="Result", lines=1)
 
         verify_chunks_button.click(
             verify_chunks_whisperx,
@@ -149,13 +149,13 @@ with gr.Blocks() as demo:
             outputs=output5
         )
 
-    with gr.Tab("5.1. Darabok Összehasonlítása"):
-        gr.Markdown("## Darabok összehasonlítása JSON és TXT fájlok alapján")
+    with gr.Tab("5.1. Compare Chunks"):
+        gr.Markdown("## Compare Chunks Based on JSON and TXT Files")
 
         with gr.Row():
-            compare_button = gr.Button("Összehasonlítás Indítása")
+            compare_button = gr.Button("Start Comparison")
 
-        output51 = gr.HTML(label="Eredmény")
+        output51 = gr.HTML(label="Result")
 
         compare_button.click(
             compare_transcripts_whisperx,
@@ -163,32 +163,32 @@ with gr.Blocks() as demo:
             outputs=output51
         )
 
-    with gr.Tab("7. Darabok Fordítása"):
-        gr.Markdown("## Chunks gépi fordítása DeepL API segítségével")
+    with gr.Tab("7. Translate Chunks"):
+        gr.Markdown("## Machine Translation of Chunks Using DeepL API")
 
         with gr.Row():
             input_language = gr.Dropdown(
-                label="Bemeneti Nyelv",
+                label="Input Language",
                 choices=["EN", "HU", "DE", "FR", "ES", "IT", "NL", "PL", "RU", "ZH"],
                 value="EN"
             )
             output_language = gr.Dropdown(
-                label="Cél Nyelv",
+                label="Target Language",
                 choices=["EN", "HU", "DE", "FR", "ES", "IT", "NL", "PL", "RU", "ZH"],
                 value="HU"
             )
 
         with gr.Row():
             auth_key = gr.Textbox(
-                label="DeepL API Kulcs",
+                label="DeepL API Key",
                 type="password",
-                placeholder="Add meg a DeepL API kulcsodat"
+                placeholder="Enter your DeepL API key"
             )
 
         with gr.Row():
-            translate_button = gr.Button("Fordítás Indítása")
+            translate_button = gr.Button("Start Translation")
 
-        output7 = gr.Textbox(label="Eredmény", lines=20)
+        output7 = gr.Textbox(label="Result", lines=1)
 
         translate_button.click(
             translate_chunks,
@@ -196,13 +196,13 @@ with gr.Blocks() as demo:
             outputs=output7
         )
 
-    with gr.Tab("8. TTS Hangfájlok Generálása"):
-        gr.Markdown("## TTS hangfájlok generálása a f5-tts_infer-cli parancs segítségével")
+    with gr.Tab("8. Generate TTS Audio Files"):
+        gr.Markdown("## Generate TTS Audio Files Using f5-tts_infer-cli Command")
 
         with gr.Row():
-            generate_tts_button = gr.Button("TTS Generálás Indítása")
+            generate_tts_button = gr.Button("Start TTS Generation")
 
-        output8 = gr.Textbox(label="Eredmény", lines=20)
+        output8 = gr.Textbox(label="Result", lines=1)
 
         generate_tts_button.click(
             tts_generation,
@@ -210,20 +210,20 @@ with gr.Blocks() as demo:
             outputs=output8
         )
 
-    with gr.Tab("9. Chunks Egyesítése"):
-        gr.Markdown("## Darabok egyesítése és audio illesztés, hangerő normalizálás")
+    with gr.Tab("9. Merge Chunks"):
+        gr.Markdown("## Merge Chunks and Adjust Audio with Volume Normalization")
 
         with gr.Row():
-            delete_empty_checkbox = gr.Checkbox(label="Üres fájlok törlése (--delete_empty)", value=False)
+            delete_empty_checkbox = gr.Checkbox(label="Delete Empty Files (--delete_empty)", value=False)
 
         with gr.Row():
-            db_value_input = gr.Textbox(label="Minimális referencia hangerőszint (dB) (-db)", placeholder="-40.0")
-            use_db_checkbox = gr.Checkbox(label="Használja a megadott dB értéket", value=False)
+            db_value_input = gr.Textbox(label="Minimum Reference Volume Level (dB) (-db)", placeholder="-40.0")
+            use_db_checkbox = gr.Checkbox(label="Use Specified dB Value", value=False)
 
         with gr.Row():
-            adjust_audio_button = gr.Button("Audio illesztés és hangerő normalizálás")
+            adjust_audio_button = gr.Button("Adjust Audio and Normalize Volume")
 
-        output9_adjust = gr.Textbox(label="Eredmény", lines=20)
+        output9_adjust = gr.Textbox(label="Result", lines=1)
 
         adjust_audio_button.click(
             adjust_audio,
@@ -232,9 +232,9 @@ with gr.Blocks() as demo:
         )
 
         with gr.Row():
-            merge_chunks_button = gr.Button("Chunks Egyesítése Indítása")
+            merge_chunks_button = gr.Button("Start Merging Chunks")
 
-        output9 = gr.Textbox(label="Eredmény", lines=20)
+        output9 = gr.Textbox(label="Result", lines=1)
 
         merge_chunks_button.click(
             merge_chunks,
@@ -242,16 +242,16 @@ with gr.Blocks() as demo:
             outputs=output9
         )
 
-    with gr.Tab("10. Audio Integrálása a Videóba"):
-        gr.Markdown("## Audio fájl integrálása a videóba a megadott nyelvi címkével")
+    with gr.Tab("10. Integrate Audio into Video"):
+        gr.Markdown("## Integrate Audio File into Video with Specified Language Tag")
 
         with gr.Row():
-            language_code = gr.Textbox(label="Nyelvi kód", placeholder="pl. eng, hun", value="hun")
+            language_code = gr.Textbox(label="Language Code", placeholder="e.g., eng, hun", value="hun")
 
         with gr.Row():
-            integrate_audio_button = gr.Button("Audio Integrálása Indítása")
+            integrate_audio_button = gr.Button("Start Audio Integration")
 
-        output10 = gr.Textbox(label="Eredmény", lines=20)
+        output10 = gr.Textbox(label="Result", lines=1)
 
         integrate_audio_button.click(
             integrate_audio,
@@ -261,35 +261,35 @@ with gr.Blocks() as demo:
 
     gr.Markdown("""
     ---
-    **Megjegyzés:** Ez a projekt, egy kisérleti MI szinkron készítő. Fejlesztés alatt, de lehet, hogy nem.
+    **Note:** This project is an experimental AI dubbing creator. Under development, but maybe not.
     """)
 
-    # Függvény a projekt létrehozására és Dropdown frissítésére
+    # Function to create a project and update the Dropdown
     def create_project_and_update(proj_name, video_input):
         if not proj_name:
-            return "Hiba: Projekt név nem lehet üres.", gr.update(choices=list_projects(), value=selected_project.value)
-        # Létrehozzuk a projektet és kinyerjük az audio fájlt
+            return "Error: Project name cannot be empty.", gr.update(choices=list_projects(), value=selected_project.value)
+        # Create the project and extract the audio file
         result = upload_and_extract_audio(proj_name, video_input)
         
-        # Frissítjük a projekt listát
+        # Update the project list
         projects = list_projects()
         
-        # Frissítjük a kiválasztott projektot az új projektre
+        # Update the selected project to the new project
         selected_project.value = proj_name
         
-        # Frissítjük a Dropdown választásait és kiválasztjuk az új projektet
+        # Update the Dropdown choices and select the new project
         dropdown_update = gr.update(choices=projects, value=proj_name)
         
         return result, dropdown_update
 
-    # Fülön kívüli, főablakban található feltöltés és projekt létrehozás
+    # Upload and create project in the main window, outside tabs
     upload_button.click(
         create_project_and_update,
         inputs=[proj_name, video_input],
         outputs=[output1, project_dropdown]
     )
 
-    # Alkalmazás betöltésekor inicializáljuk a projekt kiválasztást
+    # Initialize project selection when the app loads
     def initialize_projects():
         projects = list_projects()
         if not projects:
@@ -300,5 +300,5 @@ with gr.Blocks() as demo:
 
     demo.load(fn=initialize_projects, inputs=[], outputs=project_dropdown)
 
-# Alkalmazás indítása
+# Launch the application
 demo.launch()
