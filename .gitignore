@@ -3,3 +3,5 @@ workdir/
 tabs/__pycache__
 info.txt
 TTS/
+script.log
+separate.log
