@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
-from PyQt5.QtCore import QUrl, Qt
+from PyQt5.QtCore import QUrl, Qt, QSize
 from PyQt5.QtGui import QBrush, QColor, QFont
 
 class VideoPlayer(QWidget):
@@ -94,7 +94,7 @@ class VideoPlayer(QWidget):
         editor_layout.addWidget(QLabel("Felirat Szegmensek:"))
         editor_layout.addWidget(self.segment_list)
 
-        # **Áthelyezés Az Előző Szegmens Végére Gomb Elhelyezése**
+        # Áthelyezés Az Előző Szegmens Végére Gomb Elhelyezése
         self.move_to_previous_button = QPushButton("Áthelyezés az előző szegmens végére")
         self.move_to_previous_button.clicked.connect(self.move_words_to_previous_segment_end)
         editor_layout.addWidget(self.move_to_previous_button)
@@ -123,7 +123,7 @@ class VideoPlayer(QWidget):
         speaker_layout.addWidget(self.rename_button)
         editor_layout.addLayout(speaker_layout)
 
-        # **"Áthelyezés a következő szegmens elejére" gomb marad a helyén**
+        # "Áthelyezés a következő szegmens elejére" gomb marad a helyén
         self.move_to_next_button = QPushButton("Áthelyezés a következő szegmens elejére")
         self.move_to_next_button.clicked.connect(self.move_words_to_next_segment_start)
         editor_layout.addWidget(self.move_to_next_button)
@@ -187,14 +187,44 @@ class VideoPlayer(QWidget):
     def populate_segment_list(self):
         self.segment_list.clear()
         for idx, segment in enumerate(self.subtitles):
-            text = segment.get('text', '').strip()
-            item = QListWidgetItem(f"{idx + 1}. {text}")
-            item.setData(Qt.UserRole, idx)
-            # Színkódolás beszélők szerint
-            speaker = segment.get('speaker', 'Unknown')
-            color = self.speaker_colors.get(speaker, "gray")
-            item.setForeground(QBrush(QColor(color)))
+            # Create list item
+            item = QListWidgetItem()
+            item.setSizeHint(QSize(300, 40))  # Adjust size as needed
+
+            # Create widget
+            widget = QWidget()
+            layout = QHBoxLayout()
+            layout.setContentsMargins(5, 5, 5, 5)
+
+            # Play button
+            play_button = QPushButton("Play")
+            play_button.setFixedSize(40, 30)  # Adjust size as needed
+            # Optionally set an icon
+            # play_button.setIcon(QIcon("play_icon.png"))
+
+            # Label
+            label = QLabel(f"{idx + 1}. {segment.get('text', '').strip()}")
+            label.setStyleSheet(f"color: {self.speaker_colors.get(segment.get('speaker', 'Unknown'), 'gray')};")
+            label.setWordWrap(True)  # To handle long texts
+
+            # Add to layout
+            layout.addWidget(play_button)
+            layout.addWidget(label)
+            layout.addStretch()
+
+            widget.setLayout(layout)
+
+            # Add widget to item
             self.segment_list.addItem(item)
+            self.segment_list.setItemWidget(item, widget)
+
+            # **Tároljuk a szegmens indexét a QListWidgetItem-ben**
+            item.setData(Qt.UserRole, idx)  # Ez a sor lett hozzáadva
+
+            # Connect button with lambda to capture current idx
+            play_button.clicked.connect(lambda checked, idx=idx: self.play_segment(idx))
+
+        print(f"{len(self.subtitles)} szegmens hozzáadva a listához.")
 
     def play_video(self):
         if self.media_player.state() == QMediaPlayer.PlayingState:
@@ -203,6 +233,16 @@ class VideoPlayer(QWidget):
         else:
             self.media_player.play()
             self.play_button.setText("Szünet")
+
+    def play_segment(self, segment_idx):
+        if 0 <= segment_idx < len(self.subtitles):
+            start_time = self.subtitles[segment_idx].get('start', 0) * 1000  # Convert to ms
+            self.media_player.setPosition(int(start_time))
+            self.media_player.play()
+            self.play_button.setText("Szünet")  # Update play button text
+            print(f"Szegmens {segment_idx + 1} kezdő időpontja: {start_time} ms")
+        else:
+            QMessageBox.warning(self, "Hiba", "Érvénytelen szegmens index.")
 
     def update_position(self, position):
         # Frissíti a csúszka értékét a videó aktuális pozíciójának megfelelően
@@ -265,21 +305,27 @@ class VideoPlayer(QWidget):
         if self.current_highlighted_index != -1:
             previous_item = self.segment_list.item(self.current_highlighted_index)
             if previous_item:
-                previous_item.setBackground(QBrush(QColor("white")))  # Alap háttérszín
-
+                # Reset background
+                widget = self.segment_list.itemWidget(previous_item)
+                if widget:
+                    widget.setStyleSheet("background-color: none;")
         # Kiemeljük az új szegmenst
         current_item = self.segment_list.item(self.current_subtitle_index)
         if current_item:
-            current_item.setBackground(QBrush(QColor("#ADD8E6")))  # Világoskék háttérszín
-            self.current_highlighted_index = self.current_subtitle_index
-            # Görgetés a jelenlegi szegmenshez
-            self.segment_list.scrollToItem(current_item, QAbstractItemView.PositionAtCenter)
+            widget = self.segment_list.itemWidget(current_item)
+            if widget:
+                widget.setStyleSheet("background-color: #ADD8E6;")  # Világoskék háttérszín
+                self.current_highlighted_index = self.current_subtitle_index
+                # Görgetés a jelenlegi szegmenshez
+                self.segment_list.scrollToItem(current_item, QAbstractItemView.PositionAtCenter)
 
     def unhighlight_previous_segment(self):
         if self.current_highlighted_index != -1:
             previous_item = self.segment_list.item(self.current_highlighted_index)
             if previous_item:
-                previous_item.setBackground(QBrush(QColor("white")))  # Alap háttérszín
+                widget = self.segment_list.itemWidget(previous_item)
+                if widget:
+                    widget.setStyleSheet("background-color: none;")  # Alap háttérszín
             self.current_highlighted_index = -1
 
     def display_segment_details(self, item):
@@ -365,8 +411,11 @@ class VideoPlayer(QWidget):
             text = self.subtitles[idx].get('text', '').strip()
             item.setText(f"{idx + 1}. {text}")
             # Frissítjük a színkódolást
-            color = self.speaker_colors.get(new_speaker, "gray")
-            item.setForeground(QBrush(QColor(color)))
+            widget = self.segment_list.itemWidget(item)
+            if widget:
+                label = widget.findChild(QLabel)
+                if label:
+                    label.setStyleSheet(f"color: {self.speaker_colors.get(new_speaker, 'gray')};")
             QMessageBox.information(self, "Siker", f"A beszélő átnevezve {new_speaker}-re.")
             self.speaker_input.clear()
 
@@ -419,7 +468,8 @@ class VideoPlayer(QWidget):
 
         # Frissítjük a szegmensek listáját és a jelenlegi szegmens részleteit
         self.populate_segment_list()
-        self.display_segment_details(self.segment_list.item(self.current_subtitle_index))
+        if self.current_subtitle_index < len(self.subtitles):
+            self.display_segment_details(self.segment_list.item(self.current_subtitle_index))
 
     def move_words_to_next_segment_start(self):
         selected_items = self.word_table.selectedItems()
@@ -470,7 +520,8 @@ class VideoPlayer(QWidget):
 
         # Frissítjük a szegmensek listáját és a jelenlegi szegmens részleteit
         self.populate_segment_list()
-        self.display_segment_details(self.segment_list.item(self.current_subtitle_index))
+        if self.current_subtitle_index < len(self.subtitles):
+            self.display_segment_details(self.segment_list.item(self.current_subtitle_index))
 
     def update_segment_text(self, segment_idx):
         """

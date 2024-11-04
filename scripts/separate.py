@@ -11,11 +11,11 @@ import torchaudio
 import numpy as np
 import traceback
 import shutil
-import logging  # Új import a naplózáshoz
+import logging
 
 # Naplózás konfigurálása
 logging.basicConfig(
-    level=logging.DEBUG,  # Állítsd DEBUG-re a részletes naplózáshoz
+    level=logging.DEBUG,  # Részletes naplózás
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler("separate.log"),  # Naplófájl
@@ -128,8 +128,88 @@ def separate_audio_demucs(audio_path, output_dir, model, device):
         logger.error(traceback.format_exc())
         return False
 
+def split_audio(audio_path, temp_dir, segment_time=300):
+    """
+    Felosztja az audio fájlt adott időtartamú szegmensekre (alapértelmezés szerint 5 perc).
+    """
+    logger.info(f"Audio felosztása {segment_time/60} perces szegmensekre: {audio_path}")
+    os.makedirs(temp_dir, exist_ok=True)
+    split_pattern = os.path.join(temp_dir, "segment_%03d.wav")
+    command = [
+        'ffmpeg', '-y', '-i', audio_path,
+        '-f', 'segment',
+        '-segment_time', str(segment_time),
+        '-c', 'copy',
+        split_pattern
+    ]
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        logger.error("Hiba történt az audio felosztása közben.")
+        logger.error(result.stderr.decode())
+        return False
+    # Ellenőrizzük, hogy létrejöttek-e a szegmensek
+    segments = sorted([f for f in os.listdir(temp_dir) if f.startswith("segment_") and f.endswith(".wav")])
+    if not segments:
+        logger.error("Nincsenek létrehozott szegmensek.")
+        return False
+    logger.debug(f"{len(segments)} szegmens létrehozva.")
+    return True
+
+def concatenate_audio(processed_dir, output_vocals_path, output_non_speech_path):
+    """
+    Összeilleszti az összes szétválasztott 'non_speech' és 'speech' fájlt a végleges kimeneti fájlokká.
+    Először a '_non_speech.wav' fájlokat, majd a '_speech.wav' fájlokat.
+    """
+    logger.info(f"Nem beszéd hangok összeillesztése: {processed_dir}")
+
+    # Összegyűjtjük és sorba rendezzük a 'non_speech' fájlokat
+    non_speech_files = sorted([f for f in os.listdir(processed_dir) if f.endswith("_non_speech.wav")])
+
+    # Nem beszéd hangok összeillesztése
+    if non_speech_files:
+        concatenated_non_speech = []
+        for nf in non_speech_files:
+            path = os.path.join(processed_dir, nf)
+            waveform, sr = torchaudio.load(path)
+            concatenated_non_speech.append(waveform)
+        if concatenated_non_speech:
+            non_speech_tensor = torch.cat(concatenated_non_speech, dim=1)
+            torchaudio.save(output_non_speech_path, non_speech_tensor, sr, encoding="PCM_S", bits_per_sample=16)
+            logger.info(f"Nem beszéd hangok összeillesztve: {output_non_speech_path}")
+
+        # Egyedi '_non_speech.wav' fájlok törlése
+        for nf in non_speech_files:
+            path = os.path.join(processed_dir, nf)
+            try:
+                os.remove(path)
+                logger.debug(f"Fájl törölve: {path}")
+            except Exception as e:
+                logger.error(f"Hiba a fájl törlése közben: {path}")
+                logger.error(str(e))
+    else:
+        logger.warning("Nincsenek 'non_speech' szegmensek az összeillesztéshez.")
+
+    logger.info(f"Vokálok összeillesztése: {processed_dir}")
+
+    # Összegyűjtjük és sorba rendezzük a 'speech' fájlokat
+    vocals_files = sorted([f for f in os.listdir(processed_dir) if f.endswith("_speech.wav")])
+
+    # Vokálok összeillesztése
+    if vocals_files:
+        concatenated_vocals = []
+        for vf in vocals_files:
+            path = os.path.join(processed_dir, vf)
+            waveform, sr = torchaudio.load(path)
+            concatenated_vocals.append(waveform)
+        if concatenated_vocals:
+            vocals_tensor = torch.cat(concatenated_vocals, dim=1)
+            torchaudio.save(output_vocals_path, vocals_tensor, sr, encoding="PCM_S", bits_per_sample=16)
+            logger.info(f"Vokálok összeillesztve: {output_vocals_path}")
+    else:
+        logger.warning("Nincsenek 'vocals' szegmensek az összeillesztéshez.")
+
 def main():
-    parser = argparse.ArgumentParser(description='Videófájlokból audio kivonása és szétválasztása Demucs MDX segítségével.')
+    parser = argparse.ArgumentParser(description='Videófájlokból audio kivonása és szétválasztása Demucs MDX segítségével, 5 perces szegmensekre bontva.')
     parser.add_argument('-i', '--input_dir', required=True, help='Bemeneti könyvtár útvonala.')
     parser.add_argument('-o', '--output_dir', required=True, help='Kimeneti könyvtár útvonala.')
     parser.add_argument('--device', default='cuda', help='Eszköz: "cuda" vagy "cpu".')
@@ -151,7 +231,7 @@ def main():
     # Modell betöltése
     logger.info("Demucs MDX modell betöltése...")
     try:
-        model = get_model('mdx_extra')
+        model = get_model('htdemucs')  #mdx_extra')
         logger.debug("Modell letöltve.")
     except Exception as e:
         logger.error("Hiba a modell betöltése közben.")
@@ -162,6 +242,7 @@ def main():
     model.eval()
     logger.info("Modell betöltve és eszközre helyezve.")
 
+    # Iterálunk a bemeneti könyvtárban található fájlokon
     for filename in os.listdir(input_dir):
         if not filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv')):
             logger.debug(f"Fájl kihagyva, nem videó: {filename}")
@@ -190,10 +271,16 @@ def main():
                 logger.error(str(e))
                 # Folytatjuk a szétválasztást még ha a mentés sikertelen is
 
-        # Audio szétválasztása Demucs MDX modellel
-        success = separate_audio_demucs(temp_audio_path, output_dir, model, device)
+        # Ideiglenes könyvtár létrehozása a szegmenseknek
+        temp_dir = os.path.join(output_dir, "temp", base_name)
+        os.makedirs(temp_dir, exist_ok=True)
+        logger.debug(f"Időközi könyvtár létrehozva: {temp_dir}")
+
+        # Audio felosztása 5 perces szegmensekre
+        success = split_audio(temp_audio_path, temp_dir)
         if not success:
-            # Ideiglenes fájl törlése, ha a szétválasztás sikertelen
+            logger.warning(f"Audio felosztása sikertelen: {temp_audio_path}")
+            # Ideiglenes fájl törlése
             try:
                 os.remove(temp_audio_path)
                 logger.debug(f"Ideiglenes fájl törölve: {temp_audio_path}")
@@ -202,7 +289,37 @@ def main():
                 logger.error(str(e))
             continue
 
-        # Ideiglenes fájl törlése, ha a teljes audio mentése nincs bekapcsolva
+        # Feldolgozott szegmensek könyvtára
+        processed_dir = os.path.join(temp_dir, "processed")
+        os.makedirs(processed_dir, exist_ok=True)
+        logger.debug(f"Feldolgozott szegmensek könyvtára létrehozva: {processed_dir}")
+
+        # Feldolgozzuk az egyes szegmenseket
+        segments = sorted([f for f in os.listdir(temp_dir) if f.startswith("segment_") and f.endswith(".wav")])
+        for segment_file in segments:
+            segment_path = os.path.join(temp_dir, segment_file)
+            logger.info(f"Szegmens feldolgozása: {segment_path}")
+            success = separate_audio_demucs(segment_path, processed_dir, model, device)
+            if not success:
+                logger.warning(f"Szétválasztás sikertelen a szegmensben: {segment_path}")
+                continue
+
+        # Végleges fájlok elérési útjának meghatározása
+        final_vocals_path = os.path.join(output_dir, f"{base_name}_speech.wav")
+        final_non_speech_path = os.path.join(output_dir, f"{base_name}_non_speech.wav")
+
+        # Összeillesztjük a szétválasztott szegmenseket
+        concatenate_audio(processed_dir, final_vocals_path, final_non_speech_path)
+
+        # Ideiglenes könyvtár törlése
+        try:
+            shutil.rmtree(os.path.join(output_dir, "temp"))
+            logger.debug(f"Időközi könyvtár törölve: {os.path.join(output_dir, 'temp')}")
+        except Exception as e:
+            logger.error(f"Hiba az időközi könyvtár törlése közben: {os.path.join(output_dir, 'temp')}")
+            logger.error(str(e))
+
+        # Ideiglenes teljes audiofájl törlése, ha nem kell megőrizni
         if not args.keep_full_audio:
             try:
                 os.remove(temp_audio_path)
