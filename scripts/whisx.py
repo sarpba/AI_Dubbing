@@ -47,7 +47,7 @@ def get_audio_duration(audio_file):
         return 0
 
 # This function handles processes assigned to each GPU.
-def worker(gpu_id, task_queue, hf_token):
+def worker(gpu_id, task_queue, hf_token, language_code):
     device = "cuda"
     try:
         torch.cuda.set_device(gpu_id)
@@ -75,15 +75,21 @@ def worker(gpu_id, task_queue, hf_token):
             start_datetime = datetime.datetime.now()
 
             # 1. Load the WhisperX model
-            model = whisperx.load_model("large-v3", device=device, compute_type="float16") #,  language="es")
+            if language_code:
+                model = whisperx.load_model("large-v3", device=device, compute_type="float16", language=language_code)
+            else:
+                model = whisperx.load_model("large-v3", device=device, compute_type="float16")
 
             # 2. Load and transcribe the audio
             audio = whisperx.load_audio(audio_file)
             result = model.transcribe(audio, batch_size=16)
             print(f"Transcription completed for {audio_file}")
 
+            # Determine the language code for alignment
+            align_language_code = language_code if language_code else result["language"]
+
             # 3. Align the transcription
-            model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+            model_a, metadata = whisperx.load_align_model(language_code=align_language_code, device=device)
             result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
             print(f"Alignment completed for {audio_file}")
 
@@ -139,7 +145,7 @@ def get_audio_files(directory):
     return audio_files
 
 # This function starts the processes assigned to GPUs and manages the task list.
-def transcribe_directory(directory, gpu_ids, hf_token):
+def transcribe_directory(directory, gpu_ids, hf_token, language_code):
     audio_files = get_audio_files(directory)
     task_queue = Queue()
     tasks_added = 0
@@ -157,7 +163,7 @@ def transcribe_directory(directory, gpu_ids, hf_token):
 
     processes = []
     for gpu_id in gpu_ids:
-        p = Process(target=worker, args=(gpu_id, task_queue, hf_token))
+        p = Process(target=worker, args=(gpu_id, task_queue, hf_token, language_code))
         processes.append(p)
         p.start()
 
@@ -169,6 +175,7 @@ if __name__ == "__main__":
     parser.add_argument("directory", type=str, help="The directory containing the audio files.")
     parser.add_argument('--gpus', type=str, default=None, help="GPU indices to use, separated by commas (e.g., '0,2,3')")
     parser.add_argument('--hf_token', type=str, required=True, help="Hugging Face Access Token to access PyAnnote gated models.")
+    parser.add_argument('--language', type=str, default=None, help="Optional language code (e.g., 'en', 'es'). If not provided, language detection is used.")
 
     args = parser.parse_args()
 
@@ -198,6 +205,5 @@ if __name__ == "__main__":
             print("Error: No GPUs available.")
             sys.exit(1)
 
-    # Start transcription with the determined GPUs
-    transcribe_directory(args.directory, gpu_ids, args.hf_token)
-
+    # Start transcription with the determined GPUs and optional language code
+    transcribe_directory(args.directory, gpu_ids, args.hf_token, args.language)

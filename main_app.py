@@ -62,6 +62,7 @@ with gr.Blocks() as demo:
 
         with gr.Row():
             hf_token = gr.Textbox(label="Hugging Face Token", type="password", placeholder="Enter your Hugging Face token")
+            language = gr.Textbox(label="Language", placeholder="Enter language (e.g., 'en', 'hu')")
 
         with gr.Row():
             device_selection = gr.Dropdown(label="Device", choices=["cpu", "cuda"], value="cuda")
@@ -92,7 +93,7 @@ with gr.Blocks() as demo:
 
         transcribe_button.click(
             transcribe_audio_whisperx,
-            inputs=[project_dropdown, hf_token, device_selection, device_index_selection],
+            inputs=[project_dropdown, hf_token, device_selection, device_index_selection, language],
             outputs=output2
         )
 
@@ -174,7 +175,7 @@ with gr.Blocks() as demo:
             )
             output_language = gr.Dropdown(
                 label="Target Language",
-                choices=["EN", "HU", "DE", "FR", "ES", "IT", "NL", "PL", "RU", "ZH"],
+                choices=["EN-US", "EN-UK", "HU", "DE", "FR", "ES", "IT", "NL", "PL", "RU", "ZH"],
                 value="HU"
             )
 

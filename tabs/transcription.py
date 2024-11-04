@@ -4,7 +4,9 @@ import shutil
 import torch
 from .utils import run_script, ensure_directory, list_projects
 
-def transcribe_audio_whisperx(proj_name, hf_token, selected_device, selected_device_index, workdir="workdir"):
+def transcribe_audio_whisperx(proj_name, hf_token, selected_device, selected_device_index, language=None):
+
+    workdir="workdir"
     """
     Transzkripciót készít WhisperX segítségével külső script hívásával.
 
@@ -14,6 +16,7 @@ def transcribe_audio_whisperx(proj_name, hf_token, selected_device, selected_dev
         selected_device (str): "cpu" vagy "cuda".
         selected_device_index (str): GPU index, ha "cuda" van választva.
         workdir (str): A munkakönyvtár alapértelmezett útvonala.
+         language(str, optional): Opcionális nyelvi kód (pl. 'en', 'es'). Alapértelmezett: None.
 
     Yields:
         str: A script kimenete folyamatosan frissülő eredmény ablakban.
@@ -51,6 +54,10 @@ def transcribe_audio_whisperx(proj_name, hf_token, selected_device, selected_dev
         if gpus:
             cmd += ["--gpus", ",".join(gpus)]
         cmd += ["--hf_token", hf_token, audio_directory]
+        
+        # Opcionális nyelvi kód hozzáadása
+        if language:
+            cmd += ["--language", language]
 
         # Script futtatása és kimenet olvasása
         for output in run_script(cmd):
@@ -75,4 +82,3 @@ def transcribe_audio_whisperx(proj_name, hf_token, selected_device, selected_dev
 
     except Exception as e:
         yield f"Hiba történt a transzkripció során: {str(e)}"
-

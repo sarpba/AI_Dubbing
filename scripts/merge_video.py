@@ -31,22 +31,30 @@ def get_audio_codec_and_sample_rate(video_file):
 def process_audio(audio_file, codec, sample_rate):
     """
     Re-encodes the audio file to match the codec and sample rate, and ensures it has at most stereo channels.
-    Returns the path to the processed audio file.
+    Returns the path to the processed audio file and the codec used.
     """
-    processed_audio = f"processed_audio.{codec}"
+    # Ha az eredeti codec 'opus', használjuk a 'libopus' kódolót
+    if codec.lower() == 'opus':
+        codec_used = 'libopus'
+        output_extension = 'opus'
+    else:
+        codec_used = codec
+        output_extension = codec.split('.')[-1]
+
+    processed_audio = f"processed_audio.{output_extension}"
     try:
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite without asking
             '-i', audio_file,
-            '-c:a', codec,
+            '-c:a', codec_used,
             '-b:a', '128k',  # Bitrate beállítása
             '-ar', sample_rate,  # Mintaarány beállítása az eredetihoz
             '-ac', '2',  # Max stereo
             processed_audio
         ]
         subprocess.run(cmd, check=True)
-        return processed_audio
+        return processed_audio, codec_used
     except subprocess.CalledProcessError as e:
         print(f"Hiba az audió feldolgozása során: {e}")
         sys.exit(1)
@@ -73,7 +81,7 @@ def add_audio_to_video(video_file, new_audio_file, language, codec, sample_rate,
             '-map', '1:a',        # Map new audio
             '-c:v', 'copy',       # Copy video stream without re-encoding
             '-c:a', 'copy',       # Copy existing audio streams without re-encoding
-            '-c:a:1', codec,      # Encode the new audio stream
+            '-c:a:1', codec,      # Encode the new audio stream with the specified codec
             '-ar:a:1', sample_rate,  # Ensure new audio has the same sample rate
             '-metadata:s:a:1', f'language={language}',
             output_file
@@ -149,11 +157,12 @@ def main():
     print(f"Eredeti sample rate: {sample_rate} Hz")
 
     # Process the new audio to match codec and sample rate
-    processed_audio = process_audio(args.input_audio, audio_codec, sample_rate)
+    processed_audio, codec_used = process_audio(args.input_audio, audio_codec, sample_rate)
     print(f"Feldolgozott audió fájl: {processed_audio}")
+    print(f"Használt codec: {codec_used}")
 
     # Add the new audio track to the video
-    add_audio_to_video(args.input_video, processed_audio, args.language, audio_codec, sample_rate, args.output_dir)
+    add_audio_to_video(args.input_video, processed_audio, args.language, codec_used, sample_rate, args.output_dir)
 
     # Define the path to the newly created file
     video_basename = os.path.basename(args.input_video)

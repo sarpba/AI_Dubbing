@@ -55,17 +55,21 @@ def tts_generation(proj_name, workdir="workdir"):
             yield f"Hiba: Hiányzik a vocab.txt a TTS könyvtárban: {vocab_path}"
             return
 
-        # Ellenőrizzük, hogy vannak-e wav fájlok a split_audio_dir-ben
-        wav_files = [f for f in os.listdir(split_audio_dir) if f.lower().endswith('.wav')]
-        if not wav_files:
-            yield f"Nincsenek wav fájlok a split_audio könyvtárban: {split_audio_dir}"
+        # Definiáljuk a támogatott audio kiterjesztéseket
+        supported_extensions = ['.wav', '.mp3']
+
+        # Ellenőrizzük, hogy vannak-e támogatott audio fájlok a split_audio_dir-ben
+        audio_files = [f for f in os.listdir(split_audio_dir) 
+                      if os.path.splitext(f.lower())[1] in supported_extensions]
+        if not audio_files:
+            yield f"Nincsenek támogatott audio fájlok (wav/mp3) a split_audio könyvtárban: {split_audio_dir}"
             return
 
         # Ellenőrizzük, hogy a split_audio_dir-ben léteznek-e a megfelelő txt fájlok
         missing_split_texts = []
-        for wav_file in wav_files:
-            wav_basename = os.path.splitext(wav_file)[0]
-            split_txt_path = os.path.join(split_audio_dir, f"{wav_basename}.txt")
+        for audio_file in audio_files:
+            audio_basename = os.path.splitext(audio_file)[0]
+            split_txt_path = os.path.join(split_audio_dir, f"{audio_basename}.txt")
             if not os.path.exists(split_txt_path):
                 missing_split_texts.append(split_txt_path)
         if missing_split_texts:
@@ -74,9 +78,9 @@ def tts_generation(proj_name, workdir="workdir"):
 
         # Ellenőrizzük, hogy a translations_dir-ben léteznek-e a megfelelő txt fájlok
         missing_translation_texts = []
-        for wav_file in wav_files:
-            wav_basename = os.path.splitext(wav_file)[0]
-            translation_txt_path = os.path.join(translations_dir, f"{wav_basename}.txt")
+        for audio_file in audio_files:
+            audio_basename = os.path.splitext(audio_file)[0]
+            translation_txt_path = os.path.join(translations_dir, f"{audio_basename}.txt")
             if not os.path.exists(translation_txt_path):
                 missing_translation_texts.append(translation_txt_path)
         if missing_translation_texts:
@@ -91,7 +95,7 @@ def tts_generation(proj_name, workdir="workdir"):
             "-p", model_path,
             "-v", vocab_path,
             "-rd", split_audio_dir,
-            "-rt", split_audio_dir,  # Assuming the split text files are in split_audio_dir
+            "-rt", split_audio_dir,  # Feltételezzük, hogy a split text fájlok a split_audio_dir-ben vannak
             "-rt_gen", translations_dir,
             "-o", sync_dir
         ]
