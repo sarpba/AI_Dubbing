@@ -47,17 +47,22 @@ with gr.Blocks() as demo:
 
     # Main window: Project selection and new project creation
     with gr.Row():
-        with gr.Column(scale=1):
-            gr.Markdown("## Project Management")
-            proj_name = gr.Textbox(label="New Project Name", placeholder="Enter the project name")
-            video_input = gr.File(label="Upload Movie", type="filepath")
-            upload_button = gr.Button("Upload and Extract Audio")
-            output1 = gr.Textbox(label="Result", lines=1)
+
         with gr.Column(scale=2):
             project_dropdown = gr.Dropdown(label="Selected Project", choices=list_projects(), value=None)
 
     # Tabs: Each tab is a sub-window that uses the selected project
-    with gr.Tab("2. Read Audio Track"):
+    with gr.Tab("1. New Project"):
+        gr.Markdown("## Create a new Project")
+
+        with gr.Row():
+            with gr.Column(scale=1):
+                proj_name = gr.Textbox(label="New Project Name", placeholder="Enter the project name")
+                video_input = gr.File(label="Upload Movie", type="filepath")
+                upload_button = gr.Button("Upload and Extract Audio")
+                output1 = gr.Textbox(label="Result", lines=1)         
+
+    with gr.Tab("2. Read In"):
         gr.Markdown("## Create Transcript with WhisperX")
 
         with gr.Row():
@@ -97,7 +102,10 @@ with gr.Blocks() as demo:
             outputs=output2
         )
 
-    with gr.Tab("3. Separate Speech and Background Sound"):
+    with gr.Tab("2.1. Json reworking"):
+        gr.Markdown("## Splitting long sentences.")
+
+    with gr.Tab("3. Separate Speech"):
         gr.Markdown("## Separate Speech and Background Sound")
 
         with gr.Row():
@@ -136,8 +144,8 @@ with gr.Blocks() as demo:
             outputs=output4
         )
 
-    with gr.Tab("5. Verify Audio Chunks"):
-        gr.Markdown("## Verify Audio Chunks with WhisperX")
+    with gr.Tab("5. Read Chunks"):
+        gr.Markdown("## Read Audio Chunks with WhisperX")
 
         with gr.Row():
             verify_chunks_button = gr.Button("Start Verification")
@@ -151,7 +159,7 @@ with gr.Blocks() as demo:
         )
 
     with gr.Tab("5.1. Compare Chunks"):
-        gr.Markdown("## Compare Chunks Based on JSON and TXT Files")
+        gr.Markdown("## Compare Chunks Based on TXT from first and JSON forom second Read process")
 
         with gr.Row():
             compare_button = gr.Button("Start Comparison")
@@ -273,7 +281,7 @@ with gr.Blocks() as demo:
 
     gr.Markdown("""
     ---
-    **Note:** This project is an experimental AI dubbing creator. Under development, but maybe not.
+    **Note:** This project is an experimental AI dubbing creator. Under development, but maybe not continue, don't know.
     """)
 
     # Function to create a project and update the Dropdown
