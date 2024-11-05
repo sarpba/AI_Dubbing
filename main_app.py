@@ -61,8 +61,8 @@ with gr.Blocks() as demo:
         gr.Markdown("## Create Transcript with WhisperX")
 
         with gr.Row():
-            hf_token = gr.Textbox(label="Hugging Face Token", type="password", placeholder="Enter your Hugging Face token")
-            language = gr.Textbox(label="Language", placeholder="Enter language (e.g., 'en', 'hu')")
+            hf_token = gr.Textbox(label="Hugging Face Token (If you want to use speaker diarization)", type="password", placeholder="Enter your Hugging Face token")
+            language = gr.Textbox(label="FORCE Whisper Language (if you not set, it'll try to autodetect)", placeholder="Enter language (e.g., 'en', 'hu')")
 
         with gr.Row():
             device_selection = gr.Dropdown(label="Device", choices=["cpu", "cuda"], value="cuda")

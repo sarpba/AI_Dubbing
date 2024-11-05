@@ -93,11 +93,18 @@ def worker(gpu_id, task_queue, hf_token, language_code):
             result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
             print(f"Alignment completed for {audio_file}")
 
-            # 4. Perform diarization
-            diarize_model = whisperx.DiarizationPipeline(use_auth_token=hf_token, device=device)
-            diarize_segments = diarize_model(audio)
-            result = whisperx.assign_word_speakers(diarize_segments, result)
-            print(f"Diarization completed for {audio_file}")
+            # 4. Perform diarization if hf_token is provided
+            if hf_token:
+                try:
+                    diarize_model = whisperx.DiarizationPipeline(use_auth_token=hf_token, device=device)
+                    diarize_segments = diarize_model(audio)
+                    result = whisperx.assign_word_speakers(diarize_segments, result)
+                    print(f"Diarization completed for {audio_file}")
+                except Exception as dia_e:
+                    print(f"Error during diarization for {audio_file}: {dia_e}")
+                    print("Need HF_token for diarization")
+            else:
+                print("Need HF_token for diarization")
 
             # 5. Save the results
             with open(json_file, "w", encoding="utf-8") as f:
@@ -107,7 +114,8 @@ def worker(gpu_id, task_queue, hf_token, language_code):
             # 6. Clean up to free GPU memory
             del model
             del model_a
-            del diarize_model
+            if hf_token:
+                del diarize_model
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -174,7 +182,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribe audio files in a directory and its subdirectories using WhisperX with multiple GPUs.")
     parser.add_argument("directory", type=str, help="The directory containing the audio files.")
     parser.add_argument('--gpus', type=str, default=None, help="GPU indices to use, separated by commas (e.g., '0,2,3')")
-    parser.add_argument('--hf_token', type=str, required=True, help="Hugging Face Access Token to access PyAnnote gated models.")
+    parser.add_argument('--hf_token', type=str, default=None, help="Hugging Face Access Token to access PyAnnote gated models. If not provided, diarization will be skipped.")
     parser.add_argument('--language', type=str, default=None, help="Optional language code (e.g., 'en', 'es'). If not provided, language detection is used.")
 
     args = parser.parse_args()
