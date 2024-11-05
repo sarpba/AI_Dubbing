@@ -200,6 +200,17 @@ with gr.Blocks() as demo:
     with gr.Tab("8. Generate TTS Audio Files"):
         gr.Markdown("## Generate TTS Audio Files Using f5-tts_infer-cli Command")
 
+        # A TTS mappa alkönyvtárainak beolvasása
+        tts_directory = "TTS"
+        subdirectories = [d for d in os.listdir(tts_directory) if os.path.isdir(os.path.join(tts_directory, d))]
+
+        with gr.Row():
+            tts_language = gr.Dropdown(
+                label="Target Language (put the.pt and vocab.txt file the /TTS/your_folder)",
+                choices=subdirectories,
+                value="hun"  # Nincs alapértelmezett érték
+            )
+
         with gr.Row():
             generate_tts_button = gr.Button("Start TTS Generation")
 
@@ -207,7 +218,7 @@ with gr.Blocks() as demo:
 
         generate_tts_button.click(
             tts_generation,
-            inputs=[project_dropdown],
+            inputs=[project_dropdown, tts_language],
             outputs=output8
         )
 

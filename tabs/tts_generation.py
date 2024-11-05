@@ -3,7 +3,7 @@ import os
 import glob
 from .utils import run_script, ensure_directory
 
-def tts_generation(proj_name, workdir="workdir"):
+def tts_generation(proj_name, tts_language):
     """
     TTS hangfájlok generálása a generate parancs segítségével.
 
@@ -11,15 +11,18 @@ def tts_generation(proj_name, workdir="workdir"):
         proj_name (str): A kiválasztott projekt neve.
         workdir (str): A munkakönyvtár alapértelmezett útvonala.
 
+
     Yields:
         str: A script aktuális kimenete.
     """
+    workdir="workdir"
+
     try:
         # Meghatározzuk a fő alkalmazás útvonalát (a main_app.py könyvtára)
         main_app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         
         # Definiáljuk a szükséges könyvtárak elérési útját
-        TTS_dir = os.path.join(main_app_dir, "TTS")
+        TTS_dir = os.path.join(main_app_dir, "TTS", tts_language)
         split_audio_dir = os.path.join(workdir, proj_name, "split_audio")
         translations_dir = os.path.join(workdir, proj_name, "translations")
         sync_dir = os.path.join(workdir, proj_name, "sync")
