@@ -48,7 +48,7 @@ with gr.Blocks() as demo:
     # Main window: Project selection and new project creation
     with gr.Row():
 
-        with gr.Column(scale=2):
+        with gr.Column(scale=1):
             project_dropdown = gr.Dropdown(label="Selected Project", choices=list_projects(), value=None)
 
     # Tabs: Each tab is a sub-window that uses the selected project
@@ -159,18 +159,188 @@ with gr.Blocks() as demo:
         )
 
     with gr.Tab("5.1. Compare Chunks"):
-        gr.Markdown("## Compare Chunks Based on TXT from first and JSON forom second Read process")
+        gr.Markdown("## Compare Chunks Based on TXT from first and JSON from second Read process")
 
         with gr.Row():
             compare_button = gr.Button("Start Comparison")
 
-        output51 = gr.HTML(label="Result")
+        # States to hold the comparison data and current page
+        comparison_data_state = gr.State([])
+        current_page_state = gr.State(0)
+
+        # Number of items per page
+        items_per_page = 5  # Adjust as needed
+
+        # Error message output
+        error_output = gr.Markdown(value="", visible=False)
+        # Save message output
+        save_message_output = gr.Markdown(value="", visible=False)
+
+        # Define components for each item
+        components = []
+        for i in range(items_per_page):
+            with gr.Row(visible=False) as row:
+                # Language Code
+                lang_code = gr.Textbox(label="Language Code", interactive=False, max_lines=1, scale=0.2)
+                # JSON Text
+                json_text = gr.Textbox(label="JSON Text", interactive=False, scale=2)
+                # TXT Text
+                txt_text = gr.Textbox(label="TXT Text", interactive=False, scale=2)
+                # Audio Player 1
+                audio_player = gr.Audio(label="Audio", interactive=True, type="filepath", scale=1)
+                # Translated TXT (editable)
+                translated_txt = gr.Textbox(label="Translated TXT", interactive=True, scale=2)
+                # Audio Player 2
+                sync_audio_player = gr.Audio(label="Sync Audio", scale=1)
+                # Save Button
+                save_button = gr.Button("Save", scale=1)
+                components.append({
+                    'row': row,
+                    'lang_code': lang_code,
+                    'json_text': json_text,
+                    'txt_text': txt_text,
+                    'audio_player': audio_player,
+                    'translated_txt': translated_txt,
+                    'sync_audio_player': sync_audio_player,
+                    'save_button': save_button,
+                    'index': i
+                })
+
+        # Navigation buttons
+        with gr.Row():
+            prev_button = gr.Button("Previous")
+            next_button = gr.Button("Next")
+
+        # Function to update the display based on current page
+        def update_display(data_list, page):
+            start = page * items_per_page
+            end = start + items_per_page
+            page_items = data_list[start:end]
+
+            updates = []
+            for i, component in enumerate(components):
+                if i < len(page_items):
+                    data_item = page_items[i]
+                    # Update visibility
+                    updates.append(gr.update(visible=True))  # Row
+                    # Update components
+                    updates.append(gr.update(value=data_item['language']))  # lang_code
+                    updates.append(gr.update(value=data_item['json_text']))  # json_text
+                    updates.append(gr.update(value=data_item['txt_text']))  # txt_text
+                    updates.append(gr.update(value=data_item['audio_file']))  # audio_player
+                    updates.append(gr.update(value=data_item['translated_txt']))  # translated_txt
+                    updates.append(gr.update(value=data_item['sync_audio_file']))  # sync_audio_player
+                    updates.append(gr.update(visible=True))  # save_button
+                else:
+                    # Hide unused components
+                    updates.append(gr.update(visible=False))  # Row
+                    updates.append(gr.update(value=""))  # lang_code
+                    updates.append(gr.update(value=""))  # json_text
+                    updates.append(gr.update(value=""))  # txt_text
+                    updates.append(gr.update(value=None))  # audio_player
+                    updates.append(gr.update(value=""))  # translated_txt
+                    updates.append(gr.update(value=None))  # sync_audio_player
+                    updates.append(gr.update(visible=False))  # save_button
+            return updates
+
+        # Flatten the list of outputs
+        output_components = []
+        for component in components:
+            output_components.extend([
+                component['row'],
+                component['lang_code'],
+                component['json_text'],
+                component['txt_text'],
+                component['audio_player'],
+                component['translated_txt'],
+                component['sync_audio_player'],
+                component['save_button']
+            ])
+
+        # Compare button action
+        def on_compare_button_click(proj_name):
+            data_list, error_message = compare_transcripts_whisperx(proj_name)
+            if error_message:
+                # Create empty updates for all components
+                empty_updates = [gr.update(visible=False) for _ in output_components]
+                return [gr.update(value=error_message, visible=True), data_list, 0] + empty_updates
+            else:
+                updates = update_display(data_list, 0)
+                return [gr.update(value="", visible=False), data_list, 0] + updates
 
         compare_button.click(
-            compare_transcripts_whisperx,
+            fn=on_compare_button_click,
             inputs=[project_dropdown],
-            outputs=output51
+            outputs=[error_output, comparison_data_state, current_page_state] + output_components
         )
+
+        # Next page action
+        def on_next_button_click(current_page, data_list):
+            max_page = (len(data_list) - 1) // items_per_page
+            new_page = min(current_page + 1, max_page)
+            updates = update_display(data_list, new_page)
+            return [new_page] + updates
+
+        next_button.click(
+            fn=on_next_button_click,
+            inputs=[current_page_state, comparison_data_state],
+            outputs=[current_page_state] + output_components
+        )
+
+        # Previous page action
+        def on_prev_button_click(current_page, data_list):
+            new_page = max(current_page - 1, 0)
+            updates = update_display(data_list, new_page)
+            return [new_page] + updates
+
+        prev_button.click(
+            fn=on_prev_button_click,
+            inputs=[current_page_state, comparison_data_state],
+            outputs=[current_page_state] + output_components
+        )
+
+        # Save button action
+        def save_translated_text(proj_name, data_list, page, translated_text, item_index):
+            # Calculate the actual index in data_list
+            actual_index = page * items_per_page + item_index
+            if actual_index < len(data_list):
+                data_item = data_list[actual_index]
+                # Update the translated text in data_item
+                data_item['translated_txt'] = translated_text
+                # Save the text back to the file
+                translated_txt_path = data_item['translated_txt_path']
+                try:
+                    with open(translated_txt_path, 'w', encoding='utf-8') as f:
+                        f.write(translated_text)
+                    return gr.update(value="Changes saved successfully.", visible=True)
+                except Exception as e:
+                    return gr.update(value=f"Error saving changes: {str(e)}", visible=True)
+            else:
+                return gr.update(value="Invalid item index.", visible=True)
+
+        # Save button click events
+        for idx, component in enumerate(components):
+            item_save_button = component['save_button']
+            item_translated_txt = component['translated_txt']
+            item_index = idx  # Index within the page (0 to items_per_page - 1)
+
+            # Save button click event
+            item_save_button.click(
+                fn=save_translated_text,
+                inputs=[
+                    project_dropdown,
+                    comparison_data_state,
+                    current_page_state,
+                    item_translated_txt,
+                    gr.State(item_index)
+                ],
+                outputs=save_message_output
+            )
+
+        # Display the save message output
+        with gr.Row():
+            save_message_output
+
 
     with gr.Tab("7. Translate Chunks"):
         gr.Markdown("## Machine Translation of Chunks Using DeepL API")
@@ -239,7 +409,8 @@ with gr.Blocks() as demo:
         with gr.Row():
             db_value_input = gr.Textbox(label="Minimum Reference Volume Level (dB) (-db)", placeholder="-40.0")
             use_db_checkbox = gr.Checkbox(label="Use Specified dB Value", value=False)
-
+        
+        gr.Markdown("## For more accurate timestamps, need to use ( 5. Read Chunks) tab again before continue")
         with gr.Row():
             adjust_audio_button = gr.Button("Adjust Audio and Normalize Volume")
 

@@ -1,20 +1,13 @@
 # tabs/compare_transcripts.py
 import os
 import json
-import base64
-import re  # Új import hozzáadva
-from .utils import normalize_text, escape_html_text
+import re
+from .utils import normalize_text
+
 
 def compare_transcripts_whisperx(proj_name, workdir="workdir"):
     """
-    Összehasonlítja a transcripts_split mappában lévő JSON fájlok és a split_audio mappában lévő TXT fájlok tartalmát.
-
-    Args:
-        proj_name (str): A kiválasztott projekt neve.
-        workdir (str): A munkakönyvtár alapértelmezett útvonala.
-
-    Returns:
-        str: HTML táblázat a összehasonlítás eredményével.
+    Compares JSON transcripts and TXT files and returns data for display.
     """
     try:
         transcripts_split_dir = os.path.join(workdir, proj_name, "transcripts_split")
@@ -23,73 +16,30 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
         sync_dir = os.path.join(workdir, proj_name, "sync")
 
         if not os.path.exists(transcripts_split_dir):
-            return "Nincs transcripts_split könyvtár a projektben."
+            return [], "No transcripts_split directory in the project."
 
         if not os.path.exists(split_audio_dir):
-            return "Nincs split_audio könyvtár a projektben."
+            return [], "No split_audio directory in the project."
 
         # List JSON files
         json_files = [f for f in os.listdir(transcripts_split_dir) if f.lower().endswith('.json')]
 
         if not json_files:
-            return "Nincs található JSON fájl a transcripts_split könyvtárban."
+            return [], "No JSON files found in transcripts_split directory."
 
-        # Új függvény az időbélyeg kiolvasásához
+        # Function to extract timestamp
         def get_timestamp(filename):
-            """
-            Kivonja az időbélyeget a fájlnévből és visszaadja azt másodpercben.
-
-            Példa fájlnév: 00-00-20.230-00-00-23.632_SPEAKER_15.json
-
-            Args:
-                filename (str): A fájlnév.
-
-            Returns:
-                float: Az időbélyeg másodpercben.
-            """
             match = re.match(r'(\d{2})-(\d{2})-(\d{2}\.\d+)-', filename)
             if match:
                 hours, minutes, seconds = match.groups()
                 return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
             else:
-                return 0  # Ha nincs egyezés, a fájl elejére kerül
+                return 0  # If no match, return 0
 
-        # Rendezés az időbélyeg alapján
+        # Sort json_files based on timestamp
         json_files = sorted(json_files, key=get_timestamp)
 
-        # Initialize HTML table
-        html_content = """
-        <style>
-            table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            th, td {
-                border: 1px solid #ddd;
-                padding: 8px;
-                vertical-align: top;
-            }
-            th {
-                background-color: #f2f2f2;
-                text-align: left;
-            }
-            .mismatch {
-                background-color: #f8d7da; /* Piros */
-            }
-            .match {
-                background-color: #d4edda; /* Zöld */
-            }
-        </style>
-        <table>
-            <tr>
-                <th>Nyelvi kód</th>
-                <th>Json text tartalma</th>
-                <th>TXT tartalma</th>
-                <th>Lejátszó</th>
-                <th>Lefordított TXT tartalma</th>
-                <th>Szinkron darabok</th>
-            </tr>
-        """
+        data_list = []
 
         for json_file in json_files:
             json_path = os.path.join(transcripts_split_dir, json_file)
@@ -112,8 +62,8 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
             txt_path = os.path.join(split_audio_dir, txt_filename)
 
             if not os.path.exists(txt_path):
-                txt_text = "TXT fájl hiányzik."
-                txt_text_normalized = "txt fájl hiányzik."
+                txt_text = "TXT file missing."
+                txt_text_normalized = "txt file missing."
             else:
                 with open(txt_path, 'r', encoding='utf-8') as txt_file:
                     txt_text = txt_file.read().strip()
@@ -121,13 +71,9 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
                 txt_text_normalized = normalize_text(txt_text)
 
             # Compare texts
-            if json_full_text_normalized == txt_text_normalized:
-                row_class = "match"
-            else:
-                row_class = "mismatch"
+            match = (json_full_text_normalized == txt_text_normalized)
 
             # Determine corresponding audio file
-            # Assuming .wav first, else .mp3
             wav_filename = f"{basename}.wav"
             mp3_filename = f"{basename}.mp3"
             wav_path = os.path.join(split_audio_dir, wav_filename)
@@ -135,76 +81,45 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
 
             if os.path.exists(wav_path):
                 audio_file_path = wav_path
-                audio_ext = "wav"
             elif os.path.exists(mp3_path):
                 audio_file_path = mp3_path
-                audio_ext = "mp3"
             else:
                 audio_file_path = None
 
-            if audio_file_path:
-                # Read audio file and encode in base64
-                with open(audio_file_path, 'rb') as audio_file:
-                    audio_data = audio_file.read()
-                    encoded_audio = base64.b64encode(audio_data).decode('utf-8')
-
-                if audio_ext == "wav":
-                    mime_type = "audio/wav"
-                elif audio_ext == "mp3":
-                    mime_type = "audio/mpeg"
-                else:
-                    mime_type = "audio/mpeg"  # default
-
-                audio_src = f"data:{mime_type};base64,{encoded_audio}"
-                audio_player = f'<audio controls><source src="{audio_src}" type="{mime_type}">Your browser does not support the audio element.</audio>'
-            else:
-                audio_player = "N/A"
-
-            # Lefordított TXT tartalma
+            # Translated TXT content
             translated_txt_filename = f"{basename}.txt"
             translated_txt_path = os.path.join(translations_dir, translated_txt_filename)
 
             if not os.path.exists(translated_txt_path):
-                translated_txt_content = "Még nem készült fordítás"
+                translated_txt_content = "Translation not yet done."
             else:
                 with open(translated_txt_path, 'r', encoding='utf-8') as translated_txt_file:
                     translated_txt_content = translated_txt_file.read().strip()
 
-            # Szinkron darabok
+            # Sync audio file
             sync_wav_filename = f"{basename}.wav"
             sync_wav_path = os.path.join(sync_dir, sync_wav_filename)
 
             if os.path.exists(sync_wav_path):
-                # Read audio file and encode in base64
-                with open(sync_wav_path, 'rb') as sync_audio_file:
-                    sync_audio_data = sync_audio_file.read()
-                    sync_encoded_audio = base64.b64encode(sync_audio_data).decode('utf-8')
-
-                sync_audio_src = f"data:audio/wav;base64,{sync_encoded_audio}"
-                sync_audio_player = f'<audio controls><source src="{sync_audio_src}" type="audio/wav">Your browser does not support the audio element.</audio>'
+                sync_audio_file_path = sync_wav_path
             else:
-                sync_audio_player = "Még nem készült szinkron"
+                sync_audio_file_path = None
 
-            # Escape HTML in text to prevent issues
-            json_text_escaped = escape_html_text(json_full_text)
-            txt_text_escaped = escape_html_text(txt_text)
-            translated_txt_escaped = escape_html_text(translated_txt_content)
+            # Collect data
+            data_item = {
+                'language': language,
+                'json_text': json_full_text,
+                'txt_text': txt_text,
+                'audio_file': audio_file_path,
+                'translated_txt': translated_txt_content,
+                'translated_txt_path': translated_txt_path,  # New field
+                'sync_audio_file': sync_audio_file_path,
+                'match': match
+            }
 
-            # Append row to table
-            html_content += f"""
-            <tr class="{row_class}">
-                <td>{language}</td>
-                <td>{json_text_escaped}</td>
-                <td>{txt_text_escaped}</td>
-                <td>{audio_player}</td>
-                <td>{translated_txt_escaped}</td>
-                <td>{sync_audio_player}</td>
-            </tr>
-            """
+            data_list.append(data_item)
 
-        html_content += "</table>"
-
-        return html_content
+        return data_list, ""
 
     except Exception as e:
-        return f"Hiba történt az összehasonlítás során: {str(e)}"
+        return [], f"An error occurred during comparison: {str(e)}"
