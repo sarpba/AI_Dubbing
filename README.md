@@ -49,9 +49,9 @@ python main_app.py
 
 todo:
 
-- make a manual correction tab, for change automatic translate or base audio fi need.
+- make a manual correction tab, for change automatic translated texts or base audio if need. (text change done)
 - need a good working normaliser metod which is with multilang moduls (change numbers and spacial characters to words, because the finetuned modells not heandle it good)
-- change the TTS run method to a faster methode (with multigpu support)
+- working speakerdiarize for segment reworking.
 ...
 
 License: MIT
