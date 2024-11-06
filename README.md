@@ -1,4 +1,4 @@
-# AI-sync is a semi-automatic video synchronization system.
+# AI-sync is a semi-automatic video (podcasts, movies, series) Dubbing system.
 
 WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
 
@@ -51,7 +51,7 @@ todo:
 
 - make a manual correction tab, for change automatic translated texts or base audio if need. (text change done)
 - need a good working normaliser metod which is with multilang moduls (change numbers and spacial characters to words, because the finetuned modells not heandle it good)
-- working speakerdiarize for segment reworking.
+- good working speaker diarization for segment reworking.
 ...
 
 License: MIT
