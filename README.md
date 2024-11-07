@@ -39,7 +39,7 @@ Create a Hugging Face account (it's optional, only need if you want to use speak
 Pyannote Speaker Diarization 3.1 Generate a read API key and save it securely. https://huggingface.co/pyannote/speaker-diarization-3.1
 
 
-Register for a DeepL account, activate the API with a free subscription, and generate an API key as well. This free tier includes up to 500,000 characters per month, equivalent to roughly 6-10 full movies.
+Register for a DeepL account, activate the API with a free subscription, and generate an API key as well. This free tier includes up to 500,000 characters per month, equivalent to roughly 10-20 hour video.
 
 RUN:
 ```
