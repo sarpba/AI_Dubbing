@@ -2,7 +2,7 @@
 import os
 from .utils import run_script, ensure_directory
 
-def separate_audio(proj_name, device, keep_full_audio, workdir="workdir"):
+def separate_audio(proj_name, device, keep_full_audio, selected_model, workdir="workdir"):
     """
     Videófájlokból audio kivonása és szétválasztása Demucs MDX segítségével külső script hívásával.
 
@@ -17,12 +17,12 @@ def separate_audio(proj_name, device, keep_full_audio, workdir="workdir"):
     """
     try:
         project_path = os.path.join(workdir, proj_name)
-        input_dir = os.path.join(project_path, "uploads")  # Feltöltött videók könyvtára
+        input_dir = os.path.join(project_path, "uploads")
         output_dir = os.path.join(project_path, "speech_removed")
         ensure_directory(output_dir)
 
         # Külső script hívása
-        separate_script = os.path.join("scripts", "separate.py")  # Ha más helyen van, add meg a teljes elérési utat
+        separate_script = os.path.join("scripts", "separate.py")
         cmd = ["python", "-u", separate_script, "-i", input_dir, "-o", output_dir]
 
         # Opciók hozzáadása
@@ -30,6 +30,8 @@ def separate_audio(proj_name, device, keep_full_audio, workdir="workdir"):
             cmd += ["--device", device]
         if keep_full_audio:
             cmd += ["--keep_full_audio"]
+        if selected_model:
+            cmd += ["--model", selected_model]
 
         # Script futtatása és kimenet olvasása
         for output in run_script(cmd):

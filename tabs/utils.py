@@ -117,6 +117,15 @@ def normalize_text(text):
     translator = str.maketrans('', '', string.punctuation)  # Írásjelek eltávolítása
     return text.translate(translator).strip()
 
+def get_available_demucs_models():
+    try:
+        from demucs.pretrained import MODEL_HASHES
+        return list(MODEL_HASHES.keys())
+    except ImportError:
+        # Alapértelmezett lista további modellekkel
+        return ["htdemucs", "mdx", "mdx_extra", "mdx_q", "mdx_extra_q",]
+
+
 def escape_html_text(text):
     """
     HTML-escape-eli a szöveget.

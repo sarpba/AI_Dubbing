@@ -16,7 +16,7 @@ from tabs import (
     # Import additional tab modules here
 )
 
-from tabs.utils import list_projects, get_available_gpus
+from tabs.utils import list_projects, get_available_gpus, get_available_demucs_models
 
 # Desired directories at the root
 work_directory = "workdir"
@@ -109,17 +109,26 @@ with gr.Blocks() as demo:
         gr.Markdown("## Separate Speech and Background Sound")
 
         with gr.Row():
-            device_step3 = gr.Radio(label="Device", choices=["cpu", "cuda"], value="cpu")
+            device_step3 = gr.Radio(label="Device", choices=["cpu", "cuda"], value="cuda")
             keep_full_audio_step3 = gr.Checkbox(label="Keep Full Audio File", value=False)
+
+        # Add hozzá a Demucs modell választó legördülő menüt
+        with gr.Row():
+            demucs_model_selection = gr.Dropdown(
+                label="Select Demucs Model",
+                choices=get_available_demucs_models(),
+                value="htdemucs"
+            )
 
         with gr.Row():
             separate_button = gr.Button("Start Speech Separation")
 
         output3 = gr.Textbox(label="Result", lines=1)
 
+        # Frissítsd a separate_button.click hívást az új bemenettel
         separate_button.click(
             separate_audio,
-            inputs=[project_dropdown, device_step3, keep_full_audio_step3],
+            inputs=[project_dropdown, device_step3, keep_full_audio_step3, demucs_model_selection],
             outputs=output3
         )
 

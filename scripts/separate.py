@@ -209,11 +209,13 @@ def concatenate_audio(processed_dir, output_vocals_path, output_non_speech_path)
         logger.warning("Nincsenek 'vocals' szegmensek az összeillesztéshez.")
 
 def main():
-    parser = argparse.ArgumentParser(description='Videófájlokból audio kivonása és szétválasztása Demucs MDX segítségével, 5 perces szegmensekre bontva.')
+    parser = argparse.ArgumentParser(description='Videófájlokból audio kivonása és szétválasztása Demucs segítségével.')
     parser.add_argument('-i', '--input_dir', required=True, help='Bemeneti könyvtár útvonala.')
     parser.add_argument('-o', '--output_dir', required=True, help='Kimeneti könyvtár útvonala.')
     parser.add_argument('--device', default='cuda', help='Eszköz: "cuda" vagy "cpu".')
     parser.add_argument('--keep_full_audio', action='store_true', help='Teljes audio fájl megtartása.')
+    parser.add_argument('--model', default='htdemucs', help='Demucs model to use')  # Új argumentum
+
     args = parser.parse_args()
 
     input_dir = args.input_dir
@@ -229,9 +231,9 @@ def main():
     logger.debug(f"Kimeneti könyvtár létrehozva vagy már létezik: {output_dir}")
 
     # Modell betöltése
-    logger.info("Demucs MDX modell betöltése...")
+    logger.info(f"Demucs modell betöltése: {args.model}")
     try:
-        model = get_model('htdemucs')  #mdx_extra')
+        model = get_model(args.model)
         logger.debug("Modell letöltve.")
     except Exception as e:
         logger.error("Hiba a modell betöltése közben.")

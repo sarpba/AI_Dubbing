@@ -3,4 +3,5 @@ moviepy
 pydub
 deepl
 demucs
+diffq
 
