@@ -92,8 +92,8 @@ def tts_generation(proj_name, tts_language):
 
         # Parancs összeállítása a generate futtatásához az F5-TTS környezetben
         cmd = [
-            "conda", "run", "-n", "F5-TTS",
-            "python", "./scripts/generate_v3.py",
+            "conda", "run", "-n", "f5-tts",
+            "python", "./scripts/generate.py",
             "-m", "F5-TTS",
             "-p", model_path,
             "-v", vocab_path,

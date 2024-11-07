@@ -62,50 +62,8 @@ with gr.Blocks() as demo:
                 upload_button = gr.Button("Upload and Extract Audio")
                 output1 = gr.Textbox(label="Result", lines=1)         
 
-    with gr.Tab("2. Read In"):
-        gr.Markdown("## Create Transcript with WhisperX")
 
-        with gr.Row():
-            hf_token = gr.Textbox(label="Hugging Face Token (If you want to use speaker diarization)", type="password", placeholder="Enter your Hugging Face token")
-            language = gr.Textbox(label="FORCE Whisper Language (if you not set, it'll try to autodetect)", placeholder="Enter language (e.g., 'en', 'hu')")
-
-        with gr.Row():
-            device_selection = gr.Dropdown(label="Device", choices=["cpu", "cuda"], value="cuda")
-            device_index_selection = gr.Dropdown(
-                label="GPU Index",
-                choices=[str(i) for i in get_available_gpus()],
-                value=str(get_available_gpus()[0]) if get_available_gpus() else "0",
-                visible=False
-            )
-
-        # Dynamic visibility setting
-        def update_device_index_visibility(device):
-            if device == "cuda":
-                return gr.update(visible=True)
-            else:
-                return gr.update(visible=False)
-
-        device_selection.change(
-            update_device_index_visibility,
-            inputs=device_selection,
-            outputs=device_index_selection
-        )
-
-        with gr.Row():
-            transcribe_button = gr.Button("Start Transcription")
-
-        output2 = gr.Textbox(label="Result", lines=1)
-
-        transcribe_button.click(
-            transcribe_audio_whisperx,
-            inputs=[project_dropdown, hf_token, device_selection, device_index_selection, language],
-            outputs=output2
-        )
-
-    with gr.Tab("2.1. Json reworking"):
-        gr.Markdown("## Splitting long sentences.")
-
-    with gr.Tab("3. Separate Speech"):
+    with gr.Tab("2. Separate Speech"):
         gr.Markdown("## Separate Speech and Background Sound")
 
         with gr.Row():
@@ -131,6 +89,78 @@ with gr.Blocks() as demo:
             inputs=[project_dropdown, device_step3, keep_full_audio_step3, demucs_model_selection],
             outputs=output3
         )
+
+
+    with gr.Tab("3. Read In"):
+        gr.Markdown("## Create Transcript with WhisperX")
+
+        with gr.Row():
+            hf_token = gr.Textbox(
+                label="Hugging Face Token (If you want to use speaker diarization)",
+                type="password",
+                placeholder="Enter your Hugging Face token"
+            )
+            language = gr.Textbox(
+                label="FORCE Whisper Language (if you not set, it'll try to autodetect)",
+                placeholder="Enter language (e.g., 'en', 'hu')"
+            )
+
+        with gr.Row():
+            device_selection = gr.Dropdown(
+                label="Device",
+                choices=["cpu", "cuda"],
+                value="cuda"
+            )
+            device_index_selection = gr.Dropdown(
+                label="GPU Index",
+                choices=[str(i) for i in get_available_gpus()],
+                value=str(get_available_gpus()[0]) if get_available_gpus() else "0",
+                visible=False
+            )
+
+        # Dynamic visibility setting for GPU index
+        def update_device_index_visibility(device):
+            if device == "cuda":
+                return gr.update(visible=True)
+            else:
+                return gr.update(visible=False)
+
+        device_selection.change(
+            update_device_index_visibility,
+            inputs=device_selection,
+            outputs=device_index_selection
+        )
+
+        with gr.Row():
+            # Új Dropdown a mappa kiválasztásához
+            audio_source_selection = gr.Dropdown(
+                label="Select Audio Source",
+                choices=["audio", "speech_removed"],
+                value="speech_removed"
+            )
+
+        with gr.Row():
+            transcribe_button = gr.Button("Start Transcription")
+
+        output2 = gr.Textbox(label="Result", lines=10)
+
+        transcribe_button.click(
+            transcribe_audio_whisperx,
+            inputs=[
+                project_dropdown,
+                hf_token,
+                device_selection,
+                device_index_selection,
+                audio_source_selection,
+                language
+            ],
+            outputs=output2
+        )
+
+
+    with gr.Tab("3.1. Json reworking"):
+        gr.Markdown("## Splitting long sentences. (not implemented jet)")
+
 
     with gr.Tab("4. Audio Splitting"):
         gr.Markdown("## Split Audio Based on JSON and Audio Files")
@@ -189,14 +219,14 @@ with gr.Blocks() as demo:
         components = []
         for i in range(items_per_page):
             with gr.Row(visible=False) as row:
-                # Language Code
-                lang_code = gr.Textbox(label="Language Code", interactive=False, max_lines=1, scale=0.2)
-                # JSON Text
+                # Timestamp (First Column)
+                timestamp = gr.Textbox(label="Timestamp", interactive=False, max_lines=1, scale=1)
+                # JSON Text (Second Column)
                 json_text = gr.Textbox(label="JSON Text", interactive=False, scale=2)
                 # TXT Text
                 txt_text = gr.Textbox(label="TXT Text", interactive=False, scale=2)
                 # Audio Player 1
-                audio_player = gr.Audio(label="Audio", interactive=True, type="filepath", scale=1)
+                audio_player = gr.Audio(label="Audio", scale=1)
                 # Translated TXT (editable)
                 translated_txt = gr.Textbox(label="Translated TXT", interactive=True, scale=2)
                 # Audio Player 2
@@ -205,12 +235,12 @@ with gr.Blocks() as demo:
                 save_button = gr.Button("Save", scale=1)
                 components.append({
                     'row': row,
-                    'lang_code': lang_code,
+                    'timestamp': timestamp,
                     'json_text': json_text,
                     'txt_text': txt_text,
                     'audio_player': audio_player,
                     'translated_txt': translated_txt,
-                    'sync_audio_player': sync_audio_player,
+                    'sync_audio_file': sync_audio_player,
                     'save_button': save_button,
                     'index': i
                 })
@@ -233,7 +263,7 @@ with gr.Blocks() as demo:
                     # Update visibility
                     updates.append(gr.update(visible=True))  # Row
                     # Update components
-                    updates.append(gr.update(value=data_item['language']))  # lang_code
+                    updates.append(gr.update(value=data_item['timestamp']))  # timestamp
                     updates.append(gr.update(value=data_item['json_text']))  # json_text
                     updates.append(gr.update(value=data_item['txt_text']))  # txt_text
                     updates.append(gr.update(value=data_item['audio_file']))  # audio_player
@@ -243,7 +273,7 @@ with gr.Blocks() as demo:
                 else:
                     # Hide unused components
                     updates.append(gr.update(visible=False))  # Row
-                    updates.append(gr.update(value=""))  # lang_code
+                    updates.append(gr.update(value=""))  # timestamp
                     updates.append(gr.update(value=""))  # json_text
                     updates.append(gr.update(value=""))  # txt_text
                     updates.append(gr.update(value=None))  # audio_player
@@ -257,12 +287,12 @@ with gr.Blocks() as demo:
         for component in components:
             output_components.extend([
                 component['row'],
-                component['lang_code'],
+                component['timestamp'],
                 component['json_text'],
                 component['txt_text'],
                 component['audio_player'],
                 component['translated_txt'],
-                component['sync_audio_player'],
+                component['sync_audio_file'],
                 component['save_button']
             ])
 

@@ -4,10 +4,16 @@ import json
 import re
 from .utils import normalize_text
 
-
 def compare_transcripts_whisperx(proj_name, workdir="workdir"):
     """
     Compares JSON transcripts and TXT files and returns data for display.
+
+    Args:
+        proj_name (str): The selected project name.
+        workdir (str): The base working directory path.
+
+    Returns:
+        tuple: A list of data items and an error message string.
     """
     try:
         transcripts_split_dir = os.path.join(workdir, proj_name, "transcripts_split")
@@ -27,7 +33,7 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
         if not json_files:
             return [], "No JSON files found in transcripts_split directory."
 
-        # Function to extract timestamp
+        # Function to extract timestamp from filename
         def get_timestamp(filename):
             match = re.match(r'(\d{2})-(\d{2})-(\d{2}\.\d+)-', filename)
             if match:
@@ -35,6 +41,13 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
                 return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
             else:
                 return 0  # If no match, return 0
+
+        # Function to format timestamp as HH:MM:SS.SSS
+        def format_timestamp(seconds):
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = seconds % 60
+            return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
 
         # Sort json_files based on timestamp
         json_files = sorted(json_files, key=get_timestamp)
@@ -51,8 +64,23 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
 
             basename = os.path.splitext(json_file)[0]
 
+            # Extract start timestamp from filename
+            match = re.match(r'(\d{2})-(\d{2})-(\d{2}\.\d+)-', basename)
+            if match:
+                hours_str, minutes_str, seconds_str = match.groups()
+                hours = int(hours_str)
+                minutes = int(minutes_str)
+                seconds = float(seconds_str)
+                total_seconds = hours * 3600 + minutes * 60 + seconds
+                formatted_timestamp = f"{hours:02d}:{minutes:02d}:{seconds:06.3f}"
+            else:
+                formatted_timestamp = "00:00:00.000"
+
             # Concatenate all JSON segment texts
             json_full_text = " ".join([segment.get("text", "") for segment in segments]).strip()
+
+            # Prefix JSON text with language code
+            json_text_with_lang = f"{language} - {json_full_text}"
 
             # Normalize JSON text
             json_full_text_normalized = normalize_text(json_full_text)
@@ -71,7 +99,7 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
                 txt_text_normalized = normalize_text(txt_text)
 
             # Compare texts
-            match = (json_full_text_normalized == txt_text_normalized)
+            match_text = (json_full_text_normalized == txt_text_normalized)
 
             # Determine corresponding audio file
             wav_filename = f"{basename}.wav"
@@ -107,14 +135,14 @@ def compare_transcripts_whisperx(proj_name, workdir="workdir"):
 
             # Collect data
             data_item = {
-                'language': language,
-                'json_text': json_full_text,
+                'timestamp': formatted_timestamp,  # Use formatted timestamp
+                'json_text': json_text_with_lang,  # JSON text prefixed with language code
                 'txt_text': txt_text,
                 'audio_file': audio_file_path,
                 'translated_txt': translated_txt_content,
-                'translated_txt_path': translated_txt_path,  # New field
+                'translated_txt_path': translated_txt_path,  # For saving edits
                 'sync_audio_file': sync_audio_file_path,
-                'match': match
+                'match': match_text
             }
 
             data_list.append(data_item)

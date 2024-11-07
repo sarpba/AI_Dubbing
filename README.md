@@ -16,7 +16,7 @@ At the moment It run on linux only with anaconda it use 2 enviroment.
 
 Prepare F5-TTS anaconda enviroment:
 ```
-conda create -n F5-TTS python=3.10 && conda activate F5-TTS
+conda create -n f5-tts python=3.10 && conda activate f5-tts
 conda install git
 pip install torch==2.3.0+cu118 torchaudio==2.3.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
 pip install git+https://github.com/SWivid/F5-TTS.git
@@ -51,7 +51,7 @@ todo:
 
 - make a manual correction tab, for change automatic translated texts or base audio if need. (text change done)
 - need a good working normaliser metod which is with multilang moduls (change numbers and spacial characters to words, because the finetuned modells not heandle it good)
-- good working speaker diarization for segment reworking.
+- good working speaker diarization for segment reworking. (segment reworking done, but it based on speaker diarization, it can use it for podcasts with one speaker)
 ...
 
 License: MIT
