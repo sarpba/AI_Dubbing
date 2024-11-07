@@ -47,8 +47,9 @@ def get_audio_duration(audio_file):
         return 0
 
 # A GPU-khoz rendelt folyamatokat kezelő függvény.
-def worker(gpu_id, task_queue):
-    device = "cuda"
+def worker(gpu_id, task_queue, language_code):
+    device = f"cuda:{gpu_id}"  # A megfelelő GPU eszköz beállítása
+
     try:
         torch.cuda.set_device(gpu_id)
     except Exception as e:
@@ -56,9 +57,21 @@ def worker(gpu_id, task_queue):
         return
 
     try:
-        # 1. WhisperX modell betöltése a munkafolyamat elején
+        # WhisperX modell betöltése
         print(f"GPU-{gpu_id}: WhisperX modell betöltése...")
-        model = whisperx.load_model("large-v3", device=device, compute_type="float16")
+        if language_code:
+            model = whisperx.load_model(
+                "large-v3",
+                device=device,
+                compute_type="float16",
+                language=language_code
+            )
+        else:
+            model = whisperx.load_model(
+                "large-v3",
+                device=device,
+                compute_type="float16"
+            )
         print(f"GPU-{gpu_id}: Modell betöltve.")
 
         while True:
@@ -83,6 +96,25 @@ def worker(gpu_id, task_queue):
                 result = model.transcribe(audio, batch_size=16)
                 print(f"Átírás befejezve: {audio_file}")
 
+                # Nyelv kód meghatározása az alignáláshoz
+                align_language_code = language_code if language_code else result["language"]
+
+                # Alignálás
+                print(f"GPU-{gpu_id}: Alignálás indítása...")
+                model_a, metadata = whisperx.load_align_model(
+                    language_code=align_language_code,
+                    device=device
+                )
+                result = whisperx.align(
+                    result["segments"],
+                    model_a,
+                    metadata,
+                    audio,
+                    device=device,
+                    return_char_alignments=False
+                )
+                print(f"Alignálás befejezve: {audio_file}")
+
                 # Eredmények mentése
                 with open(json_file, "w", encoding="utf-8") as f:
                     import json
@@ -103,6 +135,11 @@ def worker(gpu_id, task_queue):
                 print(f"Kezdés időpontja: {start_datetime.strftime('%Y.%m.%d %H:%M')}")
                 print(f"Befejezés időpontja: {end_datetime.strftime('%Y.%m.%d %H:%M')}\n")
 
+                # GPU memória felszabadítása
+                del model_a
+                gc.collect()
+                torch.cuda.empty_cache()
+
             except Exception as e:
                 print(f"Hiba a következő fájl feldolgozása során GPU-{gpu_id}-n: {audio_file} - {e}")
                 if retries < MAX_RETRIES:
@@ -112,14 +149,14 @@ def worker(gpu_id, task_queue):
                     print(f"Maximális próbálkozások elérve: {audio_file} feldolgozása sikertelen.\n")
 
     finally:
-        # GPU memória felszabadítása a munkafolyamat végén
+        # GPU memória felszabadítása
         print(f"GPU-{gpu_id}: GPU memória felszabadítása...")
         del model
         gc.collect()
         torch.cuda.empty_cache()
         print(f"GPU-{gpu_id}: GPU memória felszabadítva.")
 
-# Az adott könyvtárban és almappáiban található összes audio fájl gyűjtése.
+# Audio fájlok gyűjtése
 def get_audio_files(directory):
     audio_extensions = (".mp3", ".wav", ".flac", ".m4a", ".opus")
     audio_files = []
@@ -129,8 +166,8 @@ def get_audio_files(directory):
                 audio_files.append(os.path.join(root, file))
     return audio_files
 
-# Folyamatokat indító és feladatlistát kezelő függvény.
-def transcribe_directory(directory, gpu_ids):
+# Folyamatok indítása és feladatlista kezelése
+def transcribe_directory(directory, gpu_ids, language_code):
     audio_files = get_audio_files(directory)
     task_queue = Queue()
     tasks_added = 0
@@ -140,7 +177,7 @@ def transcribe_directory(directory, gpu_ids):
             task_queue.put((audio_file, 0))
             tasks_added += 1
         else:
-            print(f"Már létezik: {json_file}, kihagyás a feladatlistában...")
+            print(f"Már létezik: {json_file}, kihagyás a feldolgozásból...")
 
     if tasks_added == 0:
         print("Nincs feldolgozandó fájl.")
@@ -148,7 +185,7 @@ def transcribe_directory(directory, gpu_ids):
 
     processes = []
     for gpu_id in gpu_ids:
-        p = Process(target=worker, args=(gpu_id, task_queue))
+        p = Process(target=worker, args=(gpu_id, task_queue, language_code))
         processes.append(p)
         p.start()
 
@@ -156,9 +193,10 @@ def transcribe_directory(directory, gpu_ids):
         p.join()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Audio fájlok átírása egy könyvtárban és almappáiban WhisperX segítségével több GPU-val.")
+    parser = argparse.ArgumentParser(description="Audio fájlok átírása és alignálása egy könyvtárban és almappáiban WhisperX segítségével több GPU-val.")
     parser.add_argument("directory", type=str, help="A könyvtár, amely tartalmazza az audio fájlokat.")
     parser.add_argument('--gpus', type=str, default=None, help="Használni kívánt GPU indexek, vesszővel elválasztva (pl. '0,2,3')")
+    parser.add_argument('--language', type=str, default=None, help="Opciós nyelvkód (pl. 'en', 'es'). Ha nem adsz meg, a nyelv detekciója kerül alkalmazásra.")
 
     args = parser.parse_args()
 
@@ -188,6 +226,5 @@ if __name__ == "__main__":
             print("Hiba: Nincsenek elérhető GPU-k.")
             sys.exit(1)
 
-    # Átírás indítása a meghatározott GPU-kkal
-    transcribe_directory(args.directory, gpu_ids)
-
+    # Átírás és alignálás indítása
+    transcribe_directory(args.directory, gpu_ids, args.language)
