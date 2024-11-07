@@ -48,8 +48,7 @@ def get_audio_duration(audio_file):
 
 # A GPU-khoz rendelt folyamatokat kezelő függvény.
 def worker(gpu_id, task_queue, language_code):
-    device = f"cuda:{gpu_id}"  # A megfelelő GPU eszköz beállítása
-
+    device = "cuda"
     try:
         torch.cuda.set_device(gpu_id)
     except Exception as e:
@@ -57,21 +56,12 @@ def worker(gpu_id, task_queue, language_code):
         return
 
     try:
-        # WhisperX modell betöltése
+        # 1. WhisperX modell betöltése a munkafolyamat elején
         print(f"GPU-{gpu_id}: WhisperX modell betöltése...")
         if language_code:
-            model = whisperx.load_model(
-                "large-v3",
-                device=device,
-                compute_type="float16",
-                language=language_code
-            )
+            model = whisperx.load_model("large-v3", device=device, compute_type="float16", language=language_code)
         else:
-            model = whisperx.load_model(
-                "large-v3",
-                device=device,
-                compute_type="float16"
-            )
+            model = whisperx.load_model("large-v3", device=device, compute_type="float16")
         print(f"GPU-{gpu_id}: Modell betöltve.")
 
         while True:
@@ -99,20 +89,10 @@ def worker(gpu_id, task_queue, language_code):
                 # Nyelv kód meghatározása az alignáláshoz
                 align_language_code = language_code if language_code else result["language"]
 
-                # Alignálás
+                # 2. Alignálás
                 print(f"GPU-{gpu_id}: Alignálás indítása...")
-                model_a, metadata = whisperx.load_align_model(
-                    language_code=align_language_code,
-                    device=device
-                )
-                result = whisperx.align(
-                    result["segments"],
-                    model_a,
-                    metadata,
-                    audio,
-                    device=device,
-                    return_char_alignments=False
-                )
+                model_a, metadata = whisperx.load_align_model(language_code=align_language_code, device=device)
+                result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
                 print(f"Alignálás befejezve: {audio_file}")
 
                 # Eredmények mentése
@@ -135,7 +115,7 @@ def worker(gpu_id, task_queue, language_code):
                 print(f"Kezdés időpontja: {start_datetime.strftime('%Y.%m.%d %H:%M')}")
                 print(f"Befejezés időpontja: {end_datetime.strftime('%Y.%m.%d %H:%M')}\n")
 
-                # GPU memória felszabadítása
+                # GPU memória felszabadítása az egyes fájlok feldolgozása után
                 del model_a
                 gc.collect()
                 torch.cuda.empty_cache()
@@ -149,14 +129,14 @@ def worker(gpu_id, task_queue, language_code):
                     print(f"Maximális próbálkozások elérve: {audio_file} feldolgozása sikertelen.\n")
 
     finally:
-        # GPU memória felszabadítása
+        # GPU memória felszabadítása a munkafolyamat végén
         print(f"GPU-{gpu_id}: GPU memória felszabadítása...")
         del model
         gc.collect()
         torch.cuda.empty_cache()
         print(f"GPU-{gpu_id}: GPU memória felszabadítva.")
 
-# Audio fájlok gyűjtése
+# Az adott könyvtárban és almappáiban található összes audio fájl gyűjtése.
 def get_audio_files(directory):
     audio_extensions = (".mp3", ".wav", ".flac", ".m4a", ".opus")
     audio_files = []
@@ -166,7 +146,7 @@ def get_audio_files(directory):
                 audio_files.append(os.path.join(root, file))
     return audio_files
 
-# Folyamatok indítása és feladatlista kezelése
+# Folyamatokat indító és feladatlistát kezelő függvény.
 def transcribe_directory(directory, gpu_ids, language_code):
     audio_files = get_audio_files(directory)
     task_queue = Queue()
@@ -226,5 +206,5 @@ if __name__ == "__main__":
             print("Hiba: Nincsenek elérhető GPU-k.")
             sys.exit(1)
 
-    # Átírás és alignálás indítása
+    # Átírás és alignálás indítása a meghatározott GPU-kkal és opciós nyelvkóddal
     transcribe_directory(args.directory, gpu_ids, args.language)

@@ -387,7 +387,7 @@ with gr.Blocks() as demo:
         with gr.Row():
             input_language = gr.Dropdown(
                 label="Input Language",
-                choices=["EN", "HU", "DE", "FR", "ES", "IT", "NL", "PL", "RU", "ZH"],
+                choices=["EN", "HU", "DE", "FR", "ES", "IT", "NL", "PL", "RU", "ZH", "JA"],
                 value="EN"
             )
             output_language = gr.Dropdown(
