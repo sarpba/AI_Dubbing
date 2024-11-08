@@ -234,12 +234,13 @@ def process_files(
                 logger.warning(f"Generated text file not found for {wav_path.name}, skipping.")
                 continue
 
-            # Beolvassuk a referencia és generált szövegeket
+            # Beolvassuk a referencia szöveget
             with open(ref_txt_path, "r", encoding="utf-8") as f:
                 ref_text = f.read().strip()
 
+            # Beolvassuk a generált szöveget, hozzáadjuk a "... " előtagot és kisbetűssé alakítjuk
             with open(gen_txt_path, "r", encoding="utf-8") as f:
-                gen_text = f.read().strip()
+                gen_text = "... " + f.read().strip().lower()
 
             # Futtatjuk az inference-t
             try:
