@@ -531,4 +531,4 @@ with gr.Blocks() as demo:
     demo.load(fn=initialize_projects, inputs=[], outputs=project_dropdown)
 
 # Launch the application
-demo.launch()
+demo.launch(share=True)
