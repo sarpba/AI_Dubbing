@@ -425,7 +425,7 @@ with gr.Blocks() as demo:
             tts_language = gr.Dropdown(
                 label="Target Language (put the.pt and vocab.txt file the /TTS/your_folder)",
                 choices=subdirectories,
-                value="hun"  # Nincs alapértelmezett érték
+                value=None  # Nincs alapértelmezett érték
             )
 
         with gr.Row():
