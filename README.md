@@ -52,6 +52,7 @@ todo:
 - make a manual correction tab, for change automatic translated texts or base audio if need. (text change done)
 - need a good working normaliser metod which is with multilang moduls (change numbers and spacial characters to words, because the finetuned modells not heandle it good)
 - good working speaker diarization for segment reworking. (segment reworking done, but it based on speaker diarization, it can use it for podcasts with one speaker)
+- non line per line translate, for understand and handle the context (based on chatgpt 4o)
 ...
 
 License: MIT

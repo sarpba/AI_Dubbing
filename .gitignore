@@ -3,6 +3,8 @@ workdir/
 tabs/__pycache__
 info.txt
 TTS/
+tools/
 script.log
 separate.log
-.gradio/certificate.pem
+infer_batch.log
+.gradio
