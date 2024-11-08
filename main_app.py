@@ -1,6 +1,8 @@
 # main_app.py
 import os
 import gradio as gr
+import argparse
+import socket
 from tabs import (
     upload_and_extract_audio,
     transcribe_audio_whisperx,
@@ -530,5 +532,48 @@ with gr.Blocks() as demo:
 
     demo.load(fn=initialize_projects, inputs=[], outputs=project_dropdown)
 
-# Launch the application
-demo.launch()
+## Argument parsers setup
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run Gradio app with optional share, port, and host settings.")
+    parser.add_argument('--share', action='store_true', help='Create a shareable URL for Gradio.')
+    parser.add_argument('--port', type=int, default=7860, help='Port number for the application to run on (default: 7860).')
+    parser.add_argument('--host', type=str, default='127.0.0.1', help='Host address for the application to bind to (default: 127.0.0.1). If you want to share on local lan just use 0.0.0.0')
+    return parser.parse_args()
+
+# Port checker function
+def is_port_free(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+            s.close()
+            return True
+        except socket.error:
+            return False
+
+# Main section
+if __name__ == "__main__":
+    args = parse_args()
+
+    port = args.port
+    host = args.host
+    initial_port = port
+
+    max_attempts = 10  # Maximum number of port attempts
+    attempt = 0
+
+    while not is_port_free(host, port) and attempt < max_attempts:
+        print(f"Error: Port {port} is occupied on host {host}. Attempting to start on port {port + 1}.")
+        port += 1
+        attempt += 1
+
+    if not is_port_free(host, port):
+        print(f"Error: Could not find a free port in the range {initial_port} to {port + max_attempts}. The application cannot start.")
+        exit(1)
+    else:
+        if port != initial_port:
+            print(f"Gradio application is starting on host {host} and port {port}.")
+        else:
+            print(f"Gradio application is starting on host {host} and port {port}.")
+
+    # Launch the application with share, port, and host options
+    demo.launch(share=args.share, server_port=port, server_name=host)

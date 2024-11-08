@@ -5,3 +5,4 @@ info.txt
 TTS/
 script.log
 separate.log
+.gradio/certificate.pem
