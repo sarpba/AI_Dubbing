@@ -123,7 +123,7 @@ def get_available_demucs_models():
         return list(MODEL_HASHES.keys())
     except ImportError:
         # Alapértelmezett lista további modellekkel
-        return ["htdemucs", "mdx", "mdx_extra", "mdx_q", "mdx_extra_q",]
+        return ["htdemucs", "htdemucs_ft", "hdemucs_mmi", "mdx", "mdx_extra",]
 
 
 def escape_html_text(text):
