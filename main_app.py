@@ -210,7 +210,7 @@ with gr.Blocks() as demo:
         current_page_state = gr.State(0)
 
         # Number of items per page
-        items_per_page = 5  # Adjust as needed
+        items_per_page = 20  # Adjust as needed
 
         # Error message output
         error_output = gr.Markdown(value="", visible=False)
@@ -340,8 +340,21 @@ with gr.Blocks() as demo:
             outputs=[current_page_state] + output_components
         )
 
-        # Save button action
+        # Save button action (Modified)
         def save_translated_text(proj_name, data_list, page, translated_text, item_index):
+            """
+            Saves the translated text and deletes corresponding TXT files in the sync directory.
+
+            Args:
+                proj_name (str): The project name.
+                data_list (list): The list of data items.
+                page (int): The current page number.
+                translated_text (str): The translated text to save.
+                item_index (int): The index of the item on the current page.
+
+            Returns:
+                gr.update: A Gradio update object with the status message.
+            """
             # Calculate the actual index in data_list
             actual_index = page * items_per_page + item_index
             if actual_index < len(data_list):
@@ -353,13 +366,72 @@ with gr.Blocks() as demo:
                 try:
                     with open(translated_txt_path, 'w', encoding='utf-8') as f:
                         f.write(translated_text)
-                    return gr.update(value="Changes saved successfully.", visible=True)
+                    
+                        # Extract the basename from the translated_txt_path
+                        basename = os.path.splitext(os.path.basename(translated_txt_path))[0]
+
+                        # Define the sync directory path
+                        sync_dir = os.path.join("workdir", proj_name, "sync")
+
+                        # Initialize a list to keep track of deleted files
+                        deleted_files = []
+                        error_files = []
+
+                        # Track the existence of each file type
+                        wav_exists = False
+                        json_exists = False
+
+                        if os.path.exists(sync_dir):
+                            # Check if .wav and .json files with the basename exist
+                            for filename in os.listdir(sync_dir):
+                                if filename.startswith(basename) and filename.lower().endswith('.wav'):
+                                    wav_exists = True
+                                elif filename.startswith(basename) and filename.lower().endswith('.json'):
+                                    json_exists = True
+
+                            # Collect files to delete if they exist
+                            files_to_delete = [
+                                filename for filename in os.listdir(sync_dir)
+                                if filename.startswith(basename) and (filename.lower().endswith('.wav') or filename.lower().endswith('.json'))
+                            ]
+
+                            if files_to_delete:
+                                # Iterate over files and delete them
+                                for filename in files_to_delete:
+                                    file_to_delete = os.path.join(sync_dir, filename)
+                                    try:
+                                        os.remove(file_to_delete)
+                                        deleted_files.append(filename)
+                                    except Exception as e:
+                                        error_files.append(filename)
+                                        print(f"Error deleting {file_to_delete}: {e}")
+
+                                # Prepare the success message
+                                message = "Changes saved successfully."
+                                if deleted_files:
+                                    message += f" Deleted {len(deleted_files)} sync file(s): {', '.join(deleted_files)}."
+                                if error_files:
+                                    message += f" Failed to delete {len(error_files)} file(s): {', '.join(error_files)}."
+
+                                # Check for missing file types
+                                if not wav_exists:
+                                    message += " However, no .wav file was found."
+                                if not json_exists:
+                                    message += " However, no .json file was found."
+
+                                return gr.update(value=message, visible=True)
+                            else:
+                                # No matching files found
+                                return gr.update(value=f"No files with basename '{basename}' and .wav or .json extensions found in sync directory.", visible=True)
+                        else:
+                            # Sync directory does not exist
+                            return gr.update(value="Changes saved successfully. Sync directory does not exist.", visible=True)
                 except Exception as e:
                     return gr.update(value=f"Error saving changes: {str(e)}", visible=True)
             else:
                 return gr.update(value="Invalid item index.", visible=True)
 
-        # Save button click events
+        # Save button click events (Replaced with the updated function)
         for idx, component in enumerate(components):
             item_save_button = component['save_button']
             item_translated_txt = component['translated_txt']
@@ -369,11 +441,11 @@ with gr.Blocks() as demo:
             item_save_button.click(
                 fn=save_translated_text,
                 inputs=[
-                    project_dropdown,
-                    comparison_data_state,
-                    current_page_state,
-                    item_translated_txt,
-                    gr.State(item_index)
+                    project_dropdown,          # proj_name
+                    comparison_data_state,    # data_list
+                    current_page_state,       # page
+                    item_translated_txt,      # translated_text
+                    gr.State(item_index)      # item_index
                 ],
                 outputs=save_message_output
             )
@@ -381,6 +453,7 @@ with gr.Blocks() as demo:
         # Display the save message output
         with gr.Row():
             save_message_output
+
 
 
     with gr.Tab("7. Translate Chunks"):
