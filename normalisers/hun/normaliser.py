@@ -253,5 +253,5 @@ def normalize(text):
 if __name__ == "__main__":
     # Példa szöveg
     sample_text = "Ez egy példa, KENY, szöveg 10% és 7:15 időponttal 2015.10.23. dátummal. Chartmen"
-    normalized_text = normalize_text(sample_text)
+    normalized_text = normalize(sample_text)
     print(normalized_text)

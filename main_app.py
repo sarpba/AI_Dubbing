@@ -503,8 +503,9 @@ with gr.Blocks() as demo:
                 choices=subdirectories,
                 value=None  # Nincs alapértelmezett érték
             )
+
         normaliser_directory = "normalisers"
-        normalisers_subdirectories = [d for d in os.listdir(tts_directory) if os.path.isdir(os.path.join(normaliser_directory, d))]
+        normalisers_subdirectories = [d for d in os.listdir(normaliser_directory) if os.path.isdir(os.path.join(normaliser_directory, d))]
 
         with gr.Row():
             normalise_language = gr.Dropdown(

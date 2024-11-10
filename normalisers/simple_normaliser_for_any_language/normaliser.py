@@ -38,6 +38,11 @@ def apply_changes(text, changes):
         text = re.sub(pattern, value, text, flags=re.IGNORECASE)
     return text
 
+def remove_duplicate_spaces(text):
+    # Többszörös szóközök eltávolítása
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
 def add_prefix(text):
     # stabilize the short predicts with ... frefix
     return '... ' + text.lower()
