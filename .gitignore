@@ -1,6 +1,6 @@
 # Kizárt könyvtárak
 workdir/
-tabs/__pycache__
+**/__pycache__/
 info.txt
 TTS/
 tools/
