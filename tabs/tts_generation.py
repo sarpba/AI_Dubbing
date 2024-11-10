@@ -93,12 +93,13 @@ def tts_generation(proj_name, tts_language):
         # Parancs összeállítása a generate futtatásához az F5-TTS környezetben
         cmd = [
             "conda", "run", "-n", "f5-tts",
-            "python", "./scripts/f5_tts_infer_API.py",
+            "python", "/scripts/f5_tts_infer_API.py",
             "--ckpt_file", model_path,
             "--vocab_file", vocab_path,
             "--input_dir", split_audio_dir,
             "--input_gen_dir", translations_dir,
-            "--output_dir", sync_dir
+            "--output_dir", sync_dir,
+            "--norm", "hun"
         ]
 
         # Logolás megkezdése

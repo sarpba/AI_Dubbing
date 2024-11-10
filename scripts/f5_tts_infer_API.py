@@ -6,10 +6,10 @@ import torch
 import torch.multiprocessing as mp
 import random
 import logging
+import importlib.util  # Added for dynamic importing
 
 import soundfile as sf
 import tqdm
-from cached_path import cached_path
 
 from f5_tts.infer.utils_infer import (
     hop_length,
@@ -68,16 +68,9 @@ class F5TTS:
 
     def load_ema_model(self, model_type, ckpt_file, mel_spec_type, vocab_file, ode_method, use_ema):
         if model_type == "F5-TTS":
-            if not ckpt_file:
-                if mel_spec_type == "vocos":
-                    ckpt_file = str(cached_path("hf://SWivid/F5-TTS/F5TTS_Base/model_1200000.safetensors"))
-                elif mel_spec_type == "bigvgan":
-                    ckpt_file = str(cached_path("hf://SWivid/F5-TTS/F5TTS_Base_bigvgan/model_1250000.pt"))
             model_cfg = dict(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4)
             model_cls = DiT
         elif model_type == "E2-TTS":
-            if not ckpt_file:
-                ckpt_file = str(cached_path("hf://SWivid/E2-TTS/E2TTS_Base/model_1200000.safetensors"))
             model_cfg = dict(dim=1024, depth=24, heads=16, ff_mult=4)
             model_cls = UNetT
         else:
@@ -186,6 +179,10 @@ def parse_arguments():
         "--max_workers", type=int, default=None,
         help="Maximum number of parallel workers. Defaults to the number of available GPUs."
     )
+    parser.add_argument(
+        "--norm", type=str, required=False, default=None,
+        help="Normalization type (e.g., 'hun', 'eng'). Determines which normalizer to use."
+    )
     return parser.parse_args()
 
 def process_files(
@@ -199,8 +196,30 @@ def process_files(
     speed,
     nfe_step,
     device,
+    norm_value,  # Added norm_value parameter
 ):
     try:
+        # Initialize normalization if norm_value is provided
+        if norm_value is not None:
+            normaliser_path = Path("./../normalisers/") / norm_value / "normaliser.py"
+            if not normaliser_path.exists():
+                logger.error(f"Normalizer module not found for norm='{norm_value}' at {normaliser_path}")
+                sys.exit(1)
+
+            spec = importlib.util.spec_from_file_location("normaliser", normaliser_path)
+            normaliser = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(normaliser)
+
+            if not hasattr(normaliser, 'normalize'):
+                logger.error(f"The normalizer module '{normaliser_path}' does not have a 'normalize' function.")
+                sys.exit(1)
+
+            normalize_fn = normaliser.normalize
+            logger.info(f"Loaded normalizer '{norm_value}' from {normaliser_path}")
+        else:
+            normalize_fn = None
+            logger.info("No normalization will be applied as --norm parameter was not provided.")
+
         # Inicializáljuk az F5TTS osztályt a megadott paraméterekkel
         f5tts = F5TTS(
             vocab_file=vocab_file,
@@ -238,9 +257,18 @@ def process_files(
             with open(ref_txt_path, "r", encoding="utf-8") as f:
                 ref_text = f.read().strip()
 
-            # Beolvassuk a generált szöveget, hozzáadjuk a "... " előtagot és kisbetűssé alakítjuk
+            # Beolvassuk a generált szöveget
             with open(gen_txt_path, "r", encoding="utf-8") as f:
-                gen_text = "... " + f.read().strip().lower()
+                gen_text = f.read().strip()
+
+                # Apply normalization to gen_text if normalization is enabled
+                if normalize_fn is not None:
+                    try:
+                        gen_text = normalize_fn(gen_text)
+                        logger.debug(f"Normalized gen_text for {gen_txt_path}")
+                    except Exception as e:
+                        logger.error(f"Normalization failed for {gen_txt_path}: {e}")
+                        continue
 
             # Futtatjuk az inference-t
             try:
@@ -272,6 +300,7 @@ def main_worker(
     ckpt_file,
     speed,
     nfe_step,
+    norm_value,  # Added norm_value parameter
 ):
     # Meghatározzuk a GPU-t
     device = f"cuda:{worker_id}"
@@ -288,6 +317,7 @@ def main_worker(
         speed,
         nfe_step,
         device,
+        norm_value,  # Pass norm_value to process_files
     )
 
 def main():
@@ -347,6 +377,7 @@ def main():
                 args.ckpt_file,
                 args.speed,
                 args.nfe_step,
+                args.norm,  # Pass norm_value to main_worker
             )
         )
         p.start()
