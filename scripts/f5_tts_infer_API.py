@@ -35,6 +35,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Determine the project root directory once, globally
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+logger.info(f"Project root determined as: {PROJECT_ROOT}")
+
 class F5TTS:
     def __init__(
         self,
@@ -201,7 +205,13 @@ def process_files(
     try:
         # Initialize normalization if norm_value is provided
         if norm_value is not None:
-            normaliser_path = Path("./../normalisers/") / norm_value / "normaliser.py"
+            # **Modified Path Construction Starts Here**
+            # Use the globally determined PROJECT_ROOT
+            normaliser_path = PROJECT_ROOT / "normalisers" / norm_value / "normaliser.py"
+
+            # Log the path for debugging
+            logger.info(f"Normaliser path: {normaliser_path}")
+
             if not normaliser_path.exists():
                 logger.error(f"Normalizer module not found for norm='{norm_value}' at {normaliser_path}")
                 sys.exit(1)
@@ -220,7 +230,7 @@ def process_files(
             normalize_fn = None
             logger.info("No normalization will be applied as --norm parameter was not provided.")
 
-        # Inicializáljuk az F5TTS osztályt a megadott paraméterekkel
+        # Initialize F5TTS class
         f5tts = F5TTS(
             vocab_file=vocab_file,
             ckpt_file=ckpt_file,
@@ -232,19 +242,19 @@ def process_files(
         for wav_path in tqdm.tqdm(wav_files, desc=f"Processing on {device}"):
             base_name = wav_path.stem  # Filename without extension
 
-            # Elérési utak a megfelelő .txt fájlokhoz
+            # Paths to the corresponding .txt files
             ref_txt_path = input_dir / f"{base_name}.txt"
             gen_txt_path = input_gen_dir / f"{base_name}.txt"
 
-            # Kimeneti elérési út
+            # Output path
             output_wav_path = output_dir / f"{base_name}.wav"
 
-            # Ellenőrizzük, hogy a kimeneti fájl már létezik-e
+            # Check if output file already exists
             if output_wav_path.exists():
                 logger.info(f"Output file {output_wav_path} already exists. Skipping.")
                 continue
 
-            # Ellenőrizzük, hogy a referencia és generált szöveges fájlok léteznek-e
+            # Check if reference and generated text files exist
             if not ref_txt_path.exists():
                 logger.warning(f"Reference text file not found for {wav_path.name}, skipping.")
                 continue
@@ -253,11 +263,11 @@ def process_files(
                 logger.warning(f"Generated text file not found for {wav_path.name}, skipping.")
                 continue
 
-            # Beolvassuk a referencia szöveget
+            # Read the reference text
             with open(ref_txt_path, "r", encoding="utf-8") as f:
                 ref_text = f.read().strip()
 
-            # Beolvassuk a generált szöveget
+            # Read the generated text
             with open(gen_txt_path, "r", encoding="utf-8") as f:
                 gen_text = f.read().strip()
 
@@ -270,7 +280,7 @@ def process_files(
                         logger.error(f"Normalization failed for {gen_txt_path}: {e}")
                         continue
 
-            # Futtatjuk az inference-t
+            # Perform inference
             try:
                 f5tts.infer(
                     ref_file=str(wav_path),
@@ -302,7 +312,7 @@ def main_worker(
     nfe_step,
     norm_value,  # Added norm_value parameter
 ):
-    # Meghatározzuk a GPU-t
+    # Determine the GPU
     device = f"cuda:{worker_id}"
     logger.info(f"Worker {worker_id} using device {device}")
 
@@ -327,7 +337,7 @@ def main():
     input_gen_dir = Path(args.input_gen_dir)
     output_dir = Path(args.output_dir)
 
-    # Validáljuk a speed és nfe_step paramétereket
+    # Validate speed and nfe_step parameters
     if not (0.5 <= args.speed <= 2.0):
         logger.error(f"Invalid speed value: {args.speed}. Must be between 0.5 and 2.0.")
         sys.exit(1)
@@ -335,33 +345,33 @@ def main():
         logger.error(f"Invalid nfe_step value: {args.nfe_step}. Must be between 16 and 64.")
         sys.exit(1)
 
-    # Gyűjtsük össze az összes .wav fájlt a bemeneti könyvtárból
+    # Gather all .wav files from the input directory
     wav_files = list(input_dir.glob("*.wav"))
 
     if not wav_files:
         logger.error(f"No .wav files found in {input_dir}")
         sys.exit(1)
 
-    # Megvizsgáljuk a rendelkezésre álló GPU-k számát
+    # Check the number of available GPUs
     num_gpus = torch.cuda.device_count()
     if num_gpus == 0:
         logger.error("No GPUs detected. Exiting.")
         sys.exit(1)
 
-    # Használható munkamenetek számának meghatározása
+    # Determine the number of workers
     max_workers = args.max_workers or num_gpus
     logger.info(f"Number of available GPUs: {num_gpus}")
     logger.info(f"Using {max_workers} parallel workers.")
 
-    # Elosztjuk a fájlokat a munkamenetek között
+    # Distribute the files among workers
     chunks = [[] for _ in range(max_workers)]
     for idx, wav_file in enumerate(wav_files):
         chunks[idx % max_workers].append(wav_file)
 
-    # Létrehozzuk a kimeneti könyvtárat, ha nem létezik
+    # Create the output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Indítjuk a folyamatokat
+    # Start the processes
     processes = []
     for worker_id in range(max_workers):
         p = mp.Process(
@@ -384,7 +394,7 @@ def main():
         processes.append(p)
         logger.info(f"Started process {p.pid} for worker {worker_id} on device cuda:{worker_id % num_gpus}")
 
-    # Várakozunk, amíg minden folyamat befejeződik
+    # Wait for all processes to finish
     for p in processes:
         p.join()
         if p.exitcode != 0:
@@ -393,5 +403,5 @@ def main():
             logger.info(f"Process {p.pid} finished successfully.")
 
 if __name__ == "__main__":
-    mp.set_start_method('spawn')  # Biztonságosabb több GPU használat esetén
+    mp.set_start_method('spawn')  # Safer for multi-GPU environments
     main()

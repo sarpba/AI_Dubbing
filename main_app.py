@@ -496,10 +496,20 @@ with gr.Blocks() as demo:
         tts_directory = "TTS"
         subdirectories = [d for d in os.listdir(tts_directory) if os.path.isdir(os.path.join(tts_directory, d))]
 
+
         with gr.Row():
             tts_language = gr.Dropdown(
-                label="Target Language (put the.pt and vocab.txt file the /TTS/your_folder)",
+                label="Select your TTS model(put the.pt and vocab.txt file into the /TTS/your_folder)",
                 choices=subdirectories,
+                value=None  # Nincs alapértelmezett érték
+            )
+        normaliser_directory = "normalisers"
+        normalisers_subdirectories = [d for d in os.listdir(tts_directory) if os.path.isdir(os.path.join(normaliser_directory, d))]
+
+        with gr.Row():
+            normalise_language = gr.Dropdown(
+                label="Select your normaliser (put the normalise.py file into the /normalisers/your_folder)",
+                choices=normalisers_subdirectories,
                 value=None  # Nincs alapértelmezett érték
             )
 
@@ -510,7 +520,7 @@ with gr.Blocks() as demo:
 
         generate_tts_button.click(
             tts_generation,
-            inputs=[project_dropdown, tts_language],
+            inputs=[project_dropdown, tts_language, normalise_language],
             outputs=output8
         )
 
