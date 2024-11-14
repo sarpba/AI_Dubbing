@@ -103,7 +103,7 @@ class F5TTS:
         remove_silence=False,
         speed=1.0,
         nfe_step=32,
-        seed=-1,
+        seed=777,
     ):
         # Validáljuk a speed és nfe_step paramétereket
         if not (0.5 <= speed <= 2.0):

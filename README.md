@@ -34,6 +34,8 @@ git clone https://github.com/sarpba/AI_sync.git
 cd AI_sync
 pip install -r requirements.txt
 ```
+Edit the whisperx alignment.py, and change the default aligment models to better if have. It's important for more precise alignment process.
+
 Copy your F5-TTS model.pt and vocab.txt into the TTS directory. 
 
 Create a Hugging Face account (it's optional, only need if you want to use speaker diarization), and accept the licenses for the following:
