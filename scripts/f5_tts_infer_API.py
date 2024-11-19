@@ -100,15 +100,15 @@ class F5TTS:
         ref_text,
         gen_text,
         file_wave,
-        # file_spect=None,  # Eltávolítva
+        # file_spect=None,
         remove_silence=False,
         speed=1.0,
         nfe_step=32,
-        seed=12345, # ranom = -1,
+        seed=-1,
     ):
         # Validáljuk a speed és nfe_step paramétereket
-        if not (0.5 <= speed <= 2.0):
-            raise ValueError(f"Invalid speed value: {speed}. Must be between 0.5 and 2.0.")
+        if not (0.3 <= speed <= 2.0):
+            raise ValueError(f"Invalid speed value: {speed}. Must be between 0.3 and 2.0.")
         if not (16 <= nfe_step <= 64):
             raise ValueError(f"Invalid nfe_step value: {nfe_step}. Must be between 16 and 64.")
 
@@ -174,7 +174,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "--speed", type=float, default=1.0,
-        help="Speed of the generated audio (0.5-2.0). Default is 1.0"
+        help="Speed of the generated audio (0.3-2.0). Default is 1.0"
     )
     parser.add_argument(
         "--nfe_step", type=int, default=32,
@@ -187,6 +187,10 @@ def parse_arguments():
     parser.add_argument(
         "--norm", type=str, required=False, default=None,
         help="Normalization type (e.g., 'hun', 'eng'). Determines which normalizer to use."
+    )
+    parser.add_argument(
+        "--seed", type=int, default=-1,
+        help="Random seed for reproducibility. Default is -1, which selects a random seed."
     )
     return parser.parse_args()
 
@@ -201,7 +205,8 @@ def process_files(
     speed,
     nfe_step,
     device,
-    norm_value,  # Added norm_value parameter
+    norm_value,
+    seed,
 ):
     try:
         # Initialize normalization if norm_value is provided
@@ -293,7 +298,7 @@ def process_files(
                     remove_silence=remove_silence,
                     speed=speed,
                     nfe_step=nfe_step,
-                    seed=-1,  # Use random seed
+                    seed=seed,
                 )
                 logger.info(f"Generated audio saved to {output_wav_path}")
             except Exception as e:
@@ -318,7 +323,8 @@ def main_worker(
     ckpt_file,
     speed,
     nfe_step,
-    norm_value,  # Added norm_value parameter
+    norm_value,
+    seed,
 ):
     # Determine the GPU
     device = f"cuda:{worker_id}"
@@ -335,7 +341,8 @@ def main_worker(
         speed,
         nfe_step,
         device,
-        norm_value,  # Pass norm_value to process_files
+        norm_value,
+        seed,
     )
 
 def main():
@@ -396,6 +403,7 @@ def main():
                 args.speed,
                 args.nfe_step,
                 args.norm,  # Pass norm_value to main_worker
+                args.seed,  # Pass seed to main_worker
             )
         )
         p.start()
