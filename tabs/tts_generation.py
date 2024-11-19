@@ -62,19 +62,25 @@ def tts_generation(proj_name, tts_language, normalise_language):
         supported_extensions = ['.wav', '.mp3']
 
         # Ellenőrizzük, hogy vannak-e támogatott audio fájlok a split_audio_dir-ben
-        audio_files = [f for f in os.listdir(split_audio_dir) 
-                      if os.path.splitext(f.lower())[1] in supported_extensions]
+        audio_files = []
+        for root, dirs, files in os.walk(split_audio_dir):
+            for file in files:
+                if os.path.splitext(file.lower())[1] in supported_extensions:
+                    # Relatív elérési út megőrzése az audio_files listában
+                    rel_path = os.path.relpath(os.path.join(root, file), split_audio_dir)
+                    audio_files.append(rel_path)
         if not audio_files:
-            yield f"Nincsenek támogatott audio fájlok (wav/mp3) a split_audio könyvtárban: {split_audio_dir}"
+            yield f"Nincsenek támogatott audio fájlok (wav/mp3) a split_audio könyvtárban és annak alkönyvtáraiban: {split_audio_dir}"
             return
 
         # Ellenőrizzük, hogy a split_audio_dir-ben léteznek-e a megfelelő txt fájlok
         missing_split_texts = []
         for audio_file in audio_files:
-            audio_basename = os.path.splitext(audio_file)[0]
-            split_txt_path = os.path.join(split_audio_dir, f"{audio_basename}.txt")
-            if not os.path.exists(split_txt_path):
-                missing_split_texts.append(split_txt_path)
+            audio_basename = os.path.splitext(os.path.basename(audio_file))[0]
+            # Keresés a split_audio_dir és alkönyvtárai között
+            split_txt_paths = glob.glob(os.path.join(split_audio_dir, '**', f"{audio_basename}.txt"), recursive=True)
+            if not split_txt_paths:
+                missing_split_texts.append(f"{audio_basename}.txt")
         if missing_split_texts:
             yield f"Hiba: Hiányzó split txt fájlok:\n" + "\n".join(missing_split_texts)
             return
@@ -82,10 +88,11 @@ def tts_generation(proj_name, tts_language, normalise_language):
         # Ellenőrizzük, hogy a translations_dir-ben léteznek-e a megfelelő txt fájlok
         missing_translation_texts = []
         for audio_file in audio_files:
-            audio_basename = os.path.splitext(audio_file)[0]
-            translation_txt_path = os.path.join(translations_dir, f"{audio_basename}.txt")
-            if not os.path.exists(translation_txt_path):
-                missing_translation_texts.append(translation_txt_path)
+            audio_basename = os.path.splitext(os.path.basename(audio_file))[0]
+            # Keresés a translations_dir és alkönyvtárai között
+            translation_txt_paths = glob.glob(os.path.join(translations_dir, '**', f"{audio_basename}.txt"), recursive=True)
+            if not translation_txt_paths:
+                missing_translation_texts.append(f"{audio_basename}.txt")
         if missing_translation_texts:
             yield f"Hiba: Hiányzó translation txt fájlok:\n" + "\n".join(missing_translation_texts)
             return

@@ -7,6 +7,7 @@ import torch.multiprocessing as mp
 import random
 import logging
 import importlib.util  # Added for dynamic importing
+import time  # Added for sleep functionality
 
 import soundfile as sf
 import tqdm
@@ -103,7 +104,7 @@ class F5TTS:
         remove_silence=False,
         speed=1.0,
         nfe_step=32,
-        seed=777,
+        seed=12345, # ranom = -1,
     ):
         # Validáljuk a speed és nfe_step paramétereket
         if not (0.5 <= speed <= 2.0):
@@ -240,27 +241,28 @@ def process_files(
         logger.info(f"Initialized F5TTS on device {device}")
 
         for wav_path in tqdm.tqdm(wav_files, desc=f"Processing on {device}"):
-            base_name = wav_path.stem  # Filename without extension
-
-            # Paths to the corresponding .txt files
-            ref_txt_path = input_dir / f"{base_name}.txt"
-            gen_txt_path = input_gen_dir / f"{base_name}.txt"
-
-            # Output path
-            output_wav_path = output_dir / f"{base_name}.wav"
+            # **Rekuzív feldolgozás kezdete**
+            relative_path = wav_path.relative_to(input_dir)
+            output_wav_path = output_dir / relative_path.parent / f"{wav_path.stem}.wav"
+            output_wav_path.parent.mkdir(parents=True, exist_ok=True)
+            # **Rekuzív feldolgozás vége**
 
             # Check if output file already exists
             if output_wav_path.exists():
                 logger.info(f"Output file {output_wav_path} already exists. Skipping.")
                 continue
 
+            # Paths to the corresponding .txt files
+            ref_txt_path = input_dir / relative_path.parent / f"{wav_path.stem}.txt"
+            gen_txt_path = input_gen_dir / relative_path.parent / f"{wav_path.stem}.txt"
+
             # Check if reference and generated text files exist
             if not ref_txt_path.exists():
-                logger.warning(f"Reference text file not found for {wav_path.name}, skipping.")
+                logger.warning(f"Reference text file not found for {wav_path.relative_to(input_dir)}, skipping.")
                 continue
 
             if not gen_txt_path.exists():
-                logger.warning(f"Generated text file not found for {wav_path.name}, skipping.")
+                logger.warning(f"Generated text file not found for {wav_path.relative_to(input_gen_dir)}, skipping.")
                 continue
 
             # Read the reference text
@@ -295,7 +297,13 @@ def process_files(
                 )
                 logger.info(f"Generated audio saved to {output_wav_path}")
             except Exception as e:
-                logger.error(f"Error processing {wav_path.name}: {e}", exc_info=True)
+                logger.error(f"Error processing {wav_path.relative_to(input_dir)}: {e}", exc_info=True)
+                continue
+
+            # **750 ms szünet beiktatása a következő fájl feldolgozása előtt**
+            #time.sleep(0.75)
+            #logger.debug(f"Paused for 750 ms before processing the next file.")
+
     except Exception as e:
         logger.critical(f"Critical error in process on device {device}: {e}", exc_info=True)
 
@@ -345,11 +353,11 @@ def main():
         logger.error(f"Invalid nfe_step value: {args.nfe_step}. Must be between 16 and 64.")
         sys.exit(1)
 
-    # Gather all .wav files from the input directory
-    wav_files = list(input_dir.glob("*.wav"))
+    # Gather all .wav files from the input directory recursively
+    wav_files = list(input_dir.rglob("*.wav"))
 
     if not wav_files:
-        logger.error(f"No .wav files found in {input_dir}")
+        logger.error(f"No .wav files found in {input_dir} or its subdirectories.")
         sys.exit(1)
 
     # Check the number of available GPUs

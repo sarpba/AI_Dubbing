@@ -77,7 +77,7 @@ with gr.Blocks() as demo:
             demucs_model_selection = gr.Dropdown(
                 label="Select Demucs Model",
                 choices=get_available_demucs_models(),
-                value="htdemucs"
+                value="htdemucs_ft"
             )
 
         with gr.Row():

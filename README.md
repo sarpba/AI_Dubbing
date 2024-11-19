@@ -56,6 +56,8 @@ todo:
 - need a good working normaliser metod which is with multilang moduls (change numbers and spacial characters to words, because the finetuned modells not heandle it good)
 - good working speaker diarization for segment reworking. (segment reworking done, but it based on speaker diarization, it can use it for podcasts with one speaker)
 - non line per line translate, for understand and handle the context (based on chatgpt 4o)
+- narration mode (with one narrator only)
+- timed SRT upload isnted whisper transcript (manuall edited srt with subtitle editor 4.0.8.)
 ...
 
 License: MIT
