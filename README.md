@@ -1,8 +1,5 @@
 # AI-dubbing is a semi-automatic video (podcasts, movies, series) Dubbing system.
 
-WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
-
-
 The project uses the following AI models:
 
 OpenAI Whisper, 
