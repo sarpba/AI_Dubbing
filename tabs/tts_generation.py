@@ -101,12 +101,13 @@ def tts_generation(proj_name, tts_language, normalise_language):
         cmd = [
             "conda", "run", "-n", "f5-tts",
             "python", "scripts/f5_tts_infer_API.py",
+            "--remove_silence",
             "--ckpt_file", model_path,
             "--vocab_file", vocab_path,
             "--input_dir", split_audio_dir,
             "--input_gen_dir", translations_dir,
             "--output_dir", sync_dir,
-            "--norm", normalise_language
+            "--norm", normalise_language,
         ]
 
         # Logolás megkezdése

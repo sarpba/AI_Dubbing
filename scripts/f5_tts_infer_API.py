@@ -100,11 +100,11 @@ class F5TTS:
         ref_text,
         gen_text,
         file_wave,
-        # file_spect=None,
+        # file_spect=None,  # Eltávolítva
         remove_silence=False,
         speed=1.0,
         nfe_step=32,
-        seed=-1,
+        seed=-1,  # módosítva
     ):
         # Validáljuk a speed és nfe_step paramétereket
         if not (0.3 <= speed <= 2.0):
@@ -205,8 +205,8 @@ def process_files(
     speed,
     nfe_step,
     device,
-    norm_value,
-    seed,
+    norm_value,  # Added norm_value parameter
+    seed,        # Added seed parameter
 ):
     try:
         # Initialize normalization if norm_value is provided
@@ -298,7 +298,7 @@ def process_files(
                     remove_silence=remove_silence,
                     speed=speed,
                     nfe_step=nfe_step,
-                    seed=seed,
+                    seed=seed,  # Módosítva
                 )
                 logger.info(f"Generated audio saved to {output_wav_path}")
             except Exception as e:
@@ -323,8 +323,8 @@ def main_worker(
     ckpt_file,
     speed,
     nfe_step,
-    norm_value,
-    seed,
+    norm_value,  # Added norm_value parameter
+    seed,        # Added seed parameter
 ):
     # Determine the GPU
     device = f"cuda:{worker_id}"
@@ -341,8 +341,8 @@ def main_worker(
         speed,
         nfe_step,
         device,
-        norm_value,
-        seed,
+        norm_value,  # Pass norm_value to process_files
+        seed,        # Pass seed to process_files
     )
 
 def main():
