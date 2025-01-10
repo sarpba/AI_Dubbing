@@ -1,4 +1,4 @@
-# AI-sync is a semi-automatic video (podcasts, movies, series) Dubbing system.
+# AI-dubbing is a semi-automatic video (podcasts, movies, series) Dubbing system.
 
 WORKING IN PROGRESS... not sure it work flavesly when cloned. Loock back a few hour or day leater.
 
@@ -24,7 +24,7 @@ pip install num2words
 conda deactivate
 ```
 
-Prepare AI_sync anaconda enviroment:
+Prepare AI_dubbing anaconda enviroment:
 ```
 conda  create -n sync python=3.10 && conda activate sync
 pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
