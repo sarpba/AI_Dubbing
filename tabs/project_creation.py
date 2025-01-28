@@ -2,7 +2,7 @@
 import os
 import shutil
 import subprocess
-from moviepy.editor import VideoFileClip
+from moviepy import VideoFileClip #.editor
 from .utils import run_script, ensure_directory
 
 def upload_and_extract_audio(proj_name, video_path, workdir="workdir"):
