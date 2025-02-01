@@ -48,21 +48,21 @@ def save_audio_torchaudio(audio_data, path, sample_rate=44100):
     tensor = torch.from_numpy(audio_data)  # alak: (channels, length)
     torchaudio.save(path, tensor, sample_rate, encoding="PCM_S", bits_per_sample=16)
 
-def separate_audio_demucs(audio_path, output_dir, model, device):
+def separate_audio_demucs(audio_path, output_dir, model, device, non_speech_silence=False):
     """
     Demucs segítségével szétválasztja az audio sávot beszédre és egyéb hangokra.
     Elmenti a szétválasztott hangfájlokat.
+    Ha a non_speech_silence kapcsoló be van kapcsolva, akkor a non_speech részt csenddé alakítja.
     """
     try:
         # Betöltjük a hangot
         waveform, sample_rate = torchaudio.load(audio_path)
         if sample_rate != 44100:
-            print(f"Átalakítás 44100 Hz-re.")
+            print("Átalakítás 44100 Hz-re.")
             resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=44100)
             waveform = resampler(waveform)
             sample_rate = 44100
 
-        # waveform alakja: (channels, length)
         # Áthelyezzük az eszközre (CPU vagy GPU)
         waveform = waveform.to(device)
 
@@ -90,6 +90,10 @@ def separate_audio_demucs(audio_path, output_dir, model, device):
         other_indices = [i for i in range(len(sources)) if i != vocals_index]
         non_speech = estimates[0, other_indices].sum(dim=0).cpu().numpy()
 
+        # Ha a kapcsoló be van kapcsolva, a non_speech részt csendre állítjuk
+        if non_speech_silence:
+            non_speech = np.zeros_like(non_speech)
+
         # Fájlok mentése
         base_name = os.path.splitext(os.path.basename(audio_path))[0]
         vocals_path = os.path.join(output_dir, f"{base_name}_speech.wav")
@@ -107,11 +111,18 @@ def separate_audio_demucs(audio_path, output_dir, model, device):
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description='Videófájlokból audio kivonása és szétválasztása Demucs MDX segítségével.')
+    parser = argparse.ArgumentParser(
+        description='Videófájlokból audio kivonása és szétválasztása Demucs MDX segítségével.'
+    )
     parser.add_argument('-i', '--input_dir', required=True, help='Bemeneti könyvtár útvonala.')
     parser.add_argument('-o', '--output_dir', required=True, help='Kimeneti könyvtár útvonala.')
     parser.add_argument('--device', default='cuda', help='Eszköz: "cuda" vagy "cpu".')
     parser.add_argument('--keep_full_audio', action='store_true', help='Teljes audio fájl megtartása.')
+    parser.add_argument(
+        '--non_speech_silence',
+        action='store_true',
+        help='Ha aktiválva, a non_speech fájl letisztítása, hogy csak csend legyen benne.'
+    )
     args = parser.parse_args()
 
     input_dir = args.input_dir
@@ -161,10 +172,13 @@ def main():
             except Exception as e:
                 print(f"Hiba a teljes audio mentése közben: {full_audio_path}")
                 print(str(e))
-                # Folytatjuk a szétválasztást még ha a mentés sikertelen is
+                # Folytatjuk a szétválasztást, még ha a mentés sikertelen is
 
         # Audio szétválasztása Demucs MDX modellel
-        success = separate_audio_demucs(temp_audio_path, output_dir, model, device)
+        success = separate_audio_demucs(
+            temp_audio_path, output_dir, model, device,
+            non_speech_silence=args.non_speech_silence
+        )
         if not success:
             # Ideiglenes fájl törlése, ha a szétválasztás sikertelen
             os.remove(temp_audio_path)
@@ -178,4 +192,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

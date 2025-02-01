@@ -32,6 +32,8 @@ def separate_audio(proj_name, device, keep_full_audio, selected_model, workdir="
             cmd += ["--keep_full_audio"]
         if selected_model:
             cmd += ["--model", selected_model]
+        if selected_model:
+            cmd += ["--non_speech_silence"]
 
         # Script futtatása és kimenet olvasása
         for output in run_script(cmd):
