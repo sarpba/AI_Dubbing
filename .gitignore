@@ -10,3 +10,5 @@ infer_batch.log
 .gradio
 *extract.sh
 *whisx_simple_old.py
+.old/
+keyholder.json
