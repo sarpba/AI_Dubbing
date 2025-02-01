@@ -1,6 +1,7 @@
 import os
 import re
 import argparse
+from datetime import datetime
 from pydub import AudioSegment
 
 def parse_filename(filename):
@@ -94,9 +95,6 @@ def merge_wav_files(input_folder, output_file, background_file=None):
         # Trim the background music to match the final audio duration
         background = background[:final_duration]
         
-        # **Hangerejének Megőrzése:** Eltávolítjuk a hangerő csökkentését
-        # background = background - 20  # Eltávolítva, hogy a háttérzene eredeti hangerőn maradjon
-        
         # Overlay the final audio onto the background
         final_with_bg = background.overlay(final_audio)
         
@@ -111,37 +109,35 @@ def merge_wav_files(input_folder, output_file, background_file=None):
 def main():
     parser = argparse.ArgumentParser(description="Összeilleszt WAV fájlokat időalapú neveik szerint, csenddel kitöltve a köztes részeket és összemixelve az átfedéseket. Opcionálisan háttérzenével is kiegészíthető.")
     parser.add_argument('-i', '--input', required=True, help='Az input könyvtár, amely tartalmazza a WAV fájlokat.')
-    parser.add_argument('-o', '--output', required=True, help='A kimeneti WAV fájl neve vagy mappája.')
+    parser.add_argument('-o', '--output', required=True, help='A kimeneti könyvtár, ahol a generált WAV fájl lesz elmentve. A fájl neve a futtatás ideje alapján automatikusan generálódik (YYYY.MM.DD_HH.MM.SS.wav).')
     parser.add_argument('-bg', '--background', required=False, help='A háttérzene WAV fájlja.')
     
     args = parser.parse_args()
     
     input_folder = args.input
-    output_file = args.output
+    output_dir = args.output
     background_file = args.background
-    
+
+    # Ellenőrizzük, hogy az input könyvtár létezik-e
     if not os.path.isdir(input_folder):
         print(f"Hiba: Az input könyvtár '{input_folder}' nem létezik vagy nem elérhető.")
         return
-    
-    # Ellenőrizzük, hogy az output path egy mappa-e
-    if os.path.isdir(output_file):
-        # Ha az output path egy mappa, hozzunk létre egy alapértelmezett fájlnevet
-        output_file = os.path.join(output_file, "merged_output.wav")
-        print(f"Az output mappa meg van adva. A kimeneti fájl: {output_file}")
-    else:
-        # Ha az output path nem létezik, ellenőrizzük, hogy a szülő könyvtár létezik-e
-        output_dir = os.path.dirname(output_file)
-        if output_dir and not os.path.exists(output_dir):
-            try:
-                os.makedirs(output_dir, exist_ok=True)
-                print(f"Létrehozva az output könyvtár: {output_dir}")
-            except Exception as e:
-                print(f"Hiba az output könyvtár létrehozásakor: {e}")
-                return
+
+    # Ellenőrizzük, hogy az output könyvtár létezik-e, ha nem, létrehozzuk
+    if not os.path.isdir(output_dir):
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+            print(f"Létrehozva az output könyvtár: {output_dir}")
+        except Exception as e:
+            print(f"Hiba az output könyvtár létrehozásakor: {e}")
+            return
+
+    # Generáljuk a fájlnevet a futtatás ideje alapján (YYYY.MM.DD_HH.MM.SS.wav)
+    timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+    output_file = os.path.join(output_dir, f"{timestamp}.wav")
+    print(f"A kimeneti fájl neve: {output_file}")
     
     merge_wav_files(input_folder, output_file, background_file)
 
 if __name__ == "__main__":
     main()
-

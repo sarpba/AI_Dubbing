@@ -86,7 +86,7 @@ def run_separate_audio(device, keep_full_audio, non_speech_silence, current_proj
       - INPUT_DIR: a projekt "upload" almappája.
       - OUTPUT_DIR: a projekt "separated_audio" almappája.
       - --device: "cuda" vagy "cpu".
-      - --keep_full_audio" és "--non_speech_silence": flag-ek.
+      - --keep_full_audio és --non_speech_silence: flag-ek.
     """
     if not current_project:
         return "Nincs aktív projekt kiválasztva!"
@@ -357,17 +357,141 @@ def run_normalise_and_cut(current_project, delete_empty, min_db):
     output += f"\nTörölt JSON fájlok: {len(deleted_files)} db."
     return output
 
-# Egyszerű callback függvények egyéb gombokhoz
 def on_inspect_repair(current_project):
     return f"Inspect & Repair Chunks gomb megnyomva! (Projekt: {current_project})"
 
 def on_merge_chunks_bg(current_project):
-    return f"Merge Chunks with Background gomb megnyomva! (Projekt: {current_project})"
+    """
+    Futtatja a merge_chunks_with_background.py scriptet a következő paraméterekkel:
+      -i INPUT: a projekt "translated_splits" könyvtára,
+      -o OUTPUT: a projekt "film_dubbing" könyvtára,
+      -bg BACKGROUND: a projekt "separated_audio" könyvtárában található, "non_speech.wav" végződésű fájl.
+    """
+    if not current_project:
+        return "Nincs aktív projekt kiválasztva!"
+    
+    # Projekt útvonalak beállítása
+    project_path = os.path.join(WORKDIR, current_project)
+    input_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["translated_splits"])
+    output_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["film_dubbing"])
+    separated_audio_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["separated_audio"])
+    
+    # Keressük a non_speech.wav fájlt a separated_audio könyvtárban
+    bg_file = None
+    for f in os.listdir(separated_audio_dir):
+        if f.endswith("non_speech.wav"):
+            bg_file = os.path.join(separated_audio_dir, f)
+            break
+    if not bg_file:
+        return "Nem található non_speech.wav a separated_audio könyvtárban!"
+    
+    # Script útvonalának meghatározása a config.json alapján
+    script_path = os.path.join(config["DIRECTORIES"]["scripts"], "merge_chunks_with_background.py")
+    
+    # Parancs összeállítása
+    command = [
+        "python", script_path,
+        "-i", input_dir,
+        "-o", output_dir,
+        "-bg", bg_file
+    ]
+    log_action(f"Running merge_chunks_with_background.py with command: {' '.join(command)}", current_project)
+    
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        output = result.stdout
+    except subprocess.CalledProcessError as e:
+        output = f"Error: {e.stderr}"
+    
+    log_action(f"merge_chunks_with_background.py finished with output: {output}", current_project)
+    return output
 
-def on_merge_video(current_project):
-    return f"Merge to Video gomb megnyomva! (Projekt: {current_project})"
+def on_merge_video(current_project, language):
+    """
+    Futtatja a merge_to_video.py scriptet a következő paraméterekkel:
+      -i INPUT_VIDEO: a projekt "upload" mappában lévő mkv file,
+      -ia INPUT_AUDIO: a projekt "film_dubbing" könyvtárában található, a legutoljára lementett fájl,
+      -lang LANGUAGE: a felhasználó által megadott 3 betűs nyelvkód,
+      -o OUTPUT_DIR: a projekt "download" könyvtára.
+    """
+    if not current_project:
+        return "Nincs aktív projekt kiválasztva!"
+    
+    project_path = os.path.join(WORKDIR, current_project)
+    # INPUT_VIDEO: az upload mappában keresünk egy mkv kiterjesztésű fájlt
+    upload_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["upload"])
+    input_video = None
+    for f in os.listdir(upload_dir):
+        if f.lower().endswith(".mkv"):
+            input_video = os.path.join(upload_dir, f)
+            break
+    if not input_video:
+        return "Nem található mkv fájl az upload könyvtárban!"
+    
+    # INPUT_AUDIO: a film_dubbing könyvtárból a legutoljára módosított fájl
+    film_dubbing_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["film_dubbing"])
+    if not os.path.exists(film_dubbing_dir) or not os.listdir(film_dubbing_dir):
+        return "Nincs fájl a film_dubbing könyvtárban!"
+    audio_files = [os.path.join(film_dubbing_dir, f) for f in os.listdir(film_dubbing_dir) if os.path.isfile(os.path.join(film_dubbing_dir, f))]
+    if not audio_files:
+        return "Nincs fájl a film_dubbing könyvtárban!"
+    input_audio = max(audio_files, key=os.path.getmtime)
+    
+    # OUTPUT_DIR: a download könyvtár
+    output_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["download"])
+    os.makedirs(output_dir, exist_ok=True)
+    
+    script_path = os.path.join(config["DIRECTORIES"]["scripts"], "merge_to_video.py")
+    command = [
+        "python", script_path,
+        "-i", input_video,
+        "-ia", input_audio,
+        "-lang", language,
+        "-o", output_dir
+    ]
+    log_action(f"Running merge_to_video.py with command: {' '.join(command)}", current_project)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        output = result.stdout
+    except subprocess.CalledProcessError as e:
+        output = f"Error: {e.stderr}"
+    log_action(f"merge_to_video.py finished with output: {output}", current_project)
+    return output
+
+def update_download_dropdown(current_project):
+    """
+    Frissíti a projekt download könyvtárának tartalmát, és visszaadja a fájlneveket egy Dropdown számára.
+    """
+    if not current_project:
+        return "Nincs aktív projekt kiválasztva!", gr.update(choices=[])
+    project_path = os.path.join(WORKDIR, current_project)
+    download_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["download"])
+    if not os.path.exists(download_dir):
+        return "A download mappa nem létezik!", gr.update(choices=[])
+    files = [f for f in os.listdir(download_dir) if os.path.isfile(os.path.join(download_dir, f))]
+    if not files:
+        return "Nincs fájl a download mappában!", gr.update(choices=[])
+    return "A download mappa tartalma frissítve.", gr.update(choices=files, value=files[0])
+
+def download_file(current_project, selected_file):
+    """
+    A kiválasztott fájlt visszaadja letöltendőként.
+    """
+    if not current_project or not selected_file:
+        return None
+    project_path = os.path.join(WORKDIR, current_project)
+    download_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["download"])
+    file_path = os.path.join(download_dir, selected_file)
+    if os.path.exists(file_path):
+        return file_path
+    else:
+        return None
 
 def on_download(current_project):
+    """
+    Egyszerű visszajelzés a Download gombhoz.
+    Ebben a példában a tényleges frissítést az update_download_dropdown függvény végzi.
+    """
     return f"Download gomb megnyomva! (Projekt: {current_project})"
 
 def main():
@@ -457,8 +581,16 @@ def main():
                 
                 btn_inspect_repair = gr.Button("Inspect & Repair Chunks")
                 btn_merge_chunks_bg = gr.Button("Merge Chunks with Background")
+                
+                # Új: Merge to Video panelhoz egy szövegbeviteli mező a language paraméterhez
+                merge_video_lang_input = gr.Textbox(label="Language (3 betű)", placeholder="Pl: ENG", value="ENG")
                 btn_merge_video = gr.Button("Merge to Video")
+                
+                # Új: Download panel
                 btn_download = gr.Button("Download")
+                download_dropdown = gr.Dropdown(label="Válassz letöltendő fájlt", choices=[])
+                btn_download_file = gr.Button("Letöltés")
+                download_file_output = gr.File(label="Letöltendő fájl")
             with gr.Column(scale=3):
                 output_text = gr.Textbox(label="Kimenet", placeholder="Itt jelenik meg a kimenet", lines=10)
         
@@ -516,8 +648,23 @@ def main():
         )
         btn_inspect_repair.click(on_inspect_repair, inputs=[current_project_state], outputs=output_text)
         btn_merge_chunks_bg.click(on_merge_chunks_bg, inputs=[current_project_state], outputs=output_text)
-        btn_merge_video.click(on_merge_video, inputs=[current_project_state], outputs=output_text)
-        btn_download.click(on_download, inputs=[current_project_state], outputs=output_text)
+        btn_merge_video.click(
+            on_merge_video,
+            inputs=[current_project_state, merge_video_lang_input],
+            outputs=output_text
+        )
+        # A Download gombbal frissítjük a letöltendő fájlok listáját
+        btn_download.click(
+            update_download_dropdown,
+            inputs=[current_project_state],
+            outputs=[output_text, download_dropdown]
+        )
+        # A "Letöltés" gomb megnyomására visszaadjuk a kiválasztott fájl elérési útját, amely megjelenik a download_file_output komponensben
+        btn_download_file.click(
+            download_file,
+            inputs=[current_project_state, download_dropdown],
+            outputs=download_file_output
+        )
     
     demo.launch()
 
