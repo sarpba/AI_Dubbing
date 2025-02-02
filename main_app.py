@@ -375,7 +375,7 @@ def run_normalise_and_cut(current_project, delete_empty, min_db):
 
 def on_inspect_repair(current_project):
     """Return a simple message indicating the Inspect & Repair Chunks button was pressed."""
-    return f"Inspect & Repair Chunks button pressed! (Project: {current_project})"
+    return f"Inspect & Repair Chunks button pressed! The code not implemented yet. (Project: {current_project})"
 
 def on_merge_chunks_bg(current_project):
     """
@@ -582,7 +582,7 @@ def main():
                 merge_video_lang_input = gr.Textbox(label="Language (3-letter code)", placeholder="e.g. ENG, HUN", value="HUN")
                 btn_merge_video = gr.Button("Merge to Video")
                 
-                btn_download = gr.Button("Download")
+                btn_download = gr.Button("Refresh Download Dir")
                 download_dropdown = gr.Dropdown(label="Select file to download", choices=[])
                 btn_download_file = gr.Button("Download")
                 download_file_output = gr.File(label="Download File")
