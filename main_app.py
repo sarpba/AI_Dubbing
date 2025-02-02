@@ -385,7 +385,15 @@ def on_inspect_repair(current_project):
     command = [sys.executable, "check_app.py", "--project", current_project]
     try:
         subprocess.Popen(command)
-        return f"check_app.py launched for project '{current_project}' in a new window. /n Check the terminal for port number!"
+        return (
+                    f"check_app.py launched for project '{current_project}' in a new window.\n"
+                    "Check the terminal for port number!\n"
+                    "\n"
+                    "After done the chunk repair, close the window and return here.\n"
+                    "Run the Generate TTS Dubbing button again.\n"
+                    "Run the Normalize & Cut Chunks button again.\n"
+                    "Then continue with the Merge Chunks with Background button."
+                )
     except Exception as e:
         return f"Failed to launch check_app.py: {e}"
 
