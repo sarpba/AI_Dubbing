@@ -5,6 +5,7 @@ import subprocess
 import datetime
 import base64
 import gradio as gr
+import sys
 
 # Load configuration from config.json
 with open("config.json", "r", encoding="utf-8") as f:
@@ -374,8 +375,19 @@ def run_normalise_and_cut(current_project, delete_empty, min_db):
     return output
 
 def on_inspect_repair(current_project):
-    """Return a simple message indicating the Inspect & Repair Chunks button was pressed."""
-    return f"Inspect & Repair Chunks button pressed! The code not implemented yet. (Project: {current_project})"
+    """
+    Launch the check_app.py in a new process (new window) passing the current project
+    via the --project parameter.
+    """
+    if not current_project:
+        return "No active project selected!"
+    
+    command = [sys.executable, "check_app.py", "--project", current_project]
+    try:
+        subprocess.Popen(command)
+        return f"check_app.py launched for project '{current_project}' in a new window. /n Check the terminal for port number!"
+    except Exception as e:
+        return f"Failed to launch check_app.py: {e}"
 
 def on_merge_chunks_bg(current_project):
     """
