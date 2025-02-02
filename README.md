@@ -1,4 +1,5 @@
 # AI-dubbing is a semi-automatic video (podcasts, movies, series) Dubbing system.
+## Translate any vide for your nativ language, and keep the actors voice.
 
 The project uses the following AI models:
 
