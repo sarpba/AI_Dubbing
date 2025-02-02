@@ -523,8 +523,8 @@ def main():
                 btn_separate = gr.Button("Separate Speech")
                 with gr.Column(visible=False, elem_id="separate_audio_panel") as separate_audio_panel:
                     device_dropdown = gr.Dropdown(choices=["cuda", "cpu"], label="Device", value="cuda")
-                    keep_full_audio_checkbox = gr.Checkbox(label="Keep full audio", value=False)
-                    non_speech_silence_checkbox = gr.Checkbox(label="Non-speech silence", value=False)
+                    keep_full_audio_checkbox = gr.Checkbox(label="Keep full audio", value=False, info="Use for nothing at the moment")
+                    non_speech_silence_checkbox = gr.Checkbox(label="Background silence", value=False, info="Check if the video have speak only")
                     btn_run_separate = gr.Button("Run")
                 
                 btn_transcribe_align = gr.Button("Transcribe & Align")
