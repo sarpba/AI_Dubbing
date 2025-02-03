@@ -426,4 +426,5 @@ with gr.Blocks(css=".overlong { background-color: #ffcccc !important; }") as dem
     gr.Markdown("## File Table")
     table_container
 
-demo.launch()
+# Indítás: share=True és host beállítása "0.0.0.0"-ra
+demo.launch(share=True, server_name="0.0.0.0")
