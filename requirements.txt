@@ -5,5 +5,5 @@ deepl
 demucs
 diffq
 num2words
-ffmpeg
+mutagen
 
