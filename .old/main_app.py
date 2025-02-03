@@ -622,7 +622,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run Gradio app with optional share, port, and host settings.")
     parser.add_argument('--share', action='store_true', help='Create a shareable URL for Gradio.')
     parser.add_argument('--port', type=int, default=7860, help='Port number for the application to run on (default: 7860).')
-    parser.add_argument('--host', type=str, default='127.0.0.1', help='Host address for the application to bind to (default: 127.0.0.1). If you want to share on local lan just use 0.0.0.0')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='Host address for the application to bind to (default: 127.0.0.1). If you want to share on local lan just use 0.0.0.0')
     return parser.parse_args()
 
 # Port checker function
