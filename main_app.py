@@ -6,6 +6,7 @@ import datetime
 import base64
 import gradio as gr
 import sys
+import argparse
 
 # Load configuration from config.json
 with open("config.json", "r", encoding="utf-8") as f:
@@ -386,14 +387,14 @@ def on_inspect_repair(current_project):
     try:
         subprocess.Popen(command)
         return (
-                    f"check_app.py launched for project '{current_project}' in a new window.\n"
-                    "Check the terminal for port number!\n"
-                    "\n"
-                    "After done the chunk repair, close the window and return here.\n"
-                    "Run the Generate TTS Dubbing button again.\n"
-                    "Run the Normalize & Cut Chunks button again.\n"
-                    "Then continue with the Merge Chunks with Background button."
-                )
+            f"check_app.py launched for project '{current_project}' in a new window.\n"
+            "Check the terminal for port number!\n"
+            "\n"
+            "After done the chunk repair, close the window and return here.\n"
+            "Run the Generate TTS Dubbing button again.\n"
+            "Run the Normalize & Cut Chunks button again.\n"
+            "Then continue with the Merge Chunks with Background button."
+        )
     except Exception as e:
         return f"Failed to launch check_app.py: {e}"
 
@@ -508,7 +509,7 @@ def on_download(current_project):
     """
     return f"Download button pressed! (Project: {current_project})"
 
-def main():
+def main(share, host):
     # Load saved keys to pre-populate the token fields (decoded)
     saved_keys = load_keys()
     hf_token_default = saved_keys.get("hf_token", "")
@@ -679,7 +680,11 @@ def main():
             outputs=download_file_output
         )
     
-    demo.launch()
+    demo.launch(share=share, server_name=host)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Run the Gradio app with optional sharing and host parameters.")
+    parser.add_argument("--share", action="store_true", help="Share the Gradio app on a public link.")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address to serve the app (default: 0.0.0.0)")
+    args = parser.parse_args()
+    main(share=args.share, host=args.host)
