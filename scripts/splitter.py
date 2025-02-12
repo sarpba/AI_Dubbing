@@ -1,6 +1,8 @@
 import os
 import argparse
 import json
+import re
+import math
 from pydub import AudioSegment
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
@@ -9,7 +11,7 @@ from datetime import timedelta
 def sanitize_filename(filename):
     """
     Csere a tiltott karaktereket a fájlnévben.
-    Itt a kettőspontot kötőjelre cseréljük.
+    Itt a kettőspontot kötőjelre, a vesszőt pontokra cseréljük.
     """
     return filename.replace(":", "-").replace(",", ".")
 
@@ -70,70 +72,124 @@ def process_json_file(args):
     sentence_counter = 0
     errors = []
 
+    # Feldolgozzuk az egyes JSON szegmenseket
     for segment in segments:
-        start = segment.get("start")
-        end = segment.get("end")
+        seg_start = segment.get("start")
+        seg_end = segment.get("end")
         text = segment.get("text", "").strip()
         speaker = segment.get("speaker", "UNKNOWN")
 
-        if start is None or end is None:
-            errors.append(f"Hiányzó 'start' vagy 'end' érték a '{base_name}' fájl '{sentence_counter + 1}' szegmensénél.")
+        if seg_start is None or seg_end is None:
+            errors.append(f"Hiányzó 'start' vagy 'end' érték a '{base_name}' fájl egy szegmensénél.")
             continue
 
         if not text:
-            continue  # Üres szöveg, kihagyjuk
+            continue  # Üres szöveg esetén kihagyjuk a szegmenst
 
-        if start >= end:
-            errors.append(f"Nem érvényes vágási pontok a '{base_name}' fájl '{sentence_counter + 1}' szegmensénél.")
+        if seg_start >= seg_end:
+            errors.append(f"Nem érvényes vágási pontok a '{base_name}' fájl egy szegmensénél.")
             continue
 
-        # Átalakítjuk a timestampokat miliszekundumokra
-        start_ms = int(start * 1000)
-        end_ms = int(end * 1000)
-
-        # Mappastruktúra létrehozása a relatív útvonal alapján
+        total_duration = seg_end - seg_start  # A teljes szakasz hossza (másodpercben)
+        # A kimeneti almappát a JSON fájl relatív útvonala alapján hozzuk létre
         output_subdir = os.path.join(output_dir, os.path.dirname(relative_path))
         os.makedirs(output_subdir, exist_ok=True)
 
-        try:
-            audio_segment = audio[start_ms:end_ms]
-        except Exception as e:
-            errors.append(f"Hiba történt az audio szakasz kivágása közben '{base_name}' szegmens {sentence_counter + 1}-nél: {e}")
-            continue
+        # Mondatokra bontás: próbáljuk meg a teljes szöveget mondatokra bontani.
+        # A regex a mondatvégi írásjelek (., !, ?) utáni szóközök mentén választja el a mondatokat.
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        if not sentences:
+            # Ha nem sikerült bontani (például rossz formázású szöveg esetén), az egész szöveget egy darabnak vesszük
+            sentences = [text]
+        
+        # A mondatokhoz rendelt idő meghatározásához számoljuk az összes karakter hosszát
+        total_chars = sum(len(s) for s in sentences)
+        current_time = seg_start
 
-        # Timestamp formázása a fájlnévhez
-        start_timestamp = format_timedelta_seconds(start)  # Példa: 00-00-09.287
-        end_timestamp = format_timedelta_seconds(end)      # Példa: 00-00-17.312
+        for sentence in sentences:
+            sentence_length = len(sentence)
+            # Arányos időkeret, feltételezve, hogy a beszéd sebessége állandó:
+            sentence_duration = total_duration * (sentence_length / total_chars) if total_chars > 0 else total_duration
 
-        # Fájlnév összeállítása és sanitizálása
-        filename_base = f"{sanitize_filename(start_timestamp)}-{sanitize_filename(end_timestamp)}"
+            # Ha a mondat hossza legfeljebb 13 másodperc, akkor egyetlen darabként dolgozzuk fel
+            if sentence_duration <= 13:
+                chunk_start = current_time
+                chunk_end = current_time + sentence_duration
+                chunk_start_ms = int(chunk_start * 1000)
+                chunk_end_ms = int(chunk_end * 1000)
+                try:
+                    audio_chunk = audio[chunk_start_ms:chunk_end_ms]
+                except Exception as e:
+                    errors.append(f"Hiba történt az audio szakasz kivágása közben '{base_name}' szegmensnél: {e}")
+                    current_time += sentence_duration
+                    continue
 
-        # Ha a beszélő információ is szükséges a fájlnévben, hozzáadhatjuk
-        filename_base = f"{filename_base}_{sanitize_filename(speaker)}"
+                start_timestamp = format_timedelta_seconds(chunk_start)
+                end_timestamp = format_timedelta_seconds(chunk_end)
+                filename_base = f"{sanitize_filename(start_timestamp)}-{sanitize_filename(end_timestamp)}_{sanitize_filename(speaker)}"
+                output_audio_path = os.path.join(output_subdir, f"{filename_base}.{export_extension}")
+                try:
+                    audio_chunk.export(output_audio_path, format=export_format)
+                except Exception as e:
+                    errors.append(f"Hiba történt az audio szakasz exportálása közben '{output_audio_path}': {e}")
+                    current_time += sentence_duration
+                    continue
 
-        output_audio_path = os.path.join(output_subdir, f"{filename_base}.{export_extension}")
-        try:
-            # Exportáljuk az audio szakaszt a megfelelő formátumban
-            audio_segment.export(output_audio_path, format=export_format)
-        except Exception as e:
-            error_msg = f"Hiba történt az audio szakasz exportálása közben '{output_audio_path}': {e}"
-            errors.append(error_msg)
-            continue
+                output_text_path = os.path.join(output_subdir, f"{filename_base}.txt")
+                try:
+                    with open(output_text_path, 'w', encoding='utf-8') as txt_file:
+                        txt_file.write(sentence)
+                except Exception as e:
+                    errors.append(f"Hiba történt a szövegfájl írása közben '{output_text_path}': {e}")
+                    current_time += sentence_duration
+                    continue
 
-        output_text_path = os.path.join(output_subdir, f"{filename_base}.txt")
-        try:
-            with open(output_text_path, 'w', encoding='utf-8') as txt_file:
-                txt_file.write(text)
-        except Exception as e:
-            error_msg = f"Hiba történt a szövegfájl írása közben '{output_text_path}': {e}"
-            errors.append(error_msg)
-            continue
+                sentence_counter += 1
+                current_time += sentence_duration
+            else:
+                # Ha a mondat hossza meghaladja a 13 másodpercet, további kisebb darabokra bontjuk.
+                num_chunks = math.ceil(sentence_duration / 13)
+                # Szavakra bontjuk, hogy ne szakítsuk el a szavakat véletlenül.
+                words = sentence.split()
+                if len(words) == 0:
+                    words = [sentence]
+                chunk_word_count = math.ceil(len(words) / num_chunks)
+                for i in range(num_chunks):
+                    chunk_text = " ".join(words[i*chunk_word_count : (i+1)*chunk_word_count])
+                    # A darabhoz tartozó időkeret:
+                    chunk_start = current_time + i * (sentence_duration / num_chunks)
+                    chunk_end = current_time + (i+1) * (sentence_duration / num_chunks)
+                    chunk_start_ms = int(chunk_start * 1000)
+                    chunk_end_ms = int(chunk_end * 1000)
+                    try:
+                        audio_chunk = audio[chunk_start_ms:chunk_end_ms]
+                    except Exception as e:
+                        errors.append(f"Hiba történt az audio szakasz kivágása közben '{base_name}' szegmensnél: {e}")
+                        continue
 
-        sentence_counter += 1
+                    start_timestamp = format_timedelta_seconds(chunk_start)
+                    end_timestamp = format_timedelta_seconds(chunk_end)
+                    filename_base = f"{sanitize_filename(start_timestamp)}-{sanitize_filename(end_timestamp)}_{sanitize_filename(speaker)}"
+                    output_audio_path = os.path.join(output_subdir, f"{filename_base}.{export_extension}")
+                    try:
+                        audio_chunk.export(output_audio_path, format=export_format)
+                    except Exception as e:
+                        errors.append(f"Hiba történt az audio szakasz exportálása közben '{output_audio_path}': {e}")
+                        continue
 
-    stats = f"Fájl: '{base_name}'\n" \
-            f"Feldolgozott szegmensek: {sentence_counter}"
+                    output_text_path = os.path.join(output_subdir, f"{filename_base}.txt")
+                    try:
+                        with open(output_text_path, 'w', encoding='utf-8') as txt_file:
+                            txt_file.write(chunk_text)
+                    except Exception as e:
+                        errors.append(f"Hiba történt a szövegfájl írása közben '{output_text_path}': {e}")
+                        continue
 
+                    sentence_counter += 1
+                current_time += sentence_duration
+
+    stats = f"Fájl: '{base_name}'\nFeldolgozott szegmensek: {sentence_counter}"
     if errors:
         return f"{stats}\nHibák:\n" + "\n".join(errors)
     else:
@@ -167,7 +223,8 @@ def process_directory(input_dir, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="JSON és audio fájlok feldolgozása szegmensekre bontáshoz és audio chunk-ok kivágásához.",
+        description="JSON és audio fájlok feldolgozása szegmensekre bontáshoz, egész mondatokra bontva, "
+                    "és audio chunk-ok kivágásához (max. 13 másodperc per darab).",
         epilog="Példa használat:\n  python splitter_v4_json.py --input_dir ./audio/ --output_dir ./angol_darabok/",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -187,11 +244,8 @@ def main():
     )
     
     args = parser.parse_args()
-    
     os.makedirs(args.output_dir, exist_ok=True)
-    
     process_directory(args.input_dir, args.output_dir)
 
 if __name__ == "__main__":
     main()
-
