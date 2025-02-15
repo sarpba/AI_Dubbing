@@ -43,6 +43,8 @@ RUN mkdir -p /home/sarpba && \
     cd /home/sarpba && \
     git clone https://github.com/sarpba/AI_Dubbing.git && \
     cd AI_Dubbing && \
+    source /opt/conda/etc/profile.d/conda.sh && \
+    conda activate sync && \
     pip install -r requirements.txt
 
 # Hozzuk létre a szükséges könyvtárat a modellek számára
