@@ -64,7 +64,7 @@ License: MIT
 
 
 
-#windows install in docker desktop (With Nvidia GPU support, min. 8-12gb vRAM):
+# windows install in docker desktop (With Nvidia GPU support, min. 8-12gb vRAM):
 
 ```
 git clone https://github.com/sarpba/AI_Dubbing.git
