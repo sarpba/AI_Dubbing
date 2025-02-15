@@ -12,6 +12,11 @@ import subprocess
 import json
 import queue  # a queue.Empty kivételhez
 
+import logging
+# Letiltjuk a Pyannote logolását, hogy ne jelenjenek meg üzenetek
+logging.getLogger("pyannote").disabled = True
+logging.getLogger("pyannote.audio").disabled = True
+
 # Maximális próbálkozások egy fájl feldolgozására
 MAX_RETRIES = 3
 # Időtúllépés másodpercben (nem implementált a jelenlegi szkriptben)
@@ -60,7 +65,7 @@ def worker(gpu_id, task_queue, progress_queue, last_activity, lang_override):
     Használja a progress_queue-t, hogy jelezze a sikeres feldolgozás befejezését vagy a sikertelenséget.
     A last_activity[gpu_id] értékét frissíti, ha új feladatot kap és ha befejez egy feladatot.
     
-    A lang_override értéke, ha meg van adva, mind a transzkripció, mind az alignálás során
+    A lang_override értéke, ha meg van adva, mind az átírás, mind az alignment során
     az adott nyelv használatát eredményezi.
     """
     # Beállítjuk a CUDA_VISIBLE_DEVICES környezeti változót, hogy csak az adott GPU látható legyen
@@ -113,11 +118,10 @@ def worker(gpu_id, task_queue, progress_queue, last_activity, lang_override):
 
             if os.path.exists(json_file):
                 print(f"Már létezik: {json_file}, kihagyás...")
-                # Jelzés küldése, hogy ez a feladat már elkészült
                 progress_queue.put({
                     "status": "done",
                     "file": audio_file,
-                    "processing_time": 0  # Nincs feldolgozási idő, mivel kihagyás
+                    "processing_time": 0
                 })
                 continue
 
@@ -138,7 +142,7 @@ def worker(gpu_id, task_queue, progress_queue, last_activity, lang_override):
                 if lang_override is not None:
                     align_language_code = lang_override
                 else:
-                    align_language_code = result["language"]  # A felismerés alapján
+                    align_language_code = result["language"]
 
                 if align_language_code not in alignment_models:
                     print(f"GPU-{gpu_id}: Alignment modell betöltése a következő nyelvhez: {align_language_code}")
@@ -178,14 +182,12 @@ def worker(gpu_id, task_queue, progress_queue, last_activity, lang_override):
                 print(f"  Kezdés: {start_datetime.strftime('%Y.%m.%d %H:%M')}")
                 print(f"  Befejezés: {end_datetime.strftime('%Y.%m.%d %H:%M')}\n")
 
-                # progress_queue jelzés: sikeres feldolgozás
                 progress_queue.put({
                     "status": "done",
                     "file": audio_file,
                     "processing_time": processing_time
                 })
 
-                # Mivel dolgoztunk, frissítjük az aktivitást
                 last_activity[gpu_id] = time.time()
 
             except Exception as e:
@@ -195,7 +197,6 @@ def worker(gpu_id, task_queue, progress_queue, last_activity, lang_override):
                     task_queue.put((audio_file, retries + 1))
                 else:
                     print(f"Maximális próbálkozások elérve: {audio_file} feldolgozása sikertelen.\n")
-                    # Jelzés küldése, hogy a feldolgozás sikertelen volt
                     progress_queue.put({
                         "status": "failed",
                         "file": audio_file,
@@ -206,16 +207,13 @@ def worker(gpu_id, task_queue, progress_queue, last_activity, lang_override):
         print(f"Fő hiba a GPU-{gpu_id} folyamatban: {main_e}")
 
     finally:
-        # A process végén egyszeri GPU memória felszabadítás
         if model is not None:
             try:
                 print(f"GPU-{gpu_id}: GPU memória felszabadítása...")
                 del model
-                # Az alignment modellek törlése
                 for lang_code, (model_a, _) in alignment_models.items():
                     del model_a
                 alignment_models.clear()
-
                 gc.collect()
                 import torch
                 torch.cuda.empty_cache()
@@ -242,7 +240,6 @@ def transcribe_directory(directory, gpu_ids, lang):
     Folyamatokat indító és feladatlistát kezelő függvény.
     Elindít minden GPU-ra egy worker folyamatot,
     figyeli a progress_queue-t, és ellenőrzi a GPU-k tétlenségét.
-    Ha valamelyik GPU 10 mp-ig tétlen marad, megszakítja a folyamatokat és újraindítja a scriptet.
     
     A lang paraméter, ha nem None, a megadott nyelvet használja a transzkripció és alignálás során.
     """
@@ -250,7 +247,6 @@ def transcribe_directory(directory, gpu_ids, lang):
     task_queue = Queue()
     tasks_added = 0
 
-    # Feltöltjük a queue-t azokon a fájlokon, melyekhez még nincs .json
     for audio_file in audio_files:
         json_file = os.path.splitext(audio_file)[0] + ".json"
         if not os.path.exists(json_file):
@@ -265,16 +261,13 @@ def transcribe_directory(directory, gpu_ids, lang):
 
     print(f"Összesen {tasks_added} fájl vár feldolgozásra.")
 
-    # Manager a közös queue-khoz és a last_activity dict-hez
     manager = Manager()
     progress_queue = manager.Queue()
     last_activity = manager.dict()
 
-    # Inicializáljuk a last_activity minden GPU-ra
     for gpu_id in gpu_ids:
         last_activity[gpu_id] = time.time()
 
-    # Worker folyamatok indítása
     processes = []
     for gpu_id in gpu_ids:
         p = Process(
@@ -291,22 +284,14 @@ def transcribe_directory(directory, gpu_ids, lang):
     failed_files = []
     start_time = time.time()
 
-    # A fő ciklus, amíg nincs kész az összes feldolgozás
     while tasks_done + tasks_failed < tasks_added:
         try:
             message = progress_queue.get(timeout=1.0)
             if message["status"] == "done":
                 tasks_done += 1
-
                 elapsed_time = time.time() - start_time
                 remaining = tasks_added - (tasks_done + tasks_failed)
-
-                # Ha már van legalább 1 feldolgozott fájl, átlagot számolunk
-                if tasks_done > 0:
-                    avg_time_per_file = elapsed_time / tasks_done
-                else:
-                    avg_time_per_file = 0
-
+                avg_time_per_file = elapsed_time / tasks_done if tasks_done > 0 else 0
                 est_remaining_time = avg_time_per_file * remaining
                 finish_time_est = datetime.datetime.now() + datetime.timedelta(seconds=est_remaining_time)
                 progress_percent = ((tasks_done + tasks_failed) / tasks_added) * 100
@@ -320,15 +305,9 @@ def transcribe_directory(directory, gpu_ids, lang):
             elif message["status"] == "failed":
                 tasks_failed += 1
                 failed_files.append((message["file"], message.get("error", "Ismeretlen hiba")))
-
                 elapsed_time = time.time() - start_time
                 remaining = tasks_added - (tasks_done + tasks_failed)
-
-                if (tasks_done + tasks_failed) > 0:
-                    avg_time_per_file = elapsed_time / (tasks_done + tasks_failed)
-                else:
-                    avg_time_per_file = 0
-
+                avg_time_per_file = elapsed_time / (tasks_done + tasks_failed) if (tasks_done + tasks_failed) > 0 else 0
                 est_remaining_time = avg_time_per_file * remaining
                 finish_time_est = datetime.datetime.now() + datetime.timedelta(seconds=est_remaining_time)
                 progress_percent = ((tasks_done + tasks_failed) / tasks_added) * 100
@@ -340,28 +319,20 @@ def transcribe_directory(directory, gpu_ids, lang):
                 )
 
         except queue.Empty:
-            # Ha 1 másodpercig nem jött üzenet, folytatjuk
             pass
 
-        # Ha több GPU van, ellenőrizzük a tétlenséget
         if len(gpu_ids) > 1:
             now = time.time()
             for g in gpu_ids:
                 if (now - last_activity[g]) > INACTIVITY_LIMIT:
-                    print(f"FIGYELEM: GPU-{g} már több mint {INACTIVITY_LIMIT} másodperce tétlen.")
+                    print(f"FIGYELEM: GPU-{g} több mint {INACTIVITY_LIMIT} mp-ig tétlen.")
                     print("Minden folyamat leállítása és a script újraindítása...")
-
-                    # Folyamatok megszakítása
                     for proc in processes:
                         if proc.is_alive():
                             proc.terminate()
-
-                    # Script újraindítása
                     python = sys.executable
                     os.execl(python, python, *sys.argv)
-                    # os.execl() nem tér vissza.
 
-    # Ha minden feladat elkészült, várjuk, hogy a folyamatok befejeződjenek
     for p in processes:
         p.join()
         print(f"Folyamat befejezve: {p.name}")
@@ -373,7 +344,6 @@ def transcribe_directory(directory, gpu_ids, lang):
         print(f"\n{len(failed_files)} fájl feldolgozása sikertelen:")
         for file, error in failed_files:
             print(f"  - {file}: {error}")
-
         failed_log = os.path.join(directory, "failed_files.log")
         try:
             with open(failed_log, "w", encoding="utf-8") as f:
@@ -401,7 +371,6 @@ if __name__ == "__main__":
         print(f"Hiba: A megadott könyvtár nem létezik: {args.directory}")
         sys.exit(1)
 
-    # Meghatározza a használni kívánt GPU-kat
     if args.gpus:
         try:
             specified_gpus = [int(x.strip()) for x in args.gpus.split(',')]
@@ -425,6 +394,4 @@ if __name__ == "__main__":
 
     print(f"Használt GPU-k: {gpu_ids}")
 
-    # Indítjuk az átírást és alignálást a megadott könyvtárban,
-    # a --lang opció értéke (None esetén automatikus felismerés)
     transcribe_directory(args.directory, gpu_ids, args.lang)
