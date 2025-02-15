@@ -45,6 +45,9 @@ RUN mkdir -p /home/sarpba && \
     cd AI_Dubbing && \
     pip install -r requirements.txt
 
+# Hozzuk létre a szükséges könyvtárat a modellek számára
+RUN mkdir -p /home/sarpba/AI_Dubbing/TTS/hun_v5
+
 # Letöltjük a modellt és a szólistát a megadott HF tokennel
 RUN cd /home/sarpba/AI_Dubbing/TTS/hun_v5 && \
     wget --header="Authorization: Bearer ${HF_TOKEN}" \
