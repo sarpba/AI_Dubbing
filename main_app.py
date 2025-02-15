@@ -307,26 +307,31 @@ def run_generate_tts_dubbing(remove_silence, tts_subdir, speed, nfe_step, norm_s
         command.append("--remove_silence")
     return run_subprocess_command(command, current_project, "f5_tts_infer_API.py")
 
-def run_transcribe_align_chunks(current_project):
+def run_transcribe_align_chunks(current_project, splits_lang, translated_splits_lang):
     """
     Run the whisx_turbo.py script on two directories sequentially:
       1. The project's "splits" subdirectory.
       2. The project's "translated_splits" subdirectory.
+    The language for each directory is passed via:
+      - splits_lang: language for the splits directory.
+      - translated_splits_lang: language for the translated_splits directory.
     Combines the results and returns them.
     """
     if not current_project:
         return "No active project selected!"
+    if not splits_lang or not translated_splits_lang:
+        return "Both language selections are required!"
     project_path = os.path.join(WORKDIR, current_project)
     splits_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["splits"])
     translated_splits_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["translated_splits"])
     script_path = os.path.join(config["DIRECTORIES"]["scripts"], "whisx_turbo.py")
     
-    # First run on the splits directory
-    command1 = ["python", script_path, splits_dir]
+    # Run on the splits directory with language parameter
+    command1 = ["python", script_path, splits_dir, "--lang", splits_lang]
     output1 = run_subprocess_command(command1, current_project, f"whisx_turbo.py on {splits_dir}")
     
-    # Second run on the translated_splits directory
-    command2 = ["python", script_path, translated_splits_dir]
+    # Run on the translated_splits directory with language parameter
+    command2 = ["python", script_path, translated_splits_dir, "--lang", translated_splits_lang]
     output2 = run_subprocess_command(command2, current_project, f"whisx_turbo.py on {translated_splits_dir}")
     
     combined_output = f"Splits output:\n{output1}\n\nTranslated Splits output:\n{output2}"
@@ -516,7 +521,13 @@ def main(share, host):
     deepL_api_default = saved_keys.get("deepL_api_key", "")
     
     initial_project = get_projects()[0] if get_projects() else ""
-    with gr.Blocks() as demo:
+    # A custom CSS-sel állítjuk be, hogy a gomb klikkeléskor narancssárgára váltson
+    css = """
+    button:active {
+        background-color: orange !important;
+    }
+    """
+    with gr.Blocks(css=css) as demo:
         current_project_state = gr.State(initial_project)
         header = gr.Markdown(f"**Current Project:** {initial_project}")
         with gr.Row():
@@ -551,7 +562,7 @@ def main(share, host):
                 btn_transcribe_align = gr.Button("Transcribe & Align")
                 with gr.Column(visible=False, elem_id="transcribe_align_panel") as transcribe_align_panel:
                     hf_token_input = gr.Textbox(label="Hugging Face Access Token (optional)", placeholder="Enter HF token", value=hf_token_default)
-                    language_dropdown = gr.Dropdown(choices=["", "en", "es", "de", "fr", "hu"], label="Language", value="")
+                    language_dropdown = gr.Dropdown(choices=["", "en", "fr", "de", "es", "it", "ja", "zh", "nl", "uk", "pt", "ar", "cs", "ru", "pl", "hu", "fi", "fa", "el", "tr", "da", "he", "vi", "ko", "ur", "te", "hi", "ca", "ml", "no", "nn", "sk", "sl", "hr", "ro", "eu", "gl", "ka"], label="Language", value="")
                     btn_run_transcribe_align = gr.Button("Run")
                 
                 btn_audio_split = gr.Button("Audio Splitting")
@@ -589,7 +600,23 @@ def main(share, host):
                     seed_input = gr.Number(label="Seed", value=-1)
                     btn_run_tts = gr.Button("Run")
                 
+                # Transcribe & Align Chunks:
+                # Alapértelmezetten a nyelvválasztó panel rejtve van.
                 btn_transcribe_align_chunks = gr.Button("Transcribe & Align Chunks")
+                with gr.Column(visible=False, elem_id="transcribe_align_chunks_panel") as transcribe_align_chunks_panel:
+                    splits_lang_dropdown = gr.Dropdown(
+                        choices=["", "en", "fr", "de", "es", "it", "ja", "zh", "nl", "uk", "pt", "ar", "cs", "ru", "pl", "hu", "fi", "fa", "el", "tr", "da", "he", "vi", "ko", "ur", "te", "hi", "ca", "ml", "no", "nn", "sk", "sl", "hr", "ro", "eu", "gl", "ka"
+],
+                        label="Language for Splits",
+                        value=""
+                    )
+                    translated_splits_lang_dropdown = gr.Dropdown(
+                        choices=["", "en", "fr", "de", "es", "it", "ja", "zh", "nl", "uk", "pt", "ar", "cs", "ru", "pl", "hu", "fi", "fa", "el", "tr", "da", "he", "vi", "ko", "ur", "te", "hi", "ca", "ml", "no", "nn", "sk", "sl", "hr", "ro", "eu", "gl", "ka"
+],
+                        label="Language for Translated Splits",
+                        value=""
+                    )
+                    btn_run_transcribe_align_chunks = gr.Button("Run")
                 
                 btn_normalise_cut = gr.Button("Normalize & Cut Chunks")
                 with gr.Column(visible=False, elem_id="normalise_cut_panel") as normalise_cut_panel:
@@ -651,9 +678,12 @@ def main(share, host):
             inputs=[remove_silence_checkbox, tts_subdir_dropdown, speed_slider, nfe_slider, norm_dropdown, seed_input, current_project_state],
             outputs=output_text
         )
-        btn_transcribe_align_chunks.click(
+        # A "Transcribe & Align Chunks" gomb megnyomása megjeleníti a nyelvválasztó panelt
+        btn_transcribe_align_chunks.click(lambda: gr.update(visible=True), None, transcribe_align_chunks_panel)
+        # A panelban lévő "Run" gomb elindítja a feldolgozást
+        btn_run_transcribe_align_chunks.click(
             run_transcribe_align_chunks,
-            inputs=[current_project_state],
+            inputs=[current_project_state, splits_lang_dropdown, translated_splits_lang_dropdown],
             outputs=output_text
         )
         btn_normalise_cut.click(lambda: gr.update(visible=True), None, normalise_cut_panel)

@@ -53,12 +53,15 @@ def get_audio_duration(audio_file):
         print(f"Nem sikerült meghatározni az audio hosszát a következő fájlhoz: {audio_file} - {e}")
         return 0
 
-def worker(gpu_id, task_queue, progress_queue, last_activity):
+def worker(gpu_id, task_queue, progress_queue, last_activity, lang_override):
     """
     A GPU-khoz rendelt folyamatokat kezelő függvény.
     Nem törli a betöltött modelleket minden fájl után, csak a folyamat legvégén.
     Használja a progress_queue-t, hogy jelezze a sikeres feldolgozás befejezését vagy a sikertelenséget.
     A last_activity[gpu_id] értékét frissíti, ha új feladatot kap és ha befejez egy feladatot.
+    
+    A lang_override értéke, ha meg van adva, mind a transzkripció, mind az alignálás során
+    az adott nyelv használatát eredményezi.
     """
     # Beállítjuk a CUDA_VISIBLE_DEVICES környezeti változót, hogy csak az adott GPU látható legyen
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
@@ -72,6 +75,8 @@ def worker(gpu_id, task_queue, progress_queue, last_activity):
         import whisperx
 
         print(f"Folyamat {current_process().name} beállítva a GPU-{gpu_id} eszközre.")
+        if lang_override is not None:
+            print(f"GPU-{gpu_id}: A megadott nyelv: {lang_override}")
 
         # WhisperX fő (transcribe) modell betöltése (csak egyszer)
         print(f"GPU-{gpu_id}: WhisperX transcribe modell betöltése...")
@@ -123,11 +128,18 @@ def worker(gpu_id, task_queue, progress_queue, last_activity):
 
                 # 1) Audio betöltése és átírás
                 audio = whisperx.load_audio(audio_file)
-                result = model.transcribe(audio, batch_size=16)
+                if lang_override is not None:
+                    result = model.transcribe(audio, batch_size=16, language=lang_override)
+                else:
+                    result = model.transcribe(audio, batch_size=16)
                 print(f"Átírás befejezve: {audio_file}")
 
                 # 2) Alignálás a transzkripció eredményével
-                align_language_code = result["language"]  # A felismerés alapján
+                if lang_override is not None:
+                    align_language_code = lang_override
+                else:
+                    align_language_code = result["language"]  # A felismerés alapján
+
                 if align_language_code not in alignment_models:
                     print(f"GPU-{gpu_id}: Alignment modell betöltése a következő nyelvhez: {align_language_code}")
                     model_a, metadata = whisperx.load_align_model(
@@ -225,12 +237,14 @@ def get_audio_files(directory):
                 audio_files.append(os.path.join(root, file))
     return audio_files
 
-def transcribe_directory(directory, gpu_ids):
+def transcribe_directory(directory, gpu_ids, lang):
     """
     Folyamatokat indító és feladatlistát kezelő függvény.
     Elindít minden GPU-ra egy worker folyamatot,
     figyeli a progress_queue-t, és ellenőrzi a GPU-k tétlenségét.
     Ha valamelyik GPU 10 mp-ig tétlen marad, megszakítja a folyamatokat és újraindítja a scriptet.
+    
+    A lang paraméter, ha nem None, a megadott nyelvet használja a transzkripció és alignálás során.
     """
     audio_files = get_audio_files(directory)
     task_queue = Queue()
@@ -244,13 +258,6 @@ def transcribe_directory(directory, gpu_ids):
             tasks_added += 1
         else:
             print(f"Már létezik: {json_file}, kihagyás...")
-            # Jelzés küldése, hogy ez a feladat már elkészült
-            # Ez lehetőség szerint már a worker felelőssége, de itt is jelezhetjük
-            # progress_queue.put({
-            #     "status": "done",
-            #     "file": audio_file,
-            #     "processing_time": 0
-            # })
 
     if tasks_added == 0:
         print("Nincs feldolgozandó fájl.")
@@ -272,7 +279,7 @@ def transcribe_directory(directory, gpu_ids):
     for gpu_id in gpu_ids:
         p = Process(
             target=worker,
-            args=(gpu_id, task_queue, progress_queue, last_activity),
+            args=(gpu_id, task_queue, progress_queue, last_activity, lang),
             name=f"GPU-{gpu_id}-Process"
         )
         processes.append(p)
@@ -317,7 +324,6 @@ def transcribe_directory(directory, gpu_ids):
                 elapsed_time = time.time() - start_time
                 remaining = tasks_added - (tasks_done + tasks_failed)
 
-                # Ha már van legalább 1 feldolgozott fájl, átlagot számolunk
                 if (tasks_done + tasks_failed) > 0:
                     avg_time_per_file = elapsed_time / (tasks_done + tasks_failed)
                 else:
@@ -368,7 +374,6 @@ def transcribe_directory(directory, gpu_ids):
         for file, error in failed_files:
             print(f"  - {file}: {error}")
 
-        # Opcióként menthetjük a sikertelen fájlokat egy külön log fájlba
         failed_log = os.path.join(directory, "failed_files.log")
         try:
             with open(failed_log, "w", encoding="utf-8") as f:
@@ -387,6 +392,8 @@ if __name__ == "__main__":
     parser.add_argument("directory", type=str, help="A könyvtár, amely tartalmazza az audio fájlokat.")
     parser.add_argument('--gpus', type=str, default=None, 
                         help="Használni kívánt GPU indexek, vesszővel elválasztva (pl. '0,2,3')")
+    parser.add_argument('--lang', type=str, default=None,
+                        help="Kényszerített nyelvkód a transzkripcióhoz és alignáláshoz (pl. 'hu', 'en'). Ha nincs megadva, automatikus felismerés történik.")
 
     args = parser.parse_args()
 
@@ -418,5 +425,6 @@ if __name__ == "__main__":
 
     print(f"Használt GPU-k: {gpu_ids}")
 
-    # Indítjuk az átírást és alignálást
-    transcribe_directory(args.directory, gpu_ids)
+    # Indítjuk az átírást és alignálást a megadott könyvtárban,
+    # a --lang opció értéke (None esetén automatikus felismerés)
+    transcribe_directory(args.directory, gpu_ids, args.lang)
