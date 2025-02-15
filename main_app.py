@@ -326,16 +326,17 @@ def run_transcribe_align_chunks(current_project, splits_lang, translated_splits_
     translated_splits_dir = os.path.join(project_path, config["PROJECT_SUBDIRS"]["translated_splits"])
     script_path = os.path.join(config["DIRECTORIES"]["scripts"], "whisx_turbo.py")
     
-    # Run on the splits directory with language parameter
-    command1 = ["python", script_path, splits_dir, "--lang", splits_lang]
+    # Futtatás a splits könyvtárra
+    command1 = [sys.executable, script_path, splits_dir, "--lang", splits_lang]
     output1 = run_subprocess_command(command1, current_project, f"whisx_turbo.py on {splits_dir}")
     
-    # Run on the translated_splits directory with language parameter
-    command2 = ["python", script_path, translated_splits_dir, "--lang", translated_splits_lang]
+    # Futtatás a translated_splits könyvtárra
+    command2 = [sys.executable, script_path, translated_splits_dir, "--lang", translated_splits_lang]
     output2 = run_subprocess_command(command2, current_project, f"whisx_turbo.py on {translated_splits_dir}")
     
     combined_output = f"Splits output:\n{output1}\n\nTranslated Splits output:\n{output2}"
     return combined_output
+
 
 def run_normalise_and_cut(current_project, delete_empty, min_db):
     """
