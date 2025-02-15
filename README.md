@@ -61,3 +61,19 @@ todo:
 ...
 
 License: MIT
+
+
+
+#windows install in docker desktop (With Nvidia GPU support, min. 8-12gb vRAM):
+
+```
+git clone https://github.com/sarpba/AI_Dubbing.git
+cd AI_Dubbing
+cd docker
+docker build --build-arg HF_TOKEN=YOUR_HF_TOKEN -t ai_dubbing:0.0.1 .
+```
+
+start:
+```
+sudo docker run --gpus all -p 7860:7860 -p 7861:7861 ai_dubbing:0.0.1
+```
