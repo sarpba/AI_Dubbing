@@ -80,8 +80,9 @@ docker run --gpus all -p 7860:7860 -p 7861:7861 ai_dubbing:0.0.1
 
 
 Akternatív windows docker install:
+
 ```
-docker run --gpus all -it --name ai_dubbing_builder -p 7860-7870:7860-7870 ubuntu:22.04 /bin/bash -c "
+    docker run --gpus all -it --name ai_dubbing_builder -p 7860-7870:7860-7870 ubuntu:22.04 /bin/bash -c "
     apt-get update && \
     apt-get install -y wget bzip2 ca-certificates git ffmpeg && \
     wget https://repo.anaconda.com/archive/Anaconda3-2022.10-Linux-x86_64.sh -O /tmp/anaconda.sh && \
@@ -114,14 +115,15 @@ docker run --gpus all -it --name ai_dubbing_builder -p 7860-7870:7860-7870 ubunt
     cd docker && \
     chmod +x entrypoint.sh
     "
-    ```
+```
+    
 
-    ```
+```
     docker commit --change='CMD []' --change='ENTRYPOINT ["/home/sarpba/AI_Dubbing/docker/entrypoint.sh"]' ai_dubbing_builder ai_dubbing:0.0.1
-    ```
+```
 
-    ```
+```
     docker run --gpus all -p 7860:7860 -p 7861:7861 ai_dubbing:0.0.1
-    ```
+```
 
 
