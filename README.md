@@ -113,6 +113,7 @@ docker run --gpus all -it --name ai_dubbing_builder -p 7860-7870:7860-7870 ubunt
     cd ../.. && \
     cd docker && \
     chmod +x entrypoint.sh
+    "
     ```
 
     ```
