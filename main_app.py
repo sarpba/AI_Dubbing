@@ -141,13 +141,15 @@ def confirm_project(project_mode, existing_project, new_project_name, uploaded_f
     header_text = f"**Current Project:** {selected_project}"
     return header_text, msg, gr.update(visible=False), gr.update(choices=updated_choices, value=selected_project), selected_project
 
-def run_separate_audio(device, keep_full_audio, non_speech_silence, current_project):
+def run_separate_audio(device, keep_full_audio, non_speech_silence, chunk_size, model, current_project):
     """
-    Run the separate_audio.py script with the following parameters:
-      - INPUT_DIR: the project's "upload" subdirectory.
-      - OUTPUT_DIR: the project's "separated_audio" subdirectory.
-      - --device: "cuda" or "cpu".
-      - --keep_full_audio and --non_speech_silence: flags.
+    Futtatja a separate_audio.py scriptet az alábbi paraméterekkel:
+      - INPUT_DIR: a projekt "upload" alkönyvtára.
+      - OUTPUT_DIR: a projekt "separated_audio" alkönyvtára.
+      - --device: "cuda" vagy "cpu".
+      - --keep_full_audio és --non_speech_silence: zászlók.
+      - --chunk_size: darabolás hossza percben.
+      - --model: a használt modell.
     """
     if not current_project:
         return "No active project selected!"
@@ -160,7 +162,10 @@ def run_separate_audio(device, keep_full_audio, non_speech_silence, current_proj
         command.append("--keep_full_audio")
     if non_speech_silence:
         command.append("--non_speech_silence")
+    command += ["--chunk_size", str(chunk_size)]
+    command += ["--model", model]
     return run_subprocess_command(command, current_project, "separate_audio.py")
+
 
 def run_transcribe_align(hf_token, language, current_project):
     """
@@ -558,7 +563,10 @@ def main(share, host):
                     device_dropdown = gr.Dropdown(choices=["cuda", "cpu"], label="Device", value="cuda")
                     keep_full_audio_checkbox = gr.Checkbox(label="Keep full audio", value=False, info="Use for nothing at the moment")
                     non_speech_silence_checkbox = gr.Checkbox(label="Background silence", value=False, info="Check if the video have speak only")
+                    chunk_size_input = gr.Number(label="Chunk Size (minutes)", value=5, precision=0)
+                    model_dropdown = gr.Dropdown(choices=["htdemucs", "htdemucs_ft", "hdemucs_mmi", "mdx", "mdx_extra"], label="Model", value="htdemucs")
                     btn_run_separate = gr.Button("Run")
+
                 
                 btn_transcribe_align = gr.Button("Transcribe & Align")
                 with gr.Column(visible=False, elem_id="transcribe_align_panel") as transcribe_align_panel:
@@ -653,7 +661,7 @@ def main(share, host):
         btn_separate.click(lambda: gr.update(visible=True), None, separate_audio_panel)
         btn_run_separate.click(
             run_separate_audio,
-            inputs=[device_dropdown, keep_full_audio_checkbox, non_speech_silence_checkbox, current_project_state],
+            inputs=[device_dropdown, keep_full_audio_checkbox, non_speech_silence_checkbox, chunk_size_input, model_dropdown, current_project_state],
             outputs=output_text
         )
         btn_transcribe_align.click(lambda: gr.update(visible=True), None, transcribe_align_panel)
