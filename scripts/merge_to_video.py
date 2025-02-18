@@ -8,7 +8,7 @@ import datetime
 
 def get_audio_codec_and_sample_rate(video_file):
     """
-    Retrieves the audio codec and sample rate of the first audio stream in the video file using ffprobe.
+    Lekéri a video első audió streamjének codec-jét és mintavételi arányát ffprobe segítségével.
     """
     try:
         cmd = [
@@ -30,13 +30,19 @@ def get_audio_codec_and_sample_rate(video_file):
 
 def process_audio(audio_file, codec, sample_rate):
     """
-    Re-encodes the audio file to match the codec and sample rate, and ensures it has at most stereo channels.
-    Returns the path to the processed audio file and the codec used.
+    Újrakódolja az audio fájlt, hogy a codec és a mintavételi arány megegyezzen az eredetivel,
+    és legfeljebb sztereó csatornákat tartalmazzon.
+    Ha az eredeti codec DTS, akkor AAC-t használ.
+    Visszaadja a feldolgozott audio fájl útvonalát és a használt codec-et.
     """
-    # Ha az eredeti codec 'opus', használjuk a 'libopus' kódolót
+    # Ha az eredeti codec 'opus', akkor a 'libopus'-t használjuk
     if codec.lower() == 'opus':
         codec_used = 'libopus'
         output_extension = 'opus'
+    # Ha az eredeti codec DTS, akkor AAC-t használunk (így nem használ DTS-t)
+    elif codec.lower() == 'dts':
+        codec_used = 'aac'
+        output_extension = 'm4a'
     else:
         codec_used = codec
         output_extension = codec.split('.')[-1]
@@ -45,12 +51,12 @@ def process_audio(audio_file, codec, sample_rate):
     try:
         cmd = [
             'ffmpeg',
-            '-y',  # Overwrite without asking
+            '-y',  # Felülírja a már létező fájlt
             '-i', audio_file,
             '-c:a', codec_used,
             '-b:a', '128k',  # Bitrate beállítása
-            '-ar', sample_rate,  # Mintaarány beállítása az eredetihoz
-            '-ac', '2',  # Max stereo
+            '-ar', sample_rate,  # Mintavételi arány beállítása
+            '-ac', '2',  # Legfeljebb sztereó
             processed_audio
         ]
         subprocess.run(cmd, check=True)
@@ -61,28 +67,27 @@ def process_audio(audio_file, codec, sample_rate):
 
 def add_audio_to_video(video_file, new_audio_file, language, codec, sample_rate, output_dir):
     """
-    Adds the new audio track to the video file with the specified language tag.
-    The new audio is encoded with the given codec and sample rate.
-    Excludes any existing cover images by not mapping additional video streams.
+    Hozzáadja az új audiosávot a videóhoz a megadott nyelvi címkével.
+    Az új audió a megadott codec-et és mintavételi arányt használja.
+    Az eredeti videóból csak a fő videó stream kerül átmásolásra.
     """
-    # Derive the output file name based on the input video file name
+    # A kimeneti fájl neve az input videófájl alapján
     video_basename = os.path.basename(video_file)
     video_name, video_ext = os.path.splitext(video_basename)
     output_file = os.path.join(output_dir, f"{video_name}_with_new_audio{video_ext}")
 
     try:
-        # Build the ffmpeg command
         cmd = [
             'ffmpeg',
             '-i', video_file,
             '-i', new_audio_file,
-            '-map', '0:v:0',      # Map only the primary video stream
-            '-map', '0:a?',       # Map existing audio streams if present
-            '-map', '1:a',        # Map new audio
-            '-c:v', 'copy',       # Copy video stream without re-encoding
-            '-c:a', 'copy',       # Copy existing audio streams without re-encoding
-            '-c:a:1', codec,      # Encode the new audio stream with the specified codec
-            '-ar:a:1', sample_rate,  # Ensure new audio has the same sample rate
+            '-map', '0:v:0',      # Csak az első videó stream
+            '-map', '0:a?',       # Esetlegesen meglévő audió stream-ek
+            '-map', '1:a',        # Az új audió stream
+            '-c:v', 'copy',       # Videó stream másolása kódolás nélkül
+            '-c:a', 'copy',       # Az eredeti audió stream-ek másolása
+            '-c:a:1', codec,      # Az új audió stream kódolása a megadott codec-szel
+            '-ar:a:1', sample_rate,  # Az új audió mintavételi aránya
             '-metadata:s:a:1', f'language={language}',
             output_file
         ]
@@ -94,28 +99,24 @@ def add_audio_to_video(video_file, new_audio_file, language, codec, sample_rate,
 
 def rename_existing_files(output_dir):
     """
-    Checks for files matching *_with_new_audio.mkv in the specified directory.
-    If found, renames them by appending the creation date in the format "yyyy.mm.dd-hh_mm".
+    Ellenőrzi az output könyvtárban az *_with_new_audio.mkv fájlokat.
+    Ha talál ilyeneket, a létrehozás dátumát hozzáfűzi a fájl nevéhez.
     """
     pattern = os.path.join(output_dir, '*_with_new_audio.mkv')
     matches = glob.glob(pattern)
     
     for file_path in matches:
         try:
-            # Retrieve the file creation time
             ctime = os.path.getctime(file_path)
             dt = datetime.datetime.fromtimestamp(ctime)
             formatted_date = dt.strftime("%Y.%m.%d-%H_%M")
             
-            # Split the filename and extension
             dirname, basename = os.path.split(file_path)
             name, ext = os.path.splitext(basename)
             
-            # Construct the new name
             new_name = f"{name}_{formatted_date}{ext}"
             new_path = os.path.join(dirname, new_name)
             
-            # Rename the file
             os.rename(file_path, new_path)
             print(f"Átnevezve: {file_path} -> {new_path}")
         except Exception as e:
@@ -131,7 +132,7 @@ def main():
 
     args = parser.parse_args()
 
-    # Check if input files exist
+    # Ellenőrzi, hogy a megadott fájlok léteznek-e
     if not os.path.isfile(args.input_video):
         print(f"A megadott videófájl nem található: {args.input_video}")
         sys.exit(1)
@@ -139,7 +140,7 @@ def main():
         print(f"A megadott audiófájl nem található: {args.input_audio}")
         sys.exit(1)
 
-    # Check if output directory exists, if not, create it
+    # Ellenőrzi, hogy a kimeneti könyvtár létezik-e, ha nem, létrehozza
     if not os.path.isdir(args.output_dir):
         try:
             os.makedirs(args.output_dir)
@@ -148,28 +149,28 @@ def main():
             print(f"Hiba a kimeneti könyvtár létrehozása során: {e}")
             sys.exit(1)
 
-    # Rename existing *_with_new_audio.mkv files
+    # Átnevezi a már létező *_with_new_audio.mkv fájlokat
     rename_existing_files(args.output_dir)
 
-    # Get audio codec and sample rate from the original video
+    # Lekéri az eredeti video audió codec-jét és mintavételi arányát
     audio_codec, sample_rate = get_audio_codec_and_sample_rate(args.input_video)
     print(f"Eredeti audio codec: {audio_codec}")
     print(f"Eredeti sample rate: {sample_rate} Hz")
 
-    # Process the new audio to match codec and sample rate
+    # Feldolgozza az új audiót, hogy megfeleljen a paramétereknek
     processed_audio, codec_used = process_audio(args.input_audio, audio_codec, sample_rate)
     print(f"Feldolgozott audió fájl: {processed_audio}")
     print(f"Használt codec: {codec_used}")
 
-    # Add the new audio track to the video
+    # Hozzáadja az új audiosávot a videóhoz
     add_audio_to_video(args.input_video, processed_audio, args.language, codec_used, sample_rate, args.output_dir)
 
-    # Define the path to the newly created file
+    # A létrehozott kimeneti fájl elérési útja
     video_basename = os.path.basename(args.input_video)
     video_name, video_ext = os.path.splitext(video_basename)
     output_file = os.path.join(args.output_dir, f"{video_name}_with_new_audio{video_ext}")
 
-    # Clean up the processed audio file
+    # Törli a feldolgozott audió fájlt
     if os.path.exists(processed_audio):
         os.remove(processed_audio)
         print(f"Törölve a feldolgozott audió fájl: {processed_audio}")
