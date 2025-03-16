@@ -48,7 +48,8 @@ Register for a DeepL account, activate the API with a free subscription, and gen
 
 RUN:
 ```
-cd AI_sync
+conda activate sync
+cd AI_Dubbing
 python main_app.py
 ```
 
