@@ -32,7 +32,9 @@ conda install cudatoolkit=11.8 cudnn=8.*
 git clone https://github.com/sarpba/AI_Dubbing.git
 cd AI_Dubbing
 pip install -r requirements.txt
-apt install ffmpeg
+sudo apt install ffmpeg
+sudo apt install gcc
+pip install webrtcvad
 ```
 Edit the whisperx alignment.py, and change the default aligment models to better if have. It's important for more precise alignment process.
 
