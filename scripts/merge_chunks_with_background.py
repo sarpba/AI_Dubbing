@@ -4,30 +4,42 @@ import argparse
 from datetime import datetime
 from pydub import AudioSegment
 
+def parse_time_string(time_str):
+    """
+    Parse a time string in HH-MM-SS-mmm format to milliseconds.
+    """
+    pattern = r"^(\d{2})-(\d{2})-(\d{2})-(\d{3})$"
+    match = re.match(pattern, time_str)
+    if not match:
+        raise ValueError(f"Time string '{time_str}' does not match the expected format HH-MM-SS-mmm.")
+    
+    h, m, s, ms = match.groups()
+    
+    # Convert to milliseconds
+    total_ms = (int(h) * 3600 + int(m) * 60 + int(s)) * 1000 + int(ms)
+    return total_ms
+
 def parse_filename(filename):
     """
     Parse the filename to extract start and end times in milliseconds.
-    Expected format: HH-MM-SS.mmm-HH-MM-SS.mmm[_EXTRA].wav
-    Example: 00-00-10.287-00-00-13.811_SPEAKER_20.wav
+    Expected format: HH-MM-SS-mmm_HH-MM-SS-mmm[_EXTRA].wav
+    Example: 00-00-10-287_00-00-13-811_SPEAKER_20.wav
     """
-    # Extract the first part before any underscore
-    time_part = filename.split('_')[0]
+    parts = filename.split('_')
+    if len(parts) < 2:
+        raise ValueError(f"Filename '{filename}' does not contain enough parts separated by underscores.")
+        
+    start_time_str = parts[0]
+    end_time_str = parts[1]
     
-    # Define the regex pattern to match the time part
-    pattern = r"^(\d{2})-(\d{2})-(\d{2}\.\d{3})-(\d{2})-(\d{2})-(\d{2}\.\d{3})$"
-    match = re.match(pattern, time_part)
-    if not match:
-        raise ValueError(f"Filename '{filename}' does not match the expected format.")
-    
-    groups = match.groups()
-    start_h, start_m, start_s_ms = groups[0], groups[1], groups[2]
-    end_h, end_m, end_s_ms = groups[3], groups[4], groups[5]
-    
-    # Convert start and end times to milliseconds
-    start_time = (int(start_h) * 3600 + int(start_m) * 60 + float(start_s_ms)) * 1000  # in ms
-    end_time = (int(end_h) * 3600 + int(end_m) * 60 + float(end_s_ms)) * 1000  # in ms
-    
-    return int(start_time), int(end_time)
+    try:
+        start_time = parse_time_string(start_time_str)
+        end_time = parse_time_string(end_time_str)
+    except ValueError as e:
+        # Re-raise with the original filename for context
+        raise ValueError(f"Error parsing filename '{filename}': {e}")
+        
+    return start_time, end_time
 
 def merge_wav_files(input_folder, output_file, background_file=None):
     """

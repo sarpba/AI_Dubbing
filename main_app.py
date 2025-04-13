@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import datetime
 import base64
+import shutil
 import gradio as gr
 import sys
 import argparse
@@ -108,6 +109,79 @@ def toggle_project_fields(mode):
         return gr.update(visible=True), gr.update(visible=False)
     else:
         return gr.update(visible=False), gr.update(visible=True)
+
+def update_hun_normaliser(config):
+    """Clones or updates the hun normaliser repository."""
+    normalisers_dir = config["DIRECTORIES"]["normalisers"]
+    hun_dir = os.path.join(normalisers_dir, "hun")
+    repo_url = "https://github.com/sarpba/hun.git"
+    git_dir = os.path.join(hun_dir, ".git")
+
+    def run_git_command(command, cwd=None):
+        try:
+            print(f"Running command: {' '.join(command)}") # Add print for debugging
+            # Ensure command list elements are strings
+            command = [str(c) for c in command]
+            result = subprocess.run(command, capture_output=True, text=True, check=False, cwd=cwd) # Use check=False to handle errors manually
+            print(f"Command stdout: {result.stdout}")
+            print(f"Command stderr: {result.stderr}")
+            if result.returncode != 0:
+                # Raise an exception similar to check=True for uniform handling
+                raise subprocess.CalledProcessError(result.returncode, command, output=result.stdout, stderr=result.stderr)
+            return True, result.stdout
+        except subprocess.CalledProcessError as e:
+            print(f"Git command failed: {e}")
+            print(f"Stderr: {e.stderr}")
+            # Log the error using the app's logger if available, otherwise just print
+            # log_action(f"Git command failed: {e}. Stderr: {e.stderr}", "") # Assuming log_action is accessible or pass it
+            return False, e.stderr
+        except FileNotFoundError:
+            error_msg = "Error: 'git' command not found. Make sure Git is installed and in your PATH."
+            print(error_msg)
+            # log_action(error_msg, "")
+            return False, error_msg
+        except Exception as e: # Catch other potential errors
+            error_msg = f"An unexpected error occurred during git command execution: {e}"
+            print(error_msg)
+            # log_action(error_msg, "")
+            return False, str(e)
+
+    if os.path.exists(hun_dir):
+        if os.path.exists(git_dir):
+            print(f"Directory '{hun_dir}' exists and is a Git repository. Attempting pull...")
+            # Try to reset potential local changes and then pull
+            reset_success, reset_output = run_git_command(["git", "reset", "--hard", "HEAD"], cwd=hun_dir)
+            if reset_success:
+                 pull_success, pull_output = run_git_command(["git", "pull"], cwd=hun_dir)
+                 if pull_success:
+                     print(f"Successfully pulled updates for '{hun_dir}'.")
+                 else:
+                     print(f"Git pull failed in '{hun_dir}' after reset. Error: {pull_output}")
+                     # Consider removing and re-cloning as a fallback if pull fails consistently
+            else:
+                 print(f"Git reset failed in '{hun_dir}'. Error: {reset_output}")
+                 # Consider fallback
+
+        else:
+            print(f"Directory '{hun_dir}' exists but is not a Git repository. Removing and cloning...")
+            try:
+                shutil.rmtree(hun_dir)
+                print(f"Removed directory: {hun_dir}")
+                success, output = run_git_command(["git", "clone", repo_url, hun_dir])
+                if success:
+                    print(f"Successfully cloned '{repo_url}' into '{hun_dir}'.")
+                else:
+                    print(f"Failed to clone '{repo_url}' after removing directory. Error: {output}")
+            except Exception as e:
+                print(f"Error removing directory '{hun_dir}': {e}")
+    else:
+        print(f"Directory '{hun_dir}' does not exist. Cloning repository...")
+        success, output = run_git_command(["git", "clone", repo_url, hun_dir])
+        if success:
+            print(f"Successfully cloned '{repo_url}' into '{hun_dir}'.")
+        else:
+            print(f"Failed to clone '{repo_url}'. Error: {output}")
+
 
 # --- Callback függvények ---
 
@@ -472,6 +546,11 @@ def on_download(current_project):
     return f"Download button pressed! (Project: {current_project})"
 
 def main(share, host):
+    # Update hun normaliser before starting the app
+    print("Attempting to update hun normaliser...")
+    update_hun_normaliser(config)
+    print("Hun normaliser update process finished.")
+
     # Load saved keys to pre-populate the token fields (decoded)
     saved_keys = load_keys()
     hf_token_default = saved_keys.get("hf_token", "")
