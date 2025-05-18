@@ -1,4 +1,4 @@
-# AI Dubbing Application - New Backend Setup
+# AI Dubbing Application - New Backend Setup (pre alpha version, maybe not stable)
 
 This document outlines the necessary system packages and Python dependencies for running the new FastAPI-based backend (`main_app_new.py`) of the AI Dubbing application.
 
