@@ -389,17 +389,20 @@ async def run_transcribe_align(project_name: str, params: dict):
     if project_name not in get_projects():
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Save HF token if provided
-    if params.get("hf_token"):
-        keys = load_keys()
-        keys["hf_token"] = params["hf_token"]
-        save_keys(keys["hf_token"], keys.get("deepL_api_key", ""))
-    
+    hf_token_to_use = params.get("hf_token")
+    if not hf_token_to_use: # If token not provided in params, try to load saved one
+        saved_keys = load_keys()
+        hf_token_to_use = saved_keys.get("hf_token")
+    else: # If token IS provided in params, save it for future use
+        keys_to_save = load_keys()
+        keys_to_save["hf_token"] = hf_token_to_use
+        save_keys(keys_to_save["hf_token"], keys_to_save.get("deepL_api_key", ""))
+
     script_path = os.path.join(config["DIRECTORIES"]["scripts"], "whisx.py")
     command = ["python", script_path]
     
-    if params.get("hf_token"):
-        command.extend(["--hf_token", params["hf_token"]])
+    if hf_token_to_use: # Use the determined token
+        command.extend(["--hf_token", hf_token_to_use])
     if params.get("language"):
         command.extend(["--language", params["language"]])
     
@@ -427,13 +430,19 @@ async def run_audio_split(project_name: str):
 async def run_translate(project_name: str, params: dict):
     if project_name not in get_projects():
         raise HTTPException(status_code=404, detail="Project not found")
-    
-    # Save DeepL key if provided
-    if params.get("auth_key"):
-        keys = load_keys()
-        keys["deepL_api_key"] = params["auth_key"]
-        save_keys(keys.get("hf_token", ""), keys["deepL_api_key"])
-    
+
+    auth_key_to_use = params.get("auth_key")
+    if not auth_key_to_use: # If key not provided in params, try to load saved one
+        saved_keys = load_keys()
+        auth_key_to_use = saved_keys.get("deepL_api_key")
+    else: # If key IS provided in params, save it for future use
+        keys_to_save = load_keys()
+        keys_to_save["deepL_api_key"] = auth_key_to_use
+        save_keys(keys_to_save.get("hf_token", ""), keys_to_save["deepL_api_key"])
+
+    if not auth_key_to_use: # If still no key after trying to load, raise error
+        raise HTTPException(status_code=400, detail="DeepL API key is required and not found. Please save it in API Key Settings or provide it for the script.")
+
     script_path = os.path.join(config["DIRECTORIES"]["scripts"], "translate.py")
     command = [
         "python", script_path,
@@ -441,7 +450,7 @@ async def run_translate(project_name: str, params: dict):
         "-output_dir", os.path.join(WORKDIR, project_name, config["PROJECT_SUBDIRS"]["translated_splits"]),
         "-input_language", params.get("input_language", "EN"),
         "-output_language", params.get("output_language", "HU"),
-        "-auth_key", params.get("auth_key", "")
+        "-auth_key", auth_key_to_use # Use the determined key
     ]
     
     return_code = await run_subprocess_command(command, project_name, "translate.py")
