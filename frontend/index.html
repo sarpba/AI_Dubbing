@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+    <html lang="hu">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AI Dubbing</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <header>
+            <h1>AI Dubbing Vezérlőpult</h1>
+        </header>
+        <main>
+            <section id="project-management">
+                <h2>Projektek</h2>
+                <div class="controls project-controls">
+                    <div>
+                        <label for="new-project-name">Új projekt neve:</label>
+                        <input type="text" id="new-project-name" placeholder="Projekt neve">
+                    </div>
+                    <div>
+                        <label for="mkv-file-upload">MKV Fájl (opcionális):</label>
+                        <input type="file" id="mkv-file-upload" accept=".mkv">
+                    </div>
+                    <button id="create-project-btn">Projekt Létrehozása</button>
+                </div>
+                <h3>Létező Projektek:</h3>
+                <div class="controls">
+                    <label for="project-select-dropdown">Projekt Kiválasztása:</label>
+                    <select id="project-select-dropdown">
+                        <option value="">Válassz egy projektet...</option>
+                        <!-- Projektek listája ide kerül dinamikusan -->
+                    </select>
+                </div>
+            </section>
+
+            <section id="api-key-settings">
+                <h2>API Kulcsok</h2>
+                <div class="controls api-key-controls">
+                    <div>
+                        <label for="hf-token-input">HuggingFace Token:</label>
+                        <input type="password" id="hf-token-input" placeholder="HF Token">
+                    </div>
+                    <div>
+                        <label for="deepl-api-key-input">DeepL API Kulcs:</label>
+                        <input type="password" id="deepl-api-key-input" placeholder="DeepL API Kulcs">
+                    </div>
+                    <button id="save-api-keys-btn">Kulcsok Mentése</button>
+                </div>
+            </section>
+
+            <div class="main-layout-container">
+                <section id="script-runner" class="hidden layout-column">
+                    <h2 id="current-project-title"></h2>
+                    <div id="script-buttons">
+                        <!-- Script futtató gombok ide kerülnek -->
+                    </div>
+                    <div id="script-params" class="hidden">
+                         <!-- Script specifikus paraméterek ide -->
+                    </div>
+                     <button id="run-script-btn" class="hidden main-run-button">Script Futtatása</button>
+                </section>
+
+                <section id="status-logs" class="layout-column">
+                    <h2>Státusz és Logok</h2>
+                    <div id="logs">
+                        <!-- Log üzenetek ide kerülnek -->
+                    </div>
+                </section>
+            </div>
+
+            <section id="download-section" class="hidden">
+                <h2>Letölthető Fájlok</h2>
+                <div id="downloadable-files-list">
+                    <!-- Letölthető fájlok listája -->
+                </div>
+                <button id="refresh-downloads-btn">Lista Frissítése</button>
+            </section>
+        </main>
+        <footer>
+            <p>&copy; 2025 AI Dubbing</p>
+        </footer>
+        <script src="script.js"></script>
+    </body>
+    </html>

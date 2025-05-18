@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Dubbing - Chunk Checker</title>
+    <link rel="stylesheet" href="style.css"> <!-- Assuming shared style.css, or create checker.css -->
+    <style>
+        /* Additional styles specific to checker.html */
+        .checker-item {
+            border: 1px solid #ddd;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 6px;
+            background-color: #f9f9f9;
+        }
+        .checker-item.overlong {
+            background-color: #ffdddd; /* Light red for overlong items */
+            border-color: #ffaaaa;
+        }
+        .checker-item h4 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #333;
+        }
+        .checker-item .audio-player {
+            width: 100%;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .checker-item textarea {
+            width: calc(100% - 16px); /* Adjust for padding */
+            min-height: 60px;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .checker-item .info-text {
+            font-size: 0.9em;
+            color: #555;
+            margin-bottom: 0.5rem;
+        }
+        .checker-item .actions button {
+            margin-right: 0.5rem;
+            padding: 0.5rem 0.8rem;
+            font-size: 0.9em;
+        }
+        #pagination-controls {
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        #pagination-controls button {
+            margin: 0 0.5rem;
+        }
+        .loading-message {
+            text-align: center;
+            padding: 2rem;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>AI Dubbing - Chunk Ellenőrző</h1>
+    </header>
+    <main>
+        <section id="project-selection-checker">
+            <h2>Projekt Kiválasztása</h2>
+            <div class="controls">
+                <select id="project-dropdown-checker"></select>
+                <button id="load-project-data-btn">Projekt Adatok Betöltése</button>
+            </div>
+        </section>
+
+        <section id="checker-dashboard" class="hidden">
+            <h2 id="current-checker-project-title"></h2>
+            
+            <div id="pagination-controls">
+                <button id="prev-page-btn">Előző Oldal</button>
+                <span id="page-info">Oldal: 1 / 1</span>
+                <button id="next-page-btn">Következő Oldal</button>
+            </div>
+
+            <div id="checker-items-container">
+                <!-- Checker items will be dynamically inserted here -->
+                <p class="loading-message">Adatok betöltése...</p>
+            </div>
+
+             <div id="pagination-controls-bottom" class="hidden">
+                <button id="prev-page-btn-bottom">Előző Oldal</button>
+                <span id="page-info-bottom">Oldal: 1 / 1</span>
+                <button id="next-page-btn-bottom">Következő Oldal</button>
+            </div>
+        </section>
+        
+        <section id="checker-status-logs">
+            <h2>Checker Státusz és Logok</h2>
+            <div id="checker-logs">
+                <!-- Log messages specific to checker operations -->
+            </div>
+        </section>
+    </main>
+    <footer>
+        <p>&copy; 2025 AI Dubbing Checker</p>
+    </footer>
+    <script src="checker.js"></script>
+</body>
+</html>

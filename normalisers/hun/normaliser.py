@@ -255,13 +255,33 @@ def replace_times(text):
     return text
 
 def replace_numbers(text):
-    # Számok átírása szöveges megfelelőjükre
-    pattern = r'\b\d+\b'
-    def repl(match):
-        num = int(match.group(0))
+    """
+    Kezeli a K-s utótagot és a szóközös ezrescsoportokat is,
+    végül pedig minden tiszta számot átír szöveggé.
+    """
+    # 1. K-vel jelölt ezresek (pl. 40K → 40000)
+    text = re.sub(
+        r'\b(\d+)[kK]\b',
+        lambda m: str(int(m.group(1)) * 1000),
+        text
+    )
+
+    # 2. Szóközzel ezresre tagolt számok (pl. 40 000 → 40000)
+    text = re.sub(
+        r'\b(\d{1,3}(?:[ ]\d{3})+)\b',
+        lambda m: m.group(1).replace(' ', ''),
+        text
+    )
+
+    # 3. Maradék „tiszta” számok átírása
+    def repl_num(m):
+        num = int(m.group(0))
+        # magyarul: 'negyvenezer'
         return num2words(num, lang='hu')
-    text = re.sub(pattern, repl, text)
+    
+    text = re.sub(r'\b\d+\b', repl_num, text)
     return text
+
 
 def remove_duplicate_spaces(text):
     # Többszörös szóközök eltávolítása
