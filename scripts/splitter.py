@@ -38,6 +38,29 @@ def format_timedelta_srt(seconds):
     milliseconds = int((abs(seconds) - total_seconds) * 1000)
     return f"{hours:02}:{minutes:02}:{secs:02},{milliseconds:03}"
 
+def is_sentence_end(word_text):
+    """
+    Checks if a word ends with sentence-terminating punctuation.
+    Considers common cases and avoids splitting on abbreviations like Mr. or U.S.
+    """
+    if not word_text:
+        return False
+    # Basic sentence terminators
+    if word_text.endswith(('.', '?', '!')):
+        # Avoid splitting on common abbreviations or initials
+        if len(word_text) > 1 and word_text[-2].isalpha() and word_text[-2].isupper(): # e.g., U.S. or Mr.
+            if len(word_text) == 2 and word_text[0].isupper(): # Single letter initial like "A."
+                 return False # Typically not a sentence end in transcripts
+            if re.match(r'\b([A-Za-z]\.){2,}\b', word_text): # Matches A.B.C.
+                return False
+            if re.match(r'\b(Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St)\.$', word_text, re.IGNORECASE):
+                return False
+        # Check for numbers like 1. or 2. which might not be sentence ends in lists
+        if word_text[-2].isdigit() and len(word_text) > 1 and word_text[:-1].replace('.', '').isdigit():
+            return False # e.g. "1.", "2."
+        return True
+    return False
+
 # Add min_duration parameter to export_chunk
 def export_chunk(audio, start_time, end_time, text, speaker, output_subdir, export_format, export_extension, base_name, min_duration):
     """Helper function to export a single audio chunk and its text file."""
@@ -124,158 +147,174 @@ def process_json_file(args):
         logging.error(f"Error loading JSON file '{json_path}': {e}", exc_info=True)
         return f"Error loading JSON file '{json_path}': {e}"
 
-    # --- Prepare word list ---
-    words_to_process = []
-    default_speaker = "UNKNOWN"
-    if "word_segments" in json_content and isinstance(json_content["word_segments"], list) and json_content["word_segments"]:
-        logging.debug("Using 'word_segments' as the primary source.")
-        words_to_process = json_content["word_segments"]
-        for i, word_dict in enumerate(words_to_process):
-            if isinstance(word_dict, dict):
-                 word_dict['speaker'] = default_speaker
-                 word_dict['original_index'] = i # Keep track of original position
-            else:
-                 logging.warning(f"Unexpected item format in word_segments: {word_dict}. Skipping.")
-        words_to_process = [word for word in words_to_process if isinstance(word, dict)]
-    elif "segments" in json_content and isinstance(json_content["segments"], list):
-        logging.debug("Using 'segments' containing 'words'.")
-        flat_word_list = []
-        original_idx_counter = 0
-        loaded_segments = json_content.get("segments", [])
-        for segment_dict in loaded_segments:
-            if not isinstance(segment_dict, dict): continue
-            segment_words = segment_dict.get("words", [])
-            speaker = segment_dict.get("speaker", default_speaker)
-            for word_dict in segment_words:
-                if isinstance(word_dict, dict):
-                    word_dict['speaker'] = speaker
-                    word_dict['original_index'] = original_idx_counter
-                    flat_word_list.append(word_dict)
-                    original_idx_counter += 1
-                else:
-                    logging.warning(f"Unexpected word format in segment: {word_dict}. Skipping.")
-        words_to_process = flat_word_list
-    else:
-        logging.warning(f"No 'word_segments' or 'segments' with 'words' found in '{json_path}'. Cannot process.")
-        return f"No processable word data found in '{json_path}'"
-
-    if not words_to_process:
-        logging.warning(f"'{json_path}' contains segment structures but no actual words. Skipping.")
-        return f"No words found to process in '{json_path}'"
-
-    # --- New Time-Based Chunking Logic ---
+    # --- Simplified Segment-Based Chunking Logic ---
+    all_errors = []
     chunk_counter = 0
-    all_errors = [] # Renamed from errors to avoid conflict
     output_subdir = os.path.join(output_dir, os.path.dirname(relative_path))
     os.makedirs(output_subdir, exist_ok=True)
+    default_speaker = "UNKNOWN"
 
-    current_chunk_words = []
-    max_inter_word_gap = 1.0 # Maximum allowed gap in seconds before forcing a split
+    if "segments" not in json_content or not isinstance(json_content["segments"], list):
+        logging.warning(f"No 'segments' list found in '{json_path}'. Cannot process.")
+        return f"No 'segments' list found in '{json_path}'"
 
-    for i, current_word in enumerate(words_to_process):
-        # Validate current word data
-        if not isinstance(current_word, dict) or 'start' not in current_word or 'end' not in current_word or 'word' not in current_word:
-            logging.warning(f"Skipping invalid word data at index {i}: {current_word}")
+    for segment_index, segment_dict in enumerate(json_content["segments"]):
+        if not isinstance(segment_dict, dict):
+            logging.warning(f"Segment at index {segment_index} in {base_name} is not a dict. Skipping.")
             continue
-        
-        # Ensure times are floats
+
         try:
-            current_word['start'] = float(current_word['start'])
-            current_word['end'] = float(current_word['end'])
-        except (ValueError, TypeError):
-             logging.warning(f"Skipping word with invalid time format at index {i}: {current_word}")
-             continue
+            seg_start_time = float(segment_dict['start'])
+            seg_end_time = float(segment_dict['end'])
+            seg_text_full = segment_dict.get('text', "") 
+            seg_speaker = segment_dict.get('speaker', default_speaker)
+            if not seg_speaker: seg_speaker = default_speaker
 
-        # Calculate gap to previous word
-        gap_to_previous = 0.0
-        force_split_due_to_gap = False
-        if i > 0:
-            previous_word = words_to_process[i-1]
-            # Ensure previous word also has valid data, especially 'end' time
-            if isinstance(previous_word, dict) and 'end' in previous_word:
-                 try:
-                     previous_end_time = float(previous_word['end'])
-                     gap_to_previous = current_word['start'] - previous_end_time
-                     if gap_to_previous > max_inter_word_gap:
-                         force_split_due_to_gap = True
-                         logging.debug(f"  Gap > {max_inter_word_gap}s ({gap_to_previous:.3f}s) before word '{current_word['word']}' (idx {i}). Forcing split.")
-                 except (ValueError, TypeError):
-                      logging.warning(f"Could not calculate gap before word index {i} due to invalid previous word end time: {previous_word.get('end')}")
-            else:
-                 logging.warning(f"Could not calculate gap before word index {i} due to invalid previous word data: {previous_word}")
-
-
-        # Calculate potential duration if current word is added
-        potential_chunk_duration = 0.0
-        force_split_due_to_duration = False
-        if current_chunk_words:
-            potential_start_time = current_chunk_words[0]['start']
-            potential_end_time = current_word['end']
-            potential_chunk_duration = potential_end_time - potential_start_time
-            if potential_chunk_duration > max_chunk_duration:
-                force_split_due_to_duration = True
-                logging.debug(f"  Potential duration > {max_chunk_duration}s ({potential_chunk_duration:.3f}s) if adding word '{current_word['word']}' (idx {i}). Forcing split.")
-        else:
-            # If chunk is empty, potential duration is just the current word's duration
-            potential_chunk_duration = current_word['end'] - current_word['start']
-            # A single word exceeding max_duration is unlikely but possible
-            if potential_chunk_duration > max_chunk_duration:
-                 logging.warning(f"Single word '{current_word['word']}' (idx {i}) duration ({potential_chunk_duration:.3f}s) exceeds max_duration ({max_chunk_duration}s). It will form its own chunk.")
-                 # We don't set force_split_due_to_duration=True here, as it will be handled when the word is added
+            seg_words_raw = segment_dict.get('words', [])
+            if not isinstance(seg_words_raw, list):
+                logging.warning(f"Words for segment {segment_index} in {base_name} is not a list. Treating as empty for sub-chunking if segment is long.")
+                seg_words_raw = []
+            
+            # Validate words if present
+            seg_words = []
+            if seg_words_raw:
+                for word_idx, word_obj_raw in enumerate(seg_words_raw):
+                    if isinstance(word_obj_raw, dict) and 'start' in word_obj_raw and 'end' in word_obj_raw and 'word' in word_obj_raw:
+                        try:
+                            # Ensure word times are float, relative to audio start
+                            word_obj_validated = {
+                                'start': float(word_obj_raw['start']),
+                                'end': float(word_obj_raw['end']),
+                                'word': str(word_obj_raw['word'])
+                            }
+                            seg_words.append(word_obj_validated)
+                        except (ValueError, TypeError):
+                            logging.warning(f"Invalid time format in word {word_idx} of segment {segment_index} in {base_name}. Skipping word: {word_obj_raw}")
+                    else:
+                        logging.warning(f"Invalid word object format in segment {segment_index} in {base_name}. Skipping word: {word_obj_raw}")
 
 
-        # --- Finalize the PREVIOUS chunk if needed ---
-        if current_chunk_words and (force_split_due_to_gap or force_split_due_to_duration):
-            chunk_start_time = current_chunk_words[0]['start']
-            chunk_end_time = current_chunk_words[-1]['end']
-            chunk_text = " ".join([w.get("word", "") for w in current_chunk_words]).strip()
-            chunk_speaker = current_chunk_words[0].get('speaker', default_speaker) # Use first word's speaker
+        except (KeyError, ValueError, TypeError) as e:
+            logging.warning(f"Skipping segment at index {segment_index} in {base_name} due to missing/invalid essential keys (start, end, text, speaker): {e}")
+            continue
 
-            logging.debug(f"Finalizing chunk: Words {current_chunk_words[0]['original_index']}-{current_chunk_words[-1]['original_index']}, Time {chunk_start_time:.3f}-{chunk_end_time:.3f}")
-            export_errors, success = export_chunk(audio, chunk_start_time, chunk_end_time, chunk_text, chunk_speaker, output_subdir, export_format, export_extension, base_name, min_duration)
+        seg_duration = seg_end_time - seg_start_time
+
+        if seg_duration <= 0.001: # Using a small epsilon for duration check
+            logging.debug(f"Skipping segment {segment_index} with zero or negligible duration {seg_duration:.3f}s in {base_name}")
+            continue
+
+        if seg_duration <= max_chunk_duration:
+            logging.debug(f"Exporting segment {segment_index} as a single chunk (Speaker: {seg_speaker}, Duration: {seg_duration:.3f}s)")
+            export_errors, success = export_chunk(audio, seg_start_time, seg_end_time, seg_text_full, seg_speaker, output_subdir, export_format, export_extension, base_name, min_duration)
             all_errors.extend(export_errors)
             if success:
                 chunk_counter += 1
-
-            # Start new chunk
-            current_chunk_words = []
-
-        # --- Add current word to the (potentially new) chunk ---
-        # Check if the word itself is valid before adding
-        if current_word['end'] > current_word['start']:
-             current_chunk_words.append(current_word)
         else:
-             logging.warning(f"Skipping word with invalid duration (end <= start) at index {i}: {current_word}")
+            # Segment is too long, needs to be split
+            num_sub_chunks = math.ceil(seg_duration / max_chunk_duration)
+            logging.info(f"Segment {segment_index} (Speaker: {seg_speaker}, Duration: {seg_duration:.3f}s) is too long. Splitting into {num_sub_chunks} sub-chunks based on max_duration {max_chunk_duration}s.")
 
+            if seg_words:
+                current_word_cursor = 0
+                for k in range(num_sub_chunks):
+                    # Determine the time boundaries for this sub-chunk's words
+                    # This aims for roughly equal time distribution among sub-chunks
+                    chunk_ideal_start_time_abs = seg_start_time + k * (seg_duration / num_sub_chunks)
+                    chunk_ideal_end_time_abs = seg_start_time + (k + 1) * (seg_duration / num_sub_chunks)
+                    
+                    if k == num_sub_chunks - 1: # Last sub-chunk should go to the segment's end
+                        chunk_ideal_end_time_abs = seg_end_time
 
-    # --- Process the last remaining chunk after the loop ---
-    if current_chunk_words:
-        chunk_start_time = current_chunk_words[0]['start']
-        chunk_end_time = current_chunk_words[-1]['end']
-        chunk_text = " ".join([w.get("word", "") for w in current_chunk_words]).strip()
-        chunk_speaker = current_chunk_words[0].get('speaker', default_speaker)
+                    sub_chunk_word_objects_for_this_split = []
+                    
+                    # Collect words for this sub-chunk
+                    temp_idx = current_word_cursor
+                    first_word_start_time = -1
+                    last_word_end_time = -1
 
-        logging.debug(f"Finalizing last chunk: Words {current_chunk_words[0]['original_index']}-{current_chunk_words[-1]['original_index']}, Time {chunk_start_time:.3f}-{chunk_end_time:.3f}")
-        export_errors, success = export_chunk(audio, chunk_start_time, chunk_end_time, chunk_text, chunk_speaker, output_subdir, export_format, export_extension, base_name, min_duration)
-        all_errors.extend(export_errors)
-        if success:
-            chunk_counter += 1
+                    while temp_idx < len(seg_words):
+                        word = seg_words[temp_idx]
+                        word_start_abs = word['start']
+                        word_end_abs = word['end']
 
+                        # Condition to include word:
+                        # Word must start before the ideal end of this sub-chunk.
+                        # For the last sub-chunk, all remaining words are included.
+                        if k < num_sub_chunks - 1: # Not the last sub-chunk
+                            if word_start_abs >= chunk_ideal_end_time_abs: 
+                                break # This word belongs to the next sub-chunk
+                        
+                        if not sub_chunk_word_objects_for_this_split: # First word for this sub-chunk
+                            first_word_start_time = word_start_abs
+                        
+                        sub_chunk_word_objects_for_this_split.append(word)
+                        last_word_end_time = word_end_abs
+                        temp_idx += 1
+                        
+                        # If not the last sub-chunk, and this word's *end* crosses the ideal boundary,
+                        # it's the last word for this sub-chunk.
+                        if k < num_sub_chunks - 1 and word_end_abs >= chunk_ideal_end_time_abs:
+                            break
+                    
+                    current_word_cursor = temp_idx # Update main cursor
 
+                    if sub_chunk_word_objects_for_this_split:
+                        # Use actual start/end times from the collected words
+                        actual_sub_chunk_start = sub_chunk_word_objects_for_this_split[0]['start']
+                        actual_sub_chunk_end = sub_chunk_word_objects_for_this_split[-1]['end']
+                        sub_chunk_text = " ".join([w['word'] for w in sub_chunk_word_objects_for_this_split]).strip()
+
+                        if actual_sub_chunk_start >= actual_sub_chunk_end and not (actual_sub_chunk_start == actual_sub_chunk_end == 0): # Allow 0,0 for safety if it happens
+                             logging.warning(f"Sub-chunk {k+1}/{num_sub_chunks} from segment {segment_index} (words) has invalid times {actual_sub_chunk_start:.3f}>={actual_sub_chunk_end:.3f}. Skipping.")
+                             continue
+                        
+                        logging.debug(f"  Exporting sub-chunk {k+1}/{num_sub_chunks} (Words-based, Speaker: {seg_speaker}): {actual_sub_chunk_start:.3f}-{actual_sub_chunk_end:.3f}")
+                        export_errors_sub, success_sub = export_chunk(audio, actual_sub_chunk_start, actual_sub_chunk_end, sub_chunk_text, seg_speaker, output_subdir, export_format, export_extension, base_name, min_duration)
+                        all_errors.extend(export_errors_sub)
+                        if success_sub:
+                            chunk_counter += 1
+                    elif k < num_sub_chunks -1 : # Only warn if not the last chunk and no words were found (might be due to sparse words)
+                        logging.warning(f"Sub-chunk {k+1}/{num_sub_chunks} of segment {segment_index} (words) found no words. Ideal time: {chunk_ideal_start_time_abs:.3f}-{chunk_ideal_end_time_abs:.3f}")
+
+            else: # No word-level details, split audio and text proportionally
+                logging.warning(f"Segment {segment_index} in {base_name} (Speaker: {seg_speaker}) is too long but has no word details. Splitting audio and text proportionally.")
+                for k in range(num_sub_chunks):
+                    sub_s = seg_start_time + k * (seg_duration / num_sub_chunks)
+                    sub_e = seg_start_time + (k + 1) * (seg_duration / num_sub_chunks)
+                    sub_e = min(sub_e, seg_end_time) 
+
+                    if sub_s >= sub_e and not (sub_s == sub_e == 0): # Allow 0,0 for safety
+                        logging.warning(f"Sub-chunk {k+1}/{num_sub_chunks} from segment {segment_index} (proportional) has invalid times {sub_s:.3f}>={sub_e:.3f}. Skipping.")
+                        continue
+                    
+                    text_len = len(seg_text_full)
+                    text_s_char_idx = math.floor(text_len * (k / num_sub_chunks))
+                    text_e_char_idx = math.floor(text_len * ((k + 1) / num_sub_chunks))
+                    sub_text = seg_text_full[text_s_char_idx:text_e_char_idx].strip()
+                    
+                    if not sub_text and (sub_e - sub_s) > 0.05 : # If audio duration is non-trivial but text is empty
+                        sub_text = f"[chunk_{k+1}_of_{num_sub_chunks}_no_text_assigned]"
+                        logging.debug(f"  Sub-chunk {k+1}/{num_sub_chunks} (Proportional text) for segment {segment_index} resulted in empty text. Using placeholder. Audio: {sub_s:.3f}-{sub_e:.3f}")
+
+                    logging.debug(f"  Exporting sub-chunk {k+1}/{num_sub_chunks} (Proportional, Speaker: {seg_speaker}): {sub_s:.3f}-{sub_e:.3f}")
+                    export_errors_sub, success_sub = export_chunk(audio, sub_s, sub_e, sub_text, seg_speaker, output_subdir, export_format, export_extension, base_name, min_duration)
+                    all_errors.extend(export_errors_sub)
+                    if success_sub:
+                        chunk_counter += 1
+    
     # --- End of processing for this JSON file ---
-    stats = f"File: '{base_name}' | Exported chunks: {chunk_counter}" # Changed 'Processed' to 'Exported'
+    stats = f"File: '{base_name}' | Exported chunks: {chunk_counter}"
     if all_errors:
         logging.warning(f"Finished processing '{base_name}' with {len(all_errors)} errors/skipped chunks.")
-        # Combine stats and errors for return
         error_details = "\nErrors/Skipped:\n" + "\n".join(all_errors)
         return f"{stats}{error_details}"
     else:
         logging.info(f"Successfully processed '{base_name}'. Exported {chunk_counter} chunks.")
         return f"{stats}\nProcessing successful."
 
-
 # Update process_directory signature
-def process_directory(input_dir, output_dir, max_chunk_duration, min_duration): # Added min_duration
+def process_directory(input_dir, output_dir, max_chunk_duration, min_duration):
     json_files_args = []
     logging.info(f"Scanning input directory: {input_dir}")
     for root, dirs, files in os.walk(input_dir):
@@ -353,7 +392,7 @@ def main():
     )
 
     parser.add_argument(
-        '--min_duration', '-m', type=float, default=3.0,
+        '--min_duration', '-m', type=float, default=0.0,
         help='Minimum duration (in seconds) for each audio chunk. Shorter chunks will be skipped. Default: 5.0'
     )
 

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Szegmens Szerkesztő</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 900px; margin: auto; }
+        h1, h2 { color: #333; text-align: center; }
+        label { display: block; margin-top: 10px; margin-bottom: 5px; font-weight: bold; }
+        select, button {
+            padding: 10px;
+            margin-top: 5px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        select { width: 100%; }
+        button { background-color: #007bff; color: white; cursor: pointer; border: none; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .segment-list { margin-top: 30px; }
+        .segment-item {
+            border: 1px solid #eee;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            background-color: #f9f9f9;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .segment-item h3 { margin-top: 0; font-size: 1.1em; color: #0056b3; }
+        .segment-item p.transcript { white-space: pre-wrap; background-color: #fff; padding: 10px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 0.95em; }
+        audio { width: 100%; margin-top: 10px; }
+        .controls { margin-top: 15px; }
+        .slider-container { display: flex; align-items: center; margin-bottom: 10px; }
+        .slider-container label { min-width: 100px; margin-right: 10px; }
+        .slider-container input[type="range"] { flex-grow: 1; }
+        .slider-container span { min-width: 60px; text-align: right; font-family: monospace; }
+        .info { font-size: 0.9em; color: #555; }
+        #loading-message, #error-message { text-align: center; padding: 10px; margin-top: 15px; border-radius: 4px; }
+        #loading-message { background-color: #e0e0e0; }
+        #error-message { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Szegmens Szerkesztő</h1>
+
+        <label for="project-select">Projekt Kiválasztása:</label>
+        <select id="project-select">
+            <option value="">Válassz egy projektet...</option>
+        </select>
+
+        <div id="loading-message" style="display: none;">Betöltés...</div>
+        <div id="error-message" style="display: none;"></div>
+
+        <div id="segment-list" class="segment-list">
+            <!-- Szegmensek itt jelennek meg -->
+        </div>
+    </div>
+
+    <script src="segment_editor.js"></script>
+</body>
+</html>
