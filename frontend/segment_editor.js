@@ -118,6 +118,13 @@ document.addEventListener('DOMContentLoaded', () => {
             audio.src = segment.audio_url; // URL from backend
             segmentItem.appendChild(audio);
 
+            const waveformContainer = document.createElement('div');
+            waveformContainer.classList.add('waveform-container');
+            waveformContainer.id = `waveform-${sanitizedSegmentId}`;
+            // Add a placeholder or message until waveform is loaded
+            waveformContainer.innerHTML = `<small style="display:block; text-align:center; padding-top:30px;">Kattints a lejátszásra a hullámforma megjelenítéséhez.</small>`;
+            segmentItem.appendChild(waveformContainer);
+
             const transcriptTextarea = document.createElement('textarea');
             transcriptTextarea.classList.add('transcript-edit');
             transcriptTextarea.value = segment.text;
@@ -174,8 +181,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
             // Ensure min is not greater than max for sliders (can happen with very small gaps)
-            if (minStartOffset > maxStartOffset) minStartOffset = maxStartOffset - epsilon; // or 0 if maxStartOffset is also small
-            if (minEndOffset > maxEndOffset) minEndOffset = maxEndOffset - epsilon; // or 0
+            if (minStartOffset > maxStartOffset) {
+                // If calculated min is greater than max, it implies a very small or zero gap.
+                // Set both to 0 or a very small valid range around 0 if possible.
+                // For simplicity, if min > max, we might disable or severely restrict the slider.
+                // Here, we'll try to make min slightly less than max, or both 0.
+                if (maxStartOffset > minAllowedGlobalOffset + epsilon) { // Check if max is not already at its absolute min
+                    minStartOffset = maxStartOffset - epsilon;
+                } else { // maxStartOffset is already very small or negative
+                    minStartOffset = maxStartOffset; // Make them equal, effectively locking if max is also min
+                }
+            }
+            if (minEndOffset > maxEndOffset) {
+                 if (maxEndOffset > minAllowedGlobalOffset + epsilon) {
+                    minEndOffset = maxEndOffset - epsilon;
+                } else {
+                    minEndOffset = maxEndOffset;
+                }
+            }
+
 
             // Start Offset Slider
             const startOffsetContainer = createSlider(
@@ -199,26 +223,81 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             controlsDiv.appendChild(endOffsetContainer.container);
             
-            // Add listeners to update the other slider if they would cross or create negative duration
-            startOffsetContainer.input.addEventListener('input', () => {
-                const startOffsetValue = parseFloat(startOffsetContainer.input.value);
-                const endOffsetValue = parseFloat(endOffsetContainer.input.value);
-                // New start time = original_start_time_sec + startOffsetValue
-                // New end time = original_end_time_sec + endOffsetValue
-                // Constraint: New end time >= New start time + epsilon
-                // original_end_time_sec + endOffsetValue >= original_start_time_sec + startOffsetValue + epsilon
-                // endOffsetValue >= original_start_time_sec - original_end_time_sec + startOffsetValue + epsilon
-                const minPossibleEndOffset = (segment.original_start_time_sec - segment.original_end_time_sec) + startOffsetValue + epsilon;
-                
-                if (parseFloat(endOffsetContainer.input.min) < minPossibleEndOffset && minPossibleEndOffset < parseFloat(endOffsetContainer.input.max)) {
-                     // This dynamic adjustment of other slider's min can be complex.
-                     // For now, we'll just ensure the values sent to backend are sane.
-                     // The backend already has a check for new_start_ms >= new_end_ms.
+            audio.addEventListener('play', () => {
+                if (waveformContainer.dataset.waveformInitialized === 'true') {
+                    return; // Already initialized
                 }
-            });
+                waveformContainer.innerHTML = ''; // Clear placeholder
+                waveformContainer.dataset.waveformInitialized = 'true';
 
-            endOffsetContainer.input.addEventListener('input', () => {
-                // Similar logic if needed, but backend validation is key.
+                const wavesurfer = WaveSurfer.create({
+                    container: waveformContainer,
+                    waveColor: 'rgb(200, 200, 200)',
+                    progressColor: 'rgb(100, 100, 100)',
+                    height: 80,
+                    barWidth: 2,
+                    barGap: 1,
+                    cursorWidth: 2,
+                    cursorColor: '#007bff',
+                    responsive: true,
+                    plugins: [] 
+                });
+
+                wavesurfer.load(segment.audio_url);
+
+                wavesurfer.on('ready', () => {
+                    const wsDuration = wavesurfer.getDuration();
+                    wavesurfer.clearRegions();
+
+                    wavesurfer.addRegion({
+                        id: `start-marker-${sanitizedSegmentId}`,
+                        start: 0, 
+                        end: epsilon / 2, 
+                        color: 'rgba(0, 123, 255, 0.7)',
+                        drag: false,
+                        resize: false,
+                    });
+                    wavesurfer.addRegion({
+                        id: `end-marker-${sanitizedSegmentId}`,
+                        start: wsDuration - (epsilon/2) < 0 ? 0 : wsDuration - (epsilon/2),
+                        end: wsDuration,
+                        color: 'rgba(0, 123, 255, 0.7)',
+                        drag: false,
+                        resize: false,
+                    });
+
+                    // Re-attach listeners or ensure they target the correct wavesurfer instance
+                    // if they were defined outside this scope and relied on a single wavesurfer.
+                    // In this case, they are specific to this wavesurfer instance.
+                });
+
+                startOffsetContainer.input.addEventListener('input', () => {
+                    const offset = parseFloat(startOffsetContainer.input.value);
+                    const wsDuration = wavesurfer.getDuration() || currentSegmentDuration;
+                    let visualStartPos = 0 + offset; 
+                    visualStartPos = Math.max(0, Math.min(wsDuration, visualStartPos));
+                    const startRegion = wavesurfer.regions.list[`start-marker-${sanitizedSegmentId}`];
+                    if (startRegion) {
+                        startRegion.update({
+                            start: visualStartPos - epsilon / 4 < 0 ? 0 : visualStartPos - epsilon / 4,
+                            end: visualStartPos + epsilon / 4 > wsDuration ? wsDuration : visualStartPos + epsilon / 4
+                        });
+                    }
+                });
+    
+                endOffsetContainer.input.addEventListener('input', () => {
+                    const offset = parseFloat(endOffsetContainer.input.value);
+                    const wsDuration = wavesurfer.getDuration() || currentSegmentDuration;
+                    let visualEndPos = wsDuration + offset; 
+                    visualEndPos = Math.max(0, Math.min(wsDuration, visualEndPos));
+                    const endRegion = wavesurfer.regions.list[`end-marker-${sanitizedSegmentId}`];
+                    if (endRegion) {
+                         endRegion.update({
+                            start: visualEndPos - epsilon / 4 < 0 ? 0 : visualEndPos - epsilon / 4,
+                            end: visualEndPos + epsilon / 4 > wsDuration ? wsDuration : visualEndPos + epsilon / 4
+                        });
+                    }
+                });
             });
 
 
