@@ -1,6 +1,10 @@
 # AI-dubbing is a semi-automatic video (podcasts, movies, series) Dubbing system.
 ## Translate any video into your native language and keep the voices of the characters.
 
+## The new main_app is not finished yet, but the main_bash2.py fully working. The new dubbing app is mostly working in eng->hun way only. If you want to use other language, then need to modificat the code.
+
+
+
 The project uses the following AI models:
 
 OpenAI Whisper, 
