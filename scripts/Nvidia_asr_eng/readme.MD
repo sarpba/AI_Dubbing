@@ -22,7 +22,10 @@ pip install cuda-python>=12.3
 ```
 
 A Környezet Újraépítése
-
+```
+sudo apt update
+sudo apt install build-essential
+```
 ```bash
 conda create -n parakeet-fix python=3.10 -y
 conda activate parakeet-fix

@@ -44,6 +44,19 @@ sudo apt install gcc
 sudo apt install mkvtoolnix mkvtoolnix-gui
 ```
 
+Nvidia ASR enviroment:
+```
+sudo apt update
+sudo apt install build-essential
+```
+```bash
+conda create -n parakeet-fix python=3.10 -y
+conda activate parakeet-fix
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install nemo_toolkit[asr]
+pip install librosa soundfile
+pip install cuda-python>=12.3
+```
 
 Edit the whisperx alignment.py, and change the default aligment models to better if have. It's important for more precise alignment process.
 
