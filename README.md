@@ -33,7 +33,7 @@ pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https
 conda install git
 pip install git+https://github.com/m-bain/whisperx.git
 conda install cudatoolkit=11.8 cudnn=8.*
-#git clone https://github.com/sarpba/AI_Dubbing_new.git
+#git clone https://github.com/sarpba/AI_Dubbing.git
 cd AI_Dubbing_new
 pip install -r requirements.txt
 sudo wget -qO - https://mkvtoolnix.download/gpg-pub-moritzbunkus.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/mkvtoolnix.gpg
