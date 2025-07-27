@@ -2,7 +2,7 @@
 workdir/
 **/__pycache__/
 info.txt
-TTS/
+TTS/*/
 tools/
 script.log
 separate.log

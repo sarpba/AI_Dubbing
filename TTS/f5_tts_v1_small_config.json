@@ -1,0 +1,13 @@
+{
+  "model_architecture": "DiT",
+  "model_params": {
+    "dim": 768,
+    "depth": 18,
+    "heads": 12,
+    "ff_mult": 2,
+    "text_dim": 512,
+    "text_mask_padding": false,
+    "conv_layers": 4,
+    "pe_attn_head": 1
+  }
+}
