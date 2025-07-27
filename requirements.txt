@@ -1,0 +1,15 @@
+gradio
+moviepy
+pydub
+deepl
+demucs
+diffq
+num2words
+mutagen
+flask>=2.0.0
+werkzeug>=2.0.0
+python-dotenv
+flask-cors
+webrtcvad
+openai
+srt

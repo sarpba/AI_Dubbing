@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="hu" data-bs-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aktív projekt: {{project_name}}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
+    <script>
+        // Theme initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('theme') || 'auto';
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme === 'dark' || (savedTheme === 'auto' && systemDark)) {
+                document.documentElement.setAttribute('data-bs-theme', 'dark');
+            } else {
+                document.documentElement.setAttribute('data-bs-theme', 'light');
+            }
+        });
+    </script>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
+        </svg>
+    </button>
+
+    <div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Aktív projekt: {{project_name}}</h1>
+        <div>
+            <a href="{{url_for('show_project', project_name=project_name)}}" class="btn btn-secondary me-2">Vissza a projekthez</a>
+            <button id="translationBtn" class="btn btn-primary">Fordítás</button>
+        </div>
+    </div>
+
+        {%if audio_url and segments_data%}
+            <div class="mb-3">
+                <p class="mb-1">Audio fájl: <strong>{{audio_file_name}}</strong></p>
+                <p class="mb-1">JSON fájl: <strong>{{json_file_name}}</strong> ({{segments_data|length}} szegmens)</p>
+            </div>
+            <button id="playPauseBtn" class="btn btn-primary mb-3">Lejátszás</button>
+            <div id="waveform-scroll-wrapper">
+                <div id="waveform-content-area">
+                    <div id="waveform"></div>
+                    <div id="segments-timeline"></div>
+                </div>
+            </div>
+        {%elif audio_url and not segments_data%}
+            <div class="alert alert-warning" role="alert">
+                Audio fájl betöltve ({{audio_file_name}}), de nincsenek megjeleníthető szegmensek a {{json_file_name if json_file_name else 'társított JSON fájlban'}}.
+            </div>
+        {%elif not audio_url%}
+            <div class="alert alert-danger" role="alert">
+                Nem található audio fájl a felülvizsgálathoz.
+            </div>
+        {%endif%}
+    </div>
+
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <script>
+        // Theme toggle function - fixed cyclic behavior
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+            let newTheme;
+            
+            if (currentTheme === 'auto') {
+                newTheme = 'light';
+            } else if (currentTheme === 'light') {
+                newTheme = 'dark';
+            } else { // currentTheme is 'dark'
+                newTheme = 'auto';
+            }
+            
+            document.documentElement.setAttribute('data-bs-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+    </script>
+
+    <!-- Felugró menü HTML struktúrája -->
+    <div id="segment-context-menu" class="custom-context-menu">
+        <ul>
+            <li id="menu-insert-segment">Szegmens beszúrása mögé</li>
+            <li id="menu-delete-segment">Szegmens törlése</li>
+        </ul>
+    </div>
+
+    <script>
+        console.log('[DEBUG 01] Script tag processing started.');
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('[DEBUG 02] DOMContentLoaded event handler started.');
+            
+            const audioUrl = "{{audio_url|safe if audio_url else ''}}";
+            let segmentsDataString = '{{segments_data|tojson if segments_data else "[]"}}';
+            let segmentsData = JSON.parse(segmentsDataString);
+            
+            const currentProjectName = "{{project_name|safe}}";
+            let currentJsonFileNameString = '{{json_file_name|tojson if json_file_name else "null"}}';
+            let currentJsonFileName = (currentJsonFileNameString && currentJsonFileNameString !== 'null') ? JSON.parse(currentJsonFileNameString) : null;
+
+            if (!audioUrl) {
+                console.error('[DEBUG 03] Audio URL hiányzik.');
+                const playButton = document.getElementById('playPauseBtn');
+                if(playButton) playButton.disabled = true;
+                return;
+            }
+            console.log('[DEBUG 03] Audio URL:', audioUrl);
+
+            if (segmentsData.length === 0 && audioUrl) {
+                console.info('[DEBUG 04] Nincsenek szegmensek.');
+            } else if (segmentsData.length > 0) {
+                console.log('[DEBUG 04] Segments count:', segmentsData.length);
+            }
+
+            let wavesurfer;
+            let regionsPlugin;
+            let regionIdToOriginalIndexMap = {}; 
+            let activelyLoopingRegionId = null;
+
+            const contextMenu = document.getElementById('segment-context-menu');
+            let currentContextMenuSegmentIndex = -1;
+
+            // ---- ÚJ FÜGGVÉNYEK ----
+            /**
+             * Egy textarea elem magasságát a tartalmához igazítja.
+             * @param {HTMLTextAreaElement} textarea - Az átméretezendő szövegdoboz.
+             */
+            function autoResizeTextarea(textarea) {
+                textarea.style.height = 'auto';
+                textarea.style.height = (textarea.scrollHeight) + 'px';
+            }
+
+            /**
+             * Frissíti az idővonal konténerének magasságát a benne lévő elemek alapján.
+             */
+            function updateTimelineContainerHeight() {
+                const segmentsTimelineContainer = document.getElementById('segments-timeline');
+                if (!segmentsTimelineContainer) return;
+                const timelineChildren = segmentsTimelineContainer.children;
+                let maxBottom = 0;
+                if (timelineChildren.length > 0) {
+                    for (let i = 0; i < timelineChildren.length; i++) {
+                        const child = timelineChildren[i];
+                        if (child.style.display === 'none') continue;
+                        const childBottom = parseFloat(child.style.top) + child.offsetHeight;
+                        if (childBottom > maxBottom) {
+                            maxBottom = childBottom;
+                        }
+                    }
+                    segmentsTimelineContainer.style.height = `${maxBottom + 20}px`;
+                } else {
+                    segmentsTimelineContainer.style.height = '50px';
+                }
+            }
+
+            /**
+             * Formats time in seconds to HH-MM-SS-mmm string for filenames.
+             * @param {number} timeInSeconds - The time value in seconds.
+             * @returns {string} The formatted time string.
+             */
+            function formatTimeForFilename(timeInSeconds) {
+                if (typeof timeInSeconds !== 'number' || isNaN(timeInSeconds)) {
+                    console.error("Invalid time provided to formatTimeForFilename:", timeInSeconds);
+                    return '00-00-00-000';
+                }
+                // Handle potential floating point inaccuracies by rounding to nearest millisecond
+                const totalMilliseconds = Math.round(timeInSeconds * 1000);
+                const hours = Math.floor(totalMilliseconds / 3600000);
+                const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
+                const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
+                const milliseconds = totalMilliseconds % 1000;
+
+                return [
+                    String(hours).padStart(2, '0'),
+                    String(minutes).padStart(2, '0'),
+                    String(seconds).padStart(2, '0'),
+                    String(milliseconds).padStart(3, '0')
+                ].join('-');
+            }
+            // ---- FÜGGVÉNYEK VÉGE ----
+
+            // Függvények definíciói
+            function setWaveformZoom() {
+                const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
+                if (wavesurfer && scrollWrapper) {
+                    const audioDuration = wavesurfer.getDuration();
+                    const containerWidth = scrollWrapper.clientWidth;
+                    const secondsToShow = 20;
+
+                    if (audioDuration > 0 && containerWidth > 0) {
+                        let newMinPxPerSec = containerWidth / Math.min(secondsToShow, audioDuration);
+                        newMinPxPerSec = Math.max(10, newMinPxPerSec);
+                        wavesurfer.zoom(newMinPxPerSec);
+                    } else if (containerWidth > 0) {
+                        wavesurfer.zoom(10);
+                    }
+                }
+            }
+            
+            const segmentsTimelineContainer = document.getElementById('segments-timeline');
+            const waveformContentArea = document.getElementById('waveform-content-area');
+
+            function updateWidths() {
+                if (!wavesurfer || !wavesurfer.getWrapper() || !waveformContentArea || !segmentsTimelineContainer) return;
+                try {
+                    const fullAudioPixelWidth = wavesurfer.getWrapper().scrollWidth;
+                    waveformContentArea.style.width = `${fullAudioPixelWidth}px`;
+                    segmentsTimelineContainer.style.width = `${fullAudioPixelWidth}px`;
+                } catch (e) {
+                    console.error("Error in updateWidths:", e);
+                }
+            }
+            
+            // ---- MÓDOSÍTOTT FÜGGVÉNY ----
+            function createTimelineSegments(currentPxPerSec) {
+                if (!segmentsTimelineContainer || !wavesurfer || segmentsData.length === 0) {
+                    if (segmentsTimelineContainer) segmentsTimelineContainer.innerHTML = '';
+                    return;
+                }
+                segmentsTimelineContainer.innerHTML = '';
+                
+                const verticalGap = 5;
+                const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
+
+                segmentsData.forEach((segment, index) => {
+                    const segmentContainer = document.createElement('div');
+                    segmentContainer.className = 'timeline-segment-container';
+                    let leftPositionPx = segment.start * currentPxPerSec;
+                    let segmentDuration = segment.end - segment.start;
+                    let containerWidthPx = Math.max(segmentDuration * currentPxPerSec - 10, 150);
+                    
+                    segmentContainer.style.position = 'absolute';
+                    segmentContainer.style.left = `${leftPositionPx}px`;
+                    segmentContainer.style.width = `${containerWidthPx}px`;
+
+                    const originalTextarea = document.createElement('textarea');
+                    originalTextarea.className = 'timeline-segment form-control form-control-sm original-text';
+                    originalTextarea.value = segment.text;
+                    originalTextarea.placeholder = "Original text";
+                    originalTextarea.style.resize = 'none';
+                    originalTextarea.style.overflowY = 'hidden';
+                    originalTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
+
+                    const translatedTextarea = document.createElement('textarea');
+                    translatedTextarea.className = 'timeline-segment form-control form-control-sm translated-text';
+                    translatedTextarea.value = segment.translated_text || '';
+                    translatedTextarea.placeholder = segment.translated_text ? "Fordított szöveg" : "Nincs fordítás";
+                    translatedTextarea.style.resize = 'none';
+                    translatedTextarea.style.overflowY = 'hidden';
+                    translatedTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
+                    
+                    segmentContainer.appendChild(originalTextarea);
+                    segmentContainer.appendChild(translatedTextarea);
+
+                    // --- ÚJ KÓD: AUDIO LEJÁTSZÓ HOZZÁADÁSA ---
+                    if (translatedSplitsDir) {
+                        const startTimeFormatted = formatTimeForFilename(segment.start);
+                        const endTimeFormatted = formatTimeForFilename(segment.end);
+                        const wavFilename = `${startTimeFormatted}_${endTimeFormatted}.wav`;
+                        
+                        const audioPlayer = document.createElement('audio');
+                        audioPlayer.controls = true;
+                        audioPlayer.src = `/workdir/${currentProjectName}/${translatedSplitsDir}/${wavFilename}`;
+                        audioPlayer.className = 'segment-audio-player';
+                        audioPlayer.preload = 'metadata';
+
+                        audioPlayer.addEventListener('error', function(e) {
+                            console.warn(`Nem tölthető be az audio a(z) ${index}. szegmenshez: ${this.src}`);
+                            this.style.display = 'none';
+                            updateTimelineContainerHeight();
+                        });
+                        
+                        segmentContainer.appendChild(audioPlayer);
+                    }
+                    // --- ÚJ KÓD VÉGE ---
+
+                    segmentsTimelineContainer.appendChild(segmentContainer);
+
+                    autoResizeTextarea(originalTextarea);
+                    autoResizeTextarea(translatedTextarea);
+
+                    let potentialTop = 0;
+                    let placed = false;
+                    while(!placed) {
+                        let collision = false;
+                        const siblingsOnThisLevel = Array.from(segmentsTimelineContainer.children)
+                            .filter(child => child !== segmentContainer && parseFloat(child.style.top) === potentialTop);
+
+                        for (const sibling of siblingsOnThisLevel) {
+                            const siblingLeft = parseFloat(sibling.style.left);
+                            const siblingWidth = sibling.offsetWidth;
+                            if (leftPositionPx < siblingLeft + siblingWidth && leftPositionPx + containerWidthPx > siblingLeft) {
+                                collision = true;
+                                break;
+                            }
+                        }
+
+                        if (!collision) {
+                            segmentContainer.style.top = `${potentialTop}px`;
+                            placed = true;
+                        } else {
+                            let maxRowHeight = 0;
+                            siblingsOnThisLevel.forEach(sibling => {
+                                if (sibling.offsetHeight > maxRowHeight) maxRowHeight = sibling.offsetHeight;
+                            });
+                            potentialTop += maxRowHeight + verticalGap;
+                        }
+                    }
+
+                    // Eseménykezelők
+                    [originalTextarea, translatedTextarea].forEach(textarea => {
+                         textarea.addEventListener('input', function() {
+                            autoResizeTextarea(this);
+                            updateTimelineContainerHeight();
+                        });
+                        textarea.addEventListener('keydown', function(event) {
+                            if (event.key === 'Enter') {
+                                event.preventDefault(); 
+                                this.blur(); 
+                            }
+                        });
+                        textarea.addEventListener('click', () => wavesurfer.pause());
+                        textarea.addEventListener('dblclick', function(event) {
+                            event.preventDefault(); 
+                            event.stopPropagation();
+                            currentContextMenuSegmentIndex = index;
+                            contextMenu.style.left = `${event.pageX}px`;
+                            contextMenu.style.top = `${event.pageY}px`;
+                            contextMenu.style.display = 'block';
+                        });
+                    });
+                    
+                    originalTextarea.addEventListener('blur', function() {
+                        const newText = this.value;
+                        if (newText !== segment.text) {
+                            updateSegmentOnServer(index, segment.start, segment.end, newText, segment.translated_text);
+                        }
+                    });
+
+                    translatedTextarea.addEventListener('blur', function() {
+                        const newTranslated = this.value;
+                        if (newTranslated !== segment.translated_text) {
+                            updateSegmentOnServer(index, segment.start, segment.end, segment.text, newTranslated);
+                        }
+                    });
+                });
+                
+                updateTimelineContainerHeight();
+            }
+            // ---- MÓDOSÍTOTT FÜGGVÉNY VÉGE ----
+
+            function updateSegmentOnServer(segmentIndex, newStart, newEnd, newText, newTranslatedText) {
+                const originalSegment = JSON.parse(JSON.stringify(segmentsData[segmentIndex]));
+                const payload = {
+                    json_file_name: currentJsonFileName,
+                    segment_index: segmentIndex,
+                    new_start: parseFloat(newStart.toFixed(3)),
+                    new_end: parseFloat(newEnd.toFixed(3)),
+                    new_text: newText,
+                    new_translated_text: newTranslatedText
+                };
+                
+                segmentsData[segmentIndex].start = payload.new_start;
+                segmentsData[segmentIndex].end = payload.new_end;
+                segmentsData[segmentIndex].text = newText;
+                segmentsData[segmentIndex].translated_text = newTranslatedText;
+
+                fetch(`/api/update-segment/${currentProjectName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => response.ok ? response.json() : response.json().then(err => Promise.reject(err)))
+                .then(data => {
+                    if (!data.success) {
+                        console.error('Szerver oldali hiba a mentéskor:', data.error);
+                        alert(`Hiba a szegmens mentésekor: ${data.error}`);
+                        segmentsData[segmentIndex] = originalSegment; // Rollback
+                        createTimelineSegments(wavesurfer.options.minPxPerSec); // Refresh UI
+                    }
+                })
+                .catch(error => {
+                    console.error('Hálózati vagy egyéb hiba a mentéskor:', error);
+                    alert(`Hiba a szegmens mentésekor: ${error.error || error.message || 'Ismeretlen hiba'}`);
+                    segmentsData[segmentIndex] = originalSegment; // Rollback
+                    createTimelineSegments(wavesurfer.options.minPxPerSec); // Refresh UI
+                });
+            }
+
+
+            try {
+                wavesurfer = WaveSurfer.create({
+                    container: '#waveform',
+                    url: audioUrl,
+                    waveColor: 'rgb(200, 200, 200)',
+                    progressColor: 'rgb(100, 100, 100)',
+                    height: 128,
+                    minPxPerSec: 10 
+                });
+
+                wavesurfer.on('ready', function () {
+                    regionsPlugin = wavesurfer.registerPlugin(WaveSurfer.Regions.create());
+
+                    regionsPlugin.on('region-updated', (region) => { 
+                        const originalIndex = regionIdToOriginalIndexMap[region.id];
+                        if (typeof originalIndex === 'undefined') return;
+                        const newStart = parseFloat(region.start.toFixed(3));
+                        const newEnd = parseFloat(region.end.toFixed(3));
+                        updateSegmentOnServer(originalIndex, newStart, newEnd, segmentsData[originalIndex].text, segmentsData[originalIndex].translated_text);
+                    });
+
+                    regionsPlugin.on('region-clicked', (region, e) => {
+                        e.stopPropagation();
+                        region.play();
+                    });
+
+                    setWaveformZoom(); 
+                    updateWidths();    
+                    
+                    if (segmentsData.length > 0) {
+                        segmentsData.forEach((segment, index) => {
+                            try {
+                                const region = regionsPlugin.addRegion({
+                                    start: segment.start,
+                                    end: segment.end,
+                                    color: 'rgba(0, 123, 255, 0.1)',
+                                    resize: true
+                                });
+                                regionIdToOriginalIndexMap[region.id] = index;
+                            } catch (e) {
+                                console.error(`Error adding region ${index}:`, e);
+                            }
+                        });
+                    }
+                    createTimelineSegments(wavesurfer.options.minPxPerSec); 
+                });
+
+                wavesurfer.on('zoom', (newMinPxPerSec) => {
+                    updateWidths();
+                    createTimelineSegments(newMinPxPerSec);
+                });
+
+                wavesurfer.on('error', (err) => console.error("Wavesurfer error:", err));
+
+            } catch (e) {
+                console.error('WaveSurfer core init error:', e);
+            }
+            
+            document.getElementById('playPauseBtn')?.addEventListener('click', () => wavesurfer.playPause());
+            wavesurfer.on('play', () => document.getElementById('playPauseBtn').textContent = 'Szünet');
+            wavesurfer.on('pause', () => document.getElementById('playPauseBtn').textContent = 'Lejátszás');
+            wavesurfer.on('finish', () => document.getElementById('playPauseBtn').textContent = 'Lejátszás');
+
+            document.getElementById('waveform-scroll-wrapper')?.addEventListener('wheel', (event) => {
+                if (event.deltaY !== 0) {
+                    event.preventDefault();
+                    event.currentTarget.scrollLeft += event.deltaY;
+                }
+            }, { passive: false });
+
+            function fullRefreshUI() {
+                regionsPlugin.clearRegions();
+                regionIdToOriginalIndexMap = {};
+                segmentsTimelineContainer.innerHTML = '';
+                
+                segmentsData.forEach((segment, index) => {
+                    const region = regionsPlugin.addRegion({
+                        start: segment.start,
+                        end: segment.end,
+                        color: 'rgba(0, 123, 255, 0.1)',
+                        resize: true
+                    });
+                    regionIdToOriginalIndexMap[region.id] = index;
+                });
+                
+                createTimelineSegments(wavesurfer.options.minPxPerSec);
+                updateWidths();
+            }
+
+            function insertNewSegmentAfter(clickedSegmentIndex) {
+                const clickedSegment = segmentsData[clickedSegmentIndex];
+                const newSegmentStartTime = clickedSegment.end;
+                let nextExistingSegmentStartTime = wavesurfer.getDuration();
+                for (let i = 0; i < segmentsData.length; i++) {
+                    if (segmentsData[i].start > newSegmentStartTime && segmentsData[i].start < nextExistingSegmentStartTime) {
+                        nextExistingSegmentStartTime = segmentsData[i].start;
+                    }
+                }
+                let newSegmentEndTime = Math.min(newSegmentStartTime + 0.5, nextExistingSegmentStartTime, wavesurfer.getDuration());
+                if (newSegmentEndTime - newSegmentStartTime < 0.05) {
+                    alert('Nincs elég hely új szegmens létrehozásához (minimum 50ms).');
+                    return;
+                }
+                const newSegmentPayload = {
+                    json_file_name: currentJsonFileName,
+                    start: parseFloat(newSegmentStartTime.toFixed(3)),
+                    end: parseFloat(newSegmentEndTime.toFixed(3)),
+                    text: ""
+                };
+                fetch(`/api/add-segment/${currentProjectName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newSegmentPayload)
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.segments) {
+                        segmentsData = data.segments;
+                        fullRefreshUI();
+                    } else {
+                        alert(`Hiba az új szegmens hozzáadásakor: ${data.error}`);
+                    }
+                })
+                .catch(err => alert(`Hiba: ${err.message}`));
+            }
+
+            function deleteSegmentOnServer(segmentIndex) {
+                fetch(`/api/delete-segment/${currentProjectName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ json_file_name: currentJsonFileName, segment_index: segmentIndex })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.segments) {
+                        segmentsData = data.segments;
+                        fullRefreshUI();
+                    } else {
+                        alert(`Hiba a szegmens törlésekor: ${data.error}`);
+                    }
+                })
+                .catch(err => alert(`Hiba: ${err.message}`));
+            }
+
+            document.getElementById('menu-insert-segment').addEventListener('click', () => {
+                if (currentContextMenuSegmentIndex !== -1) insertNewSegmentAfter(currentContextMenuSegmentIndex);
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('menu-delete-segment').addEventListener('click', () => {
+                if (currentContextMenuSegmentIndex !== -1 && confirm(`Biztosan törli a(z) ${currentContextMenuSegmentIndex + 1}. szegmenst?`)) {
+                    deleteSegmentOnServer(currentContextMenuSegmentIndex);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.addEventListener('click', (event) => {
+                if (contextMenu.style.display === 'block' && !contextMenu.contains(event.target)) {
+                    contextMenu.style.display = 'none';
+                }
+            });
+
+        });
+        console.log('[DEBUG 99] Script tag processing finished.');
+    </script>
+
+    <!-- Fordítás modal ablak -->
+    <div class="modal fade" id="translationModal" tabindex="-1" aria-labelledby="translationModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="translationModalLabel">Fordítás beállításai</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="translationForm">
+                        <div class="mb-3">
+                            <label for="inputDir" class="form-label">Bemeneti könyvtár (input_dir)</label>
+                            <input type="text" class="form-control" id="inputDir" value="workdir/{{ project_name }}/{{ app_config.PROJECT_SUBDIRS.separated_audio_speech }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="outputDir" class="form-label">Kimeneti könyvtár (output_dir)</label>
+                            <input type="text" class="form-control" id="outputDir" value="workdir/{{ project_name }}/{{ app_config.PROJECT_SUBDIRS.translated if app_config.PROJECT_SUBDIRS.translated else 'translated' }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label for="inputLanguage" class="form-label">Bemeneti nyelv (input_language)</label>
+                            <input type="text" class="form-control" id="inputLanguage" value="{{ app_config.CONFIG.default_source_lang if app_config.CONFIG.default_source_lang else 'en' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="outputLanguage" class="form-label">Kimeneti nyelv (output_language)</label>
+                            <input type="text" class="form-control" id="outputLanguage" value="{{ app_config.CONFIG.default_target_lang if app_config.CONFIG.default_target_lang else 'hu' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="apiKey" class="form-label">API Kulcs</label>
+                            <input type="password" class="form-control" id="apiKey">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-primary" id="saveApiKeyBtn">Mentés</button>
+                    <button type="button" class="btn btn-success" id="runTranslationBtn">Fordítás indítása</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const translationBtn = document.getElementById('translationBtn');
+            const translationModalElement = document.getElementById('translationModal');
+            if (!translationBtn || !translationModalElement) return;
+
+            const translationModal = new bootstrap.Modal(translationModalElement);
+            
+            fetch('/get-api-key')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.api_key) {
+                        try {
+                            document.getElementById('apiKey').value = atob(data.api_key);
+                        } catch(e) { console.error("API key decoding failed:", e); }
+                    }
+                });
+
+            translationBtn.addEventListener('click', () => translationModal.show());
+
+            document.getElementById('saveApiKeyBtn').addEventListener('click', function() {
+                const apiKey = document.getElementById('apiKey').value;
+                if (!apiKey) { alert('Kérjük adja meg az API kulcsot!'); return; }
+                
+                fetch('/save-api-key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('API kulcs sikeresen mentve!');
+                        translationModal.hide();
+                    } else {
+                        alert('Hiba történt a mentés során: ' + data.error);
+                    }
+                });
+            });
+
+            document.getElementById('runTranslationBtn').addEventListener('click', function() {
+                const payload = {
+                    auth_key: document.getElementById('apiKey').value,
+                    input_dir: document.getElementById('inputDir').value,
+                    output_dir: document.getElementById('outputDir').value,
+                    input_language: document.getElementById('inputLanguage').value,
+                    output_language: document.getElementById('outputLanguage').value,
+                };
+                
+                if (Object.values(payload).some(v => !v)) {
+                    alert('Minden mező kitöltése kötelező!');
+                    return;
+                }
+
+                fetch('/run-translation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Fordítás elindult! Az oldal frissítése szükséges az eredmények megtekintéséhez, amint a folyamat befejeződött.');
+                        translationModal.hide();
+                    } else {
+                        alert('Hiba a fordítás indításakor: ' + data.error);
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

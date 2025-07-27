@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="hu" data-bs-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projekt: {{ project.name }} | AI Dubbing</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>
+        // Theme initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('theme') || 'auto';
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme === 'dark' || (savedTheme === 'auto' && systemDark)) {
+                document.documentElement.setAttribute('data-bs-theme', 'dark');
+            } else {
+                document.documentElement.setAttribute('data-bs-theme', 'light');
+            }
+        });
+    </script>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
+        </svg>
+    </button>
+
+    <div class="container mt-4">
+        <h1 class="mb-4">Projekt: {{ project.name }}</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Feltöltött videó</h5>
+                        {% if project.files.upload %}
+<button class="btn btn-sm btn-primary" id="extractBtn" onclick="runAudioExtraction('{{ project.name }}', '{{ project.files.upload[0] }}', this)">
+    Audio kivonás
+</button>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        {% if project.files.upload %}
+                            <ul class="list-group" id="speechAudioList">
+                                {% for file in project.files.upload %}
+                                    <li class="list-group-item">
+                                        {{ file }}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>Nincs feltöltött videó</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Kinyert audió</h5>
+                        {% if project.files.extracted_audio %}
+<button class="btn btn-sm btn-primary" id="separateBtn" onclick="showSeparateModal('{{ project.name }}', '{{ project.files.extracted_audio[0] }}', this)">
+    Szétválasztás
+</button>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        {% if project.files.extracted_audio %}
+                            <ul class="list-group" id="speechAudioList">
+                                {% for file in project.files.extracted_audio %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        {{ file }}
+                                        <audio controls style="height: 30px;">
+                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.extracted_audio + '/' + file) }}" type="audio/wav">
+                                        </audio>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>Nincs kinyert audió</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Beszéd audió</h5>
+                        <div>
+                            {% if can_review %}
+                                <a href="{{ url_for('review_project', project_name=project.name) }}" class="btn btn-sm btn-info me-2">Felülvizsgálat</a>
+                            {% endif %}
+                            {% if has_transcribable_audio %}
+<button class="btn btn-sm btn-primary" id="transcribeBtn" onclick="handleTranscribeClick('{{ project.name }}', this)">
+    Beolvasás
+</button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        {% if project.files.separated_audio_speech %}
+                            <ul class="list-group" id="speechAudioList">
+                                {% for file_info in project.files.separated_audio_speech %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>
+                                            {{ file_info.name }}
+                                            {% if file_info.is_json and file_info.segment_count is not none %}
+                                                <span class="ms-2">(Szegmensek: {{ file_info.segment_count }})</span>
+                                            {% elif file_info.is_json and file_info.segment_count is none %}
+                                                <span class="ms-2">(Nem olvasható JSON)</span>
+                                            {% endif %}
+                                        </span>
+                                        {% if file_info.is_audio %}
+                                            <audio controls style="height: 30px;">
+                                                <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.separated_audio_speech + '/' + file_info.name) }}" type="audio/{{ file_info.name.split('.')[-1] }}">
+                                            </audio>
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>Nincs feldolgozott beszéd audió vagy transzkripció.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5>Háttérzaj</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if project.files.separated_audio_background %}
+                            <ul class="list-group">
+                                {% for file in project.files.separated_audio_background %}
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        {{ file }}
+                                        <audio controls style="height: 30px;">
+                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.separated_audio_background + '/' + file) }}" type="audio/wav">
+                                        </audio>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>Nincs feldolgozott háttérzaj</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+    </div>
+
+    <!-- Separate Audio Modal -->
+    <div class="modal fade" id="separateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Szétválasztás paraméterei</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="separateForm">
+                        <input type="hidden" id="separateProjectName">
+                        <div class="mb-3">
+                            <label for="separateDevice" class="form-label">Eszköz</label>
+                            <select class="form-select" id="separateDevice">
+                                <option value="cuda">CUDA (GPU)</option>
+                                <option value="cpu">CPU</option>
+                            </select>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="keepFullAudio">
+                            <label class="form-check-label" for="keepFullAudio">Teljes audio fájl megtartása</label>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="nonSpeechSilence">
+                            <label class="form-check-label" for="nonSpeechSilence">Csak csend a non_speech fájlban</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="chunkSize" class="form-label">Darabolás hossza (perc)</label>
+                            <input type="number" class="form-control" id="chunkSize" value="5" min="1">
+                        </div>
+                        <div class="mb-3">
+                            <label for="separateModel" class="form-label">Modell</label>
+                            <select class="form-select" id="separateModel">
+                                <option value="htdemucs_ft" selected>htdemucs_ft</option>
+                                <option value="htdemucs">htdemucs</option>
+                                <option value="hdemucs_mmi">hdemucs_mmi</option>
+                                <option value="mdx">mdx</option>
+                                <option value="mdx_extra">mdx_extra</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-primary" onclick="runSeparation()">Futtatás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transcribe Modal -->
+    <div class="modal fade" id="transcribeModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Beolvasás paraméterei</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="transcribeForm">
+                        <input type="hidden" id="transcribeProjectName">
+                        <input type="hidden" id="transcribeFileName">
+                        <div class="mb-3">
+                            <label for="language" class="form-label">Nyelv</label>
+                            <input type="text" class="form-control" id="language" placeholder="Pl.: en, vagy hagyd üresen az automatikus nyelvfelismeréshez">
+                        </div>
+                        <div class="mb-3">
+                            <label for="gpus" class="form-label">GPU-k (vesszővel elválasztva)</label>
+                            <input type="text" class="form-control" id="gpus" placeholder="Pl.: 0,1">
+                        </div>
+                        <div class="mb-3">
+                            <label for="hfToken" class="form-label">Hugging Face Token (opcionális)</label>
+                            <input type="text" class="form-control" id="hfToken" placeholder="HF token a diarizáláshoz">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-primary" onclick="runTranscription()">Futtatás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Theme toggle function
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            let newTheme = 'light';
+            if (currentTheme === 'light' || (currentTheme === 'auto' && !systemDark)) {
+                newTheme = 'dark';
+            } else {
+                newTheme = 'auto';
+            }
+            
+            document.documentElement.setAttribute('data-bs-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        function showTranscribeModal(projectName, fileName) {
+            document.getElementById('transcribeProjectName').value = projectName;
+            document.getElementById('transcribeFileName').value = fileName;
+            const modal = new bootstrap.Modal(document.getElementById('transcribeModal'));
+            modal.show();
+        }
+
+        function runTranscription() {
+            const projectName = document.getElementById('transcribeProjectName').value;
+            const fileName = document.getElementById('transcribeFileName').value;
+            const language = document.getElementById('language').value;
+            const gpus = document.getElementById('gpus').value;
+            const hfToken = document.getElementById('hfToken').value;
+
+            const buttonId = `transcribeBtn-${fileName}`;
+            setButtonLoading(buttonId, true);
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('transcribeModal'));
+            modal.hide();
+
+            fetch(`/api/transcribe/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    language: language,
+                    gpus: gpus,
+                    hf_token: hfToken
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Sikeres beolvasás!');
+                    location.reload();
+                } else {
+                    alert('Hiba: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Hiba:', error);
+                alert('Hiba történt a beolvasás során');
+            });
+        }
+        function setButtonLoading(buttonId, isLoading) {
+            const btn = document.getElementById(buttonId);
+            if (btn) {
+                if (isLoading) {
+                    btn.classList.add('btn-loading');
+                    btn.disabled = true;
+                } else {
+                    btn.classList.remove('btn-loading');
+                    btn.disabled = false;
+                }
+            }
+        }
+
+        function runAudioExtraction(projectName, fileName, button) {
+            if (!button.classList.contains('btn-processing')) {
+                button.classList.add('btn-processing');
+            }
+            
+            fetch(`/api/extract-audio/${projectName}`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                button.classList.remove('btn-processing');
+                if (data.success) {
+                    alert('Sikeres audio kivonás!');
+                    location.reload();
+                } else {
+                    alert('Hiba: ' + data.error);
+                }
+            })
+            .catch(error => {
+                button.classList.remove('btn-processing');
+                console.error('Hiba:', error);
+                alert('Hiba történt az audio kivonás során');
+            });
+        }
+
+        function handleTranscribeClick(projectName, button) {
+            if (!button.classList.contains('btn-processing')) {
+                button.classList.add('btn-processing');
+            }
+            
+            // Get first file
+            const audioElements = document.querySelectorAll('#speechAudioList audio source');
+            if (audioElements.length > 0) {
+                const fileName = audioElements[0].src.split('/').pop();
+                showTranscribeModal(projectName, fileName);
+            } else {
+                button.classList.remove('btn-processing');
+                alert('Nincs audió fájl a listában!');
+            }
+        }
+
+        function showSeparateModal(projectName, fileName, button) {
+            document.getElementById('separateProjectName').value = projectName;
+            const modal = new bootstrap.Modal(document.getElementById('separateModal'));
+            
+            modal.show();
+            
+            // Remove processing class when modal is closed
+            document.getElementById('separateModal').addEventListener('hidden.bs.modal', function () {
+                button.classList.remove('btn-processing');
+            });
+        }
+
+        function runSeparation() {
+            const projectName = document.getElementById('separateProjectName').value;
+            const device = document.getElementById('separateDevice').value;
+            const keepFullAudio = document.getElementById('keepFullAudio').checked;
+            const nonSpeechSilence = document.getElementById('nonSpeechSilence').checked;
+            const chunkSize = document.getElementById('chunkSize').value;
+            const model = document.getElementById('separateModel').value;
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('separateModal'));
+            modal.hide();
+
+            fetch(`/api/separate-audio/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    device: device,
+                    keep_full_audio: keepFullAudio,
+                    non_speech_silence: nonSpeechSilence,
+                    chunk_size: chunkSize,
+                    model: model
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Sikeres szétválasztás!');
+                    location.reload();
+                } else {
+                    alert('Hiba: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Hiba:', error);
+                alert('Hiba történt a szétválasztás során');
+            });
+        }
+
+        function runAudioSeparation(projectName, fileName) {
+            showSeparateModal(projectName, fileName);
+        }
+    </script>
+</body>
+</html>
