@@ -1,4 +1,4 @@
-# FILE: f5_tts_easy9_kisérleti.py
+# FILE: f5_tts_easy15_kisérleti_javitott.py
 
 import os
 import argparse
@@ -16,6 +16,7 @@ import tempfile
 import re
 import math
 import numpy as np
+import shutil
 
 import soundfile as sf
 import tqdm
@@ -47,8 +48,6 @@ except ImportError:
     num2words = None
 from Levenshtein import distance as levenshtein_distance
 
-### ÚJ ###
-# Próbáljuk meg importálni a fonetikus átírót
 try:
     from fonetic import fonetikus_atiras
 except ImportError:
@@ -70,39 +69,18 @@ class F5TTS:
     def load_ema_model(self, model_cls, model_cfg, ckpt_file, mel_spec_type, vocab_file, ode_method, use_ema): self.ema_model=load_model(model_cls, model_cfg, ckpt_file, mel_spec_type, vocab_file, ode_method, use_ema, self.device)
     def export_wav(self, wav, file_wave, remove_silence=False): sf.write(file_wave, wav, self.target_sample_rate); (remove_silence_for_generated_wav(file_wave) if remove_silence else None)
 
-    ### MODIFIED METHOD ###
     def infer(self, ref_file, ref_text, gen_text, file_wave, remove_silence=False, speed=1.0, nfe_step=32, seed=-1):
-        if not (0.3 <= speed <= 2.0):
-            raise ValueError(f"Invalid speed: {speed}")
-        if not (16 <= nfe_step <= 64):
-            raise ValueError(f"Invalid nfe_step: {nfe_step}")
-
-        # --- START OF FIX (v2) ---
-        # The previous fix for the CUDA race condition was correct, but sys.maxsize can be too large for numpy.
-        # We need to limit the random seed to a 32-bit unsigned integer range.
+        if not (0.3 <= speed <= 2.0): raise ValueError(f"Invalid speed: {speed}")
+        if not (16 <= nfe_step <= 64): raise ValueError(f"Invalid nfe_step: {nfe_step}")
         numpy_max_seed = 2**32 - 1
         current_seed = seed if seed != -1 else random.randint(0, numpy_max_seed)
-        # --- END OF FIX (v2) ---
-        
         self.seed = current_seed
-        
-        # This part remains the same from the previous fix
-        random.seed(current_seed)
-        np.random.seed(current_seed)
-        torch.manual_seed(current_seed)
-        if "cuda" in str(self.device):
-            torch.cuda.manual_seed(current_seed)
-
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
+        random.seed(current_seed); np.random.seed(current_seed); torch.manual_seed(current_seed)
+        if "cuda" in str(self.device): torch.cuda.manual_seed(current_seed)
+        torch.backends.cudnn.deterministic = True; torch.backends.cudnn.benchmark = False
         ref_file, ref_text = preprocess_ref_audio_text(ref_file, ref_text)
-
         wav, sr, spect = infer_process(ref_file, ref_text, gen_text, self.ema_model, self.vocoder, self.mel_spec_type, show_info=logger.info, progress=tqdm, target_rms=0.1, cross_fade_duration=0.15, nfe_step=nfe_step, cfg_strength=2, sway_sampling_coef=-1, speed=speed, fix_duration=None, device=self.device)
-        
-        if file_wave is not None:
-            self.export_wav(wav, file_wave, remove_silence)
-            
+        if file_wave is not None: self.export_wav(wav, file_wave, remove_silence)
         return wav, sr, spect
 
 def time_to_filename_str(seconds: float) -> str:
@@ -146,19 +124,17 @@ def parse_arguments():
     parser.add_argument("--speed", type=float, default=1.0, help="A generált hang sebessége (0.3-2.0).")
     parser.add_argument("--nfe_step", type=int, default=32, help="NFE lépések száma (16-64).")
     parser.add_argument("--remove_silence", action="store_true", help="Csend eltávolítása a generált hangból.")
-    ### ÚJ KAPCSOLÓ ###
-    parser.add_argument("--phonetic-ref", action="store_true", help="A referencia szöveget (ref_text) fonetikus átírással használja. Szükséges a 'fonetic.py' és 'nltk'.")
+    parser.add_argument("--phonetic-ref", action="store_true", help="A referencia szöveget (ref_text) fonetikus átírással használja.")
     parser.add_argument("--normalize-ref-audio", action="store_true", help="Aktiválja a referencia audio csúcshangerejének normalizálását.")
     parser.add_argument("--ref-audio-peak", type=float, default=0.95, help="A normalizált referencia audio cél csúcsértéke (0.0-1.0).")
     parser.add_argument("--max_workers", type=int, default=None, help="Párhuzamos workerek maximális száma.")
-    parser.add_argument("--seed", type=int, default=-1, help="Véletlenszám-generátor magja. A '-1' véletlenszerűséget és a verifikációt jelenti.")
-    parser.add_argument("--max-retries", type=int, default=5, help="Maximális újragenerálási kísérletek száma (csak random seed esetén).")
-    parser.add_argument("--tolerance-factor", type=float, default=1.0, help="Tolerancia szorzó a szavak száma alapján (csak random seed esetén).")
-    parser.add_argument("--min-tolerance", type=int, default=2, help="A dinamikusan számított tolerancia minimális értéke (csak random seed esetén).")
+    parser.add_argument("--seed", type=int, default=-1, help="Véletlenszám-generátor magja (-1: random és verifikáció).")
+    parser.add_argument("--max-retries", type=int, default=5, help="Maximális újragenerálási kísérletek száma.")
+    parser.add_argument("--tolerance-factor", type=float, default=1.0, help="Tolerancia szorzó a szavak száma alapján.")
+    parser.add_argument("--min-tolerance", type=int, default=2, help="A dinamikusan számított tolerancia minimális értéke.")
     parser.add_argument("--whisper-model", type=str, default="openai/whisper-large-v3", help="A verifikációhoz használt Whisper modell.")
-    parser.add_argument("--beam-size", type=int, default=5, help="A Whisper dekódoláshoz használt nyalábszélesség (csak random seed esetén).")
+    parser.add_argument("--beam-size", type=int, default=5, help="A Whisper dekódoláshoz használt nyalábszélesség.")
     parser.add_argument("--save-failures", action="store_true", help="Elmenti a hibás generálásokat egy 'failed_generations' mappába.")
-    parser.add_argument("--double-ref-on-failure", action="store_true", help="Az első hibás generálási kísérlet után megduplázza a referencia audiót és szöveget.")
     args = parser.parse_args()
     return args
 
@@ -180,6 +156,73 @@ def convert_numbers_to_words(text: str, lang: str) -> str:
         except Exception: return match.group(0)
     return re.sub(r'\b\d+\b', replace_match, text)
 
+### JAVÍTÁS: A hibamentő függvény teljes átdolgozása a perzisztencia érdekében ###
+def save_failed_attempt(args, filename_stem, attempt_num, dist, final_tolerance,
+                        temp_gen_path, sample_rate,
+                        original_ref_chunk, base_ref_chunk, current_ref_audio_for_gen,
+                        original_ref_text, gen_text,
+                        raw_transcribed, converted_transcribed):
+    """
+    Elmenti a sikertelen generálási kísérletet. Ha már létezik mentés ehhez a szegmenshez,
+    akkor a JSON-t bővíti és a referencia audiókat nem írja felül.
+    """
+    try:
+        debug_segment_dir = Path(args.failed_generations_dir) / filename_stem
+        debug_segment_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 1. JSON kezelése: Betöltés, ha létezik; létrehozás, ha nem.
+        info_json_path = debug_segment_dir / "info.json"
+        info = {}
+        if info_json_path.exists():
+            try:
+                with open(info_json_path, 'r', encoding='utf-8') as f:
+                    info = json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError):
+                logger.warning(f"Could not read existing info.json for {filename_stem}. A new one will be created.")
+                info = {}
+
+        # 2. Referencia fájlok mentése (CSAK HA MÉG NEM LÉTEZNEK)
+        # Az alap információkat és ref fájlokat csak akkor írjuk, ha a JSON-t most hozzuk létre.
+        if not info:
+            info.update({"original_ref_text": original_ref_text, "gen_text": gen_text})
+            
+            original_wav_path = debug_segment_dir / "ref_audio_original.wav"
+            if not original_wav_path.exists():
+                sf.write(original_wav_path, original_ref_chunk, sample_rate)
+
+            normalized_wav_path = debug_segment_dir / "ref_audio_normalized.wav"
+            if args.normalize_ref_audio and not normalized_wav_path.exists():
+                sf.write(normalized_wav_path, base_ref_chunk, sample_rate)
+
+        # A bővített referencia mentése, ha létrejött és még nincs elmentve
+        extended_wav_path = debug_segment_dir / "ref_audio_extended.wav"
+        if len(current_ref_audio_for_gen) > len(base_ref_chunk) and not extended_wav_path.exists():
+            sf.write(extended_wav_path, current_ref_audio_for_gen, sample_rate)
+        
+        # 3. Az AKTUÁLIS sikertelen kísérlet audiójának mentése, mindig egyedi névvel.
+        failed_attempt_filename = f"{filename_stem}_attempt_{attempt_num}_dist_{dist}.wav"
+        debug_gen_audio_path = debug_segment_dir / failed_attempt_filename
+        shutil.copy(temp_gen_path, debug_gen_audio_path)
+
+        # 4. Az új hibaadatok hozzáadása a JSON-hoz
+        failure_details = {
+            'attempt': attempt_num,
+            'distance': dist,
+            'allowed_tolerance': final_tolerance,
+            'raw_transcribed_text': raw_transcribed,
+            'converted_transcribed_text': converted_transcribed,
+            'saved_audio_filename': failed_attempt_filename,
+            'ref_audio_duration_for_this_attempt': len(current_ref_audio_for_gen) / sample_rate
+        }
+        info.setdefault("failures", []).append(failure_details)
+        
+        # 5. A frissített JSON visszaírása a lemezre
+        with open(info_json_path, 'w', encoding='utf-8') as f:
+            json.dump(info, f, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        logger.error(f"Failed to save debug information for {filename_stem}: {e}", exc_info=True)
+
 
 def main_worker(gpu, args, all_chunks, input_wav_path_str, stats, failed_segments_info):
     tasks_chunk = all_chunks[gpu]
@@ -187,22 +230,13 @@ def main_worker(gpu, args, all_chunks, input_wav_path_str, stats, failed_segment
     device = f"cuda:{gpu}"
     logger.info(f"Worker {gpu} starting on device {device} with {len(tasks_chunk)} tasks.")
 
-    ### MÓDOSÍTOTT: Fonetikus átíró inicializálása ###
-    # Az átírót csak akkor próbáljuk használni, ha a kapcsoló be van kapcsolva
-    # és a 'fonetic.py' importálása sikeres volt.
     phonetic_converter = None
     if args.phonetic_ref:
         if fonetikus_atiras:
-            logger.info(f"Worker {gpu}: Phonetic reference text mode is ON.")
-            phonetic_converter = fonetikus_atiras
-            # Első hívás, ami betölti a szótárat, ha még nem történt meg
-            try:
-                phonetic_converter("initialize")
-            except Exception as e:
-                logger.error(f"Worker {gpu}: Failed to initialize phonetic transcriber: {e}. Disabling feature.", exc_info=True)
-                phonetic_converter = None
-        else:
-            logger.warning(f"Worker {gpu}: --phonetic-ref was specified, but 'fonetic.py' could not be imported. The feature is disabled.")
+            logger.info(f"Worker {gpu}: Phonetic reference text mode is ON."); phonetic_converter = fonetikus_atiras
+            try: phonetic_converter("initialize")
+            except Exception as e: logger.error(f"Worker {gpu}: Failed to initialize phonetic transcriber: {e}. Disabling.", exc_info=True); phonetic_converter = None
+        else: logger.warning(f"Worker {gpu}: --phonetic-ref specified, but 'fonetic.py' not imported. Feature disabled.")
 
     try:
         run_transcription = None; whisper_language = None
@@ -238,13 +272,7 @@ def main_worker(gpu, args, all_chunks, input_wav_path_str, stats, failed_segment
             filename=f"{time_to_filename_str(start_time)}_{time_to_filename_str(end_time)}.wav"
             output_wav_path=Path(args.output_dir)/filename
             
-            ### MÓDOSÍTÁS KEZDETE: Meglévő fájlok ellenőrzése ###
-            if output_wav_path.exists():
-                # Nem használunk logger-t, hogy ne árasszuk el a konzolt, de a statisztikát frissítjük.
-                # logger.info(f"Worker {gpu}: Segment '{filename}' already exists. Skipping.")
-                stats['successful']+=1
-                continue
-            ### MÓDOSÍTÁS VÉGE ###
+            if output_wav_path.exists(): stats['successful']+=1; continue
 
             gen_text = original_gen_text
             if normalize_fn:
@@ -256,120 +284,117 @@ def main_worker(gpu, args, all_chunks, input_wav_path_str, stats, failed_segment
             if start_sample>=end_sample: continue
             
             original_ref_chunk = full_audio_data[start_sample:end_sample]
-            processed_ref_chunk = original_ref_chunk.copy()
-            if args.normalize_ref_audio:
-                processed_ref_chunk = normalize_peak(processed_ref_chunk, args.ref_audio_peak)
-
-            current_ref_text = original_ref_text
-            if phonetic_converter:
-                try:
-                    phonetic_text = phonetic_converter(original_ref_text)
-                    # A logolást áthelyeztük a részletesebb, kísérletenkénti logba
-                    current_ref_text = phonetic_text
-                except Exception as e:
-                    logger.error(f"Worker {gpu}: Failed to convert ref text '{original_ref_text}' to phonetic: {e}. Using original text.", exc_info=True)
             
-            current_ref_audio_chunk=processed_ref_chunk
-
+            base_ref_chunk = normalize_peak(original_ref_chunk.copy(), args.ref_audio_peak) if args.normalize_ref_audio else original_ref_chunk.copy()
+            base_ref_text = original_ref_text
+            initial_duration = len(base_ref_chunk) / sample_rate
+            
             if args.seed == -1:
-                verification_passed=False
-                for attempt in range(1, args.max_retries+1):
-                    temp_gen_path=None
-                    try:
-                        with tempfile.NamedTemporaryFile(suffix=".wav",delete=False,dir=args.output_dir) as tmp: temp_gen_path=tmp.name
-                        with tempfile.NamedTemporaryFile(suffix=".wav",delete=True) as tmp_ref:
-                            sf.write(tmp_ref.name, current_ref_audio_chunk, sample_rate)
-                            f5tts.infer(ref_file=tmp_ref.name, ref_text=current_ref_text, gen_text=gen_text, file_wave=temp_gen_path, seed=-1, speed=args.speed, nfe_step=args.nfe_step)
-                        
-                        raw_transcribed_text=run_transcription(temp_gen_path)['text']; converted_transcribed_text=convert_numbers_to_words(raw_transcribed_text,lang=whisper_language)
-                        norm_original=normalize_text_for_comparison(gen_text); norm_transcribed=normalize_text_for_comparison(converted_transcribed_text)
-                        dist=levenshtein_distance(norm_original,norm_transcribed)
+                verification_passed=False; best_distance = float('inf'); best_attempt_audio_path = None
+                
+                ref_multiplication_factor = 1
 
-                        original_words = norm_original.split()
-                        transcribed_words = norm_transcribed.split()
-                        if original_words and transcribed_words:
-                            if transcribed_words[0] in ('a', 'e') and transcribed_words[0] != original_words[0]:
-                                rest_of_transcribed = ' '.join(transcribed_words[1:])
-                                if norm_original.startswith(rest_of_transcribed):
-                                    dist += 5
-                        
-                        word_count=len(gen_text.split()); calculated_tolerance=math.ceil(word_count*args.tolerance_factor); final_tolerance=max(calculated_tolerance,args.min_tolerance)
-                        
-                        verification_passed_this_attempt = dist <= final_tolerance
-                        
-                        ### MÓDOSÍTÁS KEZDETE: Részletes logolás ###
-                        ref_audio_duration = len(current_ref_audio_chunk) / sample_rate
-                        is_phonetic_used = phonetic_converter and original_ref_text != current_ref_text
-                        
-                        log_message = (
-                            f"\n--- Generálás Log (Worker {gpu}, Fájl: {filename}) ---\n"
-                            f"Generálás: | {attempt}/{args.max_retries}\n"
-                            f"Referencia audió hossza: | {ref_audio_duration:.2f} sec\n"
-                            f"Referencia szöveg: | {original_ref_text}\n"
-                            f"Fonetikus referencia szöveg: | {current_ref_text if is_phonetic_used else 'Nem használt'}\n"
-                            f"Gen_text: | {original_gen_text}\n"
-                            f"Normalizált Gen_text: | {norm_original}\n"
-                            f"A whisperrel visszaolvasott szöveg: | {converted_transcribed_text}\n"
-                            f"Maximális megengedett és elért távolság: | {dist}/{final_tolerance}\n"
-                            f"Generálás sikeres: | {'Igen' if verification_passed_this_attempt else 'Nem'}\n"
-                            f"----------------------------------------------------------"
-                        )
-                        logger.info(log_message)
-                        ### MÓDOSÍTÁS VÉGE ###
+                try:
+                    for attempt in range(1, args.max_retries+1):
+                        temp_gen_path=None
+                        try:
+                            if ref_multiplication_factor == 1:
+                                processed_ref_chunk_for_gen = base_ref_chunk
+                                processed_ref_text_for_gen = base_ref_text
+                            else:
+                                audio_parts = []
+                                text_parts = []
+                                silence_chunk = np.zeros((int(0.4 * sample_rate),) + base_ref_chunk.shape[1:], dtype=base_ref_chunk.dtype)
+                                for i in range(ref_multiplication_factor):
+                                    audio_parts.append(base_ref_chunk)
+                                    text_parts.append(base_ref_text)
+                                    if i < ref_multiplication_factor - 1:
+                                        audio_parts.append(silence_chunk)
+                                processed_ref_chunk_for_gen = np.concatenate(audio_parts)
+                                processed_ref_text_for_gen = " ".join(text_parts)
+                            
+                            final_ref_text_for_gen = processed_ref_text_for_gen
+                            if phonetic_converter:
+                                try:
+                                    final_ref_text_for_gen = phonetic_converter(processed_ref_text_for_gen)
+                                except Exception as e:
+                                    logger.error(f"Worker {gpu}: Phonetic conversion failed for attempt {attempt}. Using original text. Error: {e}")
 
-                        if verification_passed_this_attempt:
-                            os.rename(temp_gen_path, output_wav_path); verification_passed=True; break
-                        else:
-                            # A régi warning log feleslegessé vált az új, részletes log miatt.
-                            # logger.warning(f"Worker {gpu}: Verification FAILED ...")
+                            with tempfile.NamedTemporaryFile(suffix=".wav",delete=False,dir=args.output_dir) as tmp: temp_gen_path=tmp.name
+                            with tempfile.NamedTemporaryFile(suffix=".wav",delete=True) as tmp_ref:
+                                sf.write(tmp_ref.name, processed_ref_chunk_for_gen, sample_rate)
+                                f5tts.infer(ref_file=tmp_ref.name, ref_text=final_ref_text_for_gen, gen_text=gen_text, file_wave=temp_gen_path, seed=-1, speed=args.speed, nfe_step=args.nfe_step)
+                            
+                            raw_transcribed_text=run_transcription(temp_gen_path)['text']; converted_transcribed_text=convert_numbers_to_words(raw_transcribed_text,lang=whisper_language)
+                            norm_original=normalize_text_for_comparison(gen_text); norm_transcribed=normalize_text_for_comparison(converted_transcribed_text)
+                            dist=levenshtein_distance(norm_original,norm_transcribed)
+                            
+                            word_count=len(gen_text.split()); calculated_tolerance=math.ceil(word_count*args.tolerance_factor); final_tolerance=max(calculated_tolerance,args.min_tolerance)
+                            ref_audio_duration_used = len(processed_ref_chunk_for_gen) / sample_rate
+                            
+                            log_message = (f"\n--- Generálás Log (Worker {gpu}, Fájl: {filename}) ---\n"
+                                f"Generálás: | {attempt}/{args.max_retries} (Ref. Multiplier: {ref_multiplication_factor}x)\n"
+                                f"Felhasznált ref audió hossza: | {ref_audio_duration_used:.2f} sec\n"
+                                f"Gen_text (normalizált): | {norm_original}\n"
+                                f"Whisperrel visszaolvasott (normalizált): | {norm_transcribed}\n"
+                                f"Távolság / Megengedett: | {dist} / {final_tolerance}\n")
+                            
+                            if dist <= 1:
+                                log_message += f"Generálás sikeres: | Igen (Távolság <= 1)\n----------------------------------------------------------"
+                                logger.info(log_message); os.rename(temp_gen_path, output_wav_path); temp_gen_path = None; verification_passed = True; break
                             
                             if args.save_failures:
-                                debug_segment_dir=Path(args.failed_generations_dir)/output_wav_path.stem; debug_segment_dir.mkdir(exist_ok=True)
-                                failed_attempt_filename = filename.replace('.wav', f'_attempt_{attempt}.wav')
-                                debug_gen_audio_path = debug_segment_dir / failed_attempt_filename
-                                os.rename(temp_gen_path, debug_gen_audio_path)
-                                
-                                info_json_path=debug_segment_dir/"info.json"
-                                info={}
-                                if attempt==1:
-                                    sf.write(debug_segment_dir/"ref_audio_original.wav", original_ref_chunk, sample_rate)
-                                    if args.normalize_ref_audio:
-                                        sf.write(debug_segment_dir/"ref_audio_normalized.wav", processed_ref_chunk, sample_rate)
-                                    info_ref_text = f"{original_ref_text} (phonetic: {current_ref_text})" if phonetic_converter and original_ref_text != current_ref_text else original_ref_text
-                                    info={"ref_text": info_ref_text, "gen_text":gen_text,"failures":[]}
-                                elif info_json_path.exists():
-                                    with open(info_json_path,'r',encoding='utf-8') as f: info=json.load(f)
-                                info.get("failures",[]).append({'attempt':attempt,'raw_transcribed_text':raw_transcribed_text,'converted_transcribed_text':converted_transcribed_text,'distance':dist,'allowed_tolerance':final_tolerance})
-                                with open(info_json_path,'w',encoding='utf-8') as f: json.dump(info,f,ensure_ascii=False,indent=2)
-                            else:
-                                os.remove(temp_gen_path)
+                                save_failed_attempt(
+                                    args, output_wav_path.stem, attempt, dist, final_tolerance, temp_gen_path,
+                                    sample_rate, original_ref_chunk, base_ref_chunk, processed_ref_chunk_for_gen,
+                                    original_ref_text, gen_text,
+                                    raw_transcribed_text, converted_transcribed_text
+                                )
+                            
+                            if dist < best_distance:
+                                log_message += f"Generálás sikeres: | Még nem (Új legjobb távolság: {dist})\n----------------------------------------------------------"
+                                best_distance = dist
+                                if best_attempt_audio_path and os.path.exists(best_attempt_audio_path): os.remove(best_attempt_audio_path)
+                                best_attempt_audio_path = temp_gen_path; temp_gen_path = None
+                            else: log_message += f"Generálás sikeres: | Még nem (Nem jobb, mint az eddigi legjobb: {best_distance})\n----------------------------------------------------------"
+                            
+                            logger.info(log_message)
+                            if temp_gen_path and os.path.exists(temp_gen_path): os.remove(temp_gen_path)
 
-                            if args.double_ref_on_failure and attempt == 1:
-                                logger.info(f"Worker {gpu}: Az első sikertelen kísérlet után a referencia duplázása a következő próbálkozásokhoz.")
-                                current_ref_text=f"{current_ref_text} {current_ref_text}"
-                                current_ref_audio_chunk=np.concatenate([processed_ref_chunk, processed_ref_chunk])
-                                if args.save_failures:
-                                    sf.write(debug_segment_dir/"ref_audio_doubled_normalized.wav", current_ref_audio_chunk, sample_rate)
-                    
-                    except Exception as e:
-                        logger.error(f"Worker {gpu}: Error during verification attempt {attempt} for '{filename}': {e}", exc_info=True)
-                        if temp_gen_path and os.path.exists(temp_gen_path): os.remove(temp_gen_path)
-                        continue
+                            if 0 < initial_duration < 1.5 and ref_audio_duration_used < 2.0:
+                                next_potential_duration = ref_audio_duration_used + 0.4 + initial_duration
+                                if next_potential_duration <= 11.5:
+                                    ref_multiplication_factor += 1
+                                    logger.info(f"Worker {gpu}: Kísérlet sikertelen. Referencia többszöröző növelve {ref_multiplication_factor}x-re a következő próbához.")
+                                else:
+                                    logger.warning(f"Worker {gpu}: Referencia többszöröző nem növelhető tovább, mert a következő lépés ({next_potential_duration:.2f}s) túllépné a 11.5s-es határt.")
+                        
+                        except Exception as e:
+                            logger.error(f"Worker {gpu}: Error during verification attempt {attempt} for '{filename}': {e}", exc_info=True)
+                            if temp_gen_path and os.path.exists(temp_gen_path): os.remove(temp_gen_path); continue
+
+                    if not verification_passed:
+                        word_count=len(gen_text.split()); calculated_tolerance=math.ceil(word_count*args.tolerance_factor); final_tolerance=max(calculated_tolerance,args.min_tolerance)
+                        if best_distance <= final_tolerance:
+                            logger.info(f"Worker {gpu}: Elfogadva a legjobb kísérlet (távolság: {best_distance}) a '{filename}' fájlhoz, mert tolerancián ({final_tolerance}) belül van.")
+                            if best_attempt_audio_path and os.path.exists(best_attempt_audio_path):
+                                os.rename(best_attempt_audio_path, output_wav_path); best_attempt_audio_path = None; verification_passed = True
+                            else: logger.error(f"Worker {gpu}: Legjobb kísérlet elfogadása sikertelen, az audiofájl nem található a '{filename}' szegmenshez.")
+                finally:
+                    if best_attempt_audio_path and os.path.exists(best_attempt_audio_path): os.remove(best_attempt_audio_path)
 
                 if verification_passed: stats['successful']+=1
-                else: stats['failed']+=1; failed_segments_info.append({'filename': filename, 'text': original_gen_text})
+                else: stats['failed']+=1; failed_segments_info.append({'filename': filename, 'text': original_gen_text}); logger.warning(f"Worker {gpu}: A '{filename}' generálása végleg sikertelen az összes ({args.max_retries}) kísérlet után.")
 
-            else:
+            else: 
                 try:
+                    final_ref_text = base_ref_text
+                    if phonetic_converter: final_ref_text = phonetic_converter(base_ref_text)
                     with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp_ref:
-                        sf.write(tmp_ref.name, current_ref_audio_chunk, sample_rate)
-                        f5tts.infer(ref_file=tmp_ref.name,ref_text=current_ref_text,gen_text=gen_text,file_wave=str(output_wav_path),seed=args.seed,speed=args.speed,nfe_step=args.nfe_step)
+                        sf.write(tmp_ref.name, base_ref_chunk, sample_rate)
+                        f5tts.infer(ref_file=tmp_ref.name,ref_text=final_ref_text,gen_text=gen_text,file_wave=str(output_wav_path),seed=args.seed,speed=args.speed,nfe_step=args.nfe_step)
                     stats['successful']+=1
-                except Exception as e: 
-                    logger.error(f"Worker {gpu}: Failed to generate with fixed seed for '{filename}': {e}")
-                    stats['failed']+=1
-                    failed_segments_info.append({'filename': filename, 'text': original_gen_text})
-
+                except Exception as e: logger.error(f"Worker {gpu}: Failed to generate with fixed seed for '{filename}': {e}"); stats['failed']+=1; failed_segments_info.append({'filename': filename, 'text': original_gen_text})
     except Exception as e: logger.critical(f"Critical error in worker {gpu}: {e}", exc_info=True)
 
 def process_file_pair(args, input_wav_path, input_json_path):
@@ -394,24 +419,16 @@ def process_file_pair(args, input_wav_path, input_json_path):
     with mp.Manager() as manager:
         stats=manager.dict({'successful':0,'failed':0,'total':len(segments)})
         failed_segments_info = manager.list()
-        
         spawn_args=(args, chunks, str(input_wav_path), stats, failed_segments_info)
         mp.spawn(main_worker, nprocs=num_workers, args=spawn_args)
         
-        s=stats['successful']; f=stats['failed']; t=stats['total']
-        p = s + f
-        # Kiszámoljuk a már korábban létező fájlok számát a feldolgozottakból
-        already_existed = p - (len(failed_segments_info) + sum(1 for _ in range(s) if not Path(args.output_dir, f"{time_to_filename_str(0)}_{time_to_filename_str(0)}.wav").exists() )) # Ez egy trükkös számítás, egyszerűsítsünk
-        processed_in_this_run = len(list(failed_segments_info)) + (s - (t - p)) # Pontosabb számítás bonyolultabb lenne
-        
-        logger.info("="*50 + f"\nVÉGSŐ STATISZTIKA\n  - Összes szegmens: {t}\n  - Feldolgozott (sikeres+sikertelen): {p}\n  - Sikeres generálások: {s}\n  - Sikertelen generálások: {f}\n" + "="*50)
+        s=stats['successful']; f=stats['failed']; t=stats['total']; p = s + f
+        logger.info("="*50 + f"\nVÉGSŐ STATISZTIKA\n  - Összes szegmens: {t}\n  - Feldolgozott: {p}\n  - Sikeres: {s}\n  - Sikertelen: {f}\n" + "="*50)
 
         if failed_segments_info:
-            logger.info("\n" + "="*50)
-            logger.info("SIKERTELEN SZEGMENSEK JELENTÉSE")
+            logger.info("\n" + "="*50 + "\nSIKERTELEN SZEGMENSEK JELENTÉSE")
             sorted_failures = sorted(list(failed_segments_info), key=lambda x: x['filename'])
-            for failure in sorted_failures:
-                logger.info(f"  - {failure['filename']}: {failure['text']}")
+            for failure in sorted_failures: logger.info(f"  - {failure['filename']}: {failure['text']}")
             logger.info("="*50)
 
 def main():
@@ -428,7 +445,7 @@ def main():
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     Path(args.output_dir_noise).mkdir(parents=True, exist_ok=True)
-    if args.save_failures and args.seed == -1: Path(args.failed_generations_dir).mkdir(parents=True, exist_ok=True)
+    if args.save_failures: Path(args.failed_generations_dir).mkdir(parents=True, exist_ok=True)
 
     if args.model_dir: model_dir_path = args.model_dir
     else: tts_base_path=PROJECT_ROOT/cfg_dirs['TTS']; model_dir_path=interactive_model_selection(tts_base_path)
@@ -442,14 +459,11 @@ def main():
     wav_files=list(input_wav_dir.glob('*.wav')); json_files=list(input_json_dir.glob('*.json'))
     
     if not wav_files or not json_files:
-        logger.error(f"Could not find required .wav or .json files in project '{args.project_name}'")
-        logger.error(f"Searched in: {input_wav_dir} and {input_json_dir}")
-        sys.exit(1)
+        logger.error(f"Could not find required .wav or .json files in '{args.project_name}'"); sys.exit(1)
 
     input_wav_path=wav_files[0]; input_json_path=json_files[0]
     process_file_pair(args, input_wav_path, input_json_path)
     logger.info("Script finished.")
-
 
 if __name__ == "__main__":
     mp.set_start_method('spawn', force=True)

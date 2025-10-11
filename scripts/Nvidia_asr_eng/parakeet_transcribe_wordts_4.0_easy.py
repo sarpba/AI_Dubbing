@@ -38,7 +38,7 @@ except ImportError as e:
 SUPPORTED_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 SAMPLE_RATE = 16000
 DEFAULT_CHUNK_S = 30
-DEFAULT_MAX_PAUSE_S = 0.8 #2.0 volt
+DEFAULT_MAX_PAUSE_S = 0.6 #2.0 volt
 DEFAULT_PADDING_S = 0.2
 DEFAULT_MAX_SEGMENT_S = 11.5
 TARGET_GPU_UTIL = 0.9

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Szinkron Illesztő Eszköz</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f2f5; }
+        .container { display: flex; justify-content: space-around; width: 95%; max-width: 1600px; margin-top: 20px; }
+        .column { width: 48%; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        ul { list-style-type: none; padding: 10px; height: 60vh; overflow-y: auto; }
+        li { padding: 10px; margin: 5px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        li:hover { background-color: #e9e9e9; }
+        li.selected { background-color: #a8d1ff; border-color: #007bff; }
+        .controls, .output { margin-top: 20px; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 95%; max-width: 1600px; }
+        button { padding: 10px 15px; font-size: 16px; cursor: pointer; border-radius: 5px; border: 1px solid #007bff; background-color: #007bff; color: white; margin: 5px; }
+        button:hover { background-color: #0056b3; }
+        #file-input { margin-bottom: 15px; }
+        #paired-list li { background-color: #e2f0d9; display: flex; justify-content: space-between; align-items: center; }
+        .delete-btn { background-color: #dc3545; border-color: #dc3545; }
+        .delete-btn:hover { background-color: #c82333; }
+        .time { font-size: 0.8em; color: #555; }
+    </style>
+</head>
+<body>
+    <h1>Szinkron Illesztő Eszköz</h1>
+    <div class="controls">
+        <label for="file-input"><b>1. Lépés:</b> Töltsd be a `correction_needed.json` fájlt:</label>
+        <input type="file" id="file-input" accept=".json">
+    </div>
+
+    <div class="container">
+        <div class="column">
+            <h2>Párosítatlan JSON Szegmensek</h2>
+            <ul id="json-list"></ul>
+        </div>
+        <div class="column">
+            <h2>Párosítatlan SRT Sorok</h2>
+            <ul id="srt-list"></ul>
+        </div>
+    </div>
+
+    <div class="controls">
+        <b>2. Lépés:</b> Jelölj ki egy vagy több elemet mindkét listából, majd kattints a gombra.
+        <button id="pair-btn">Párosítás</button>
+    </div>
+    
+    <div class="output">
+        <h2>Létrehozott Párosítások</h2>
+        <ul id="paired-list" style="height: auto; max-height: 40vh;"></ul>
+    </div>
+
+    <div class="controls">
+        <b>3. Lépés:</b> Ha végeztél, mentsd el a javításokat. A fájl neve `corrections_made.json` lesz.
+        <button id="save-btn">Javítások Mentése</button>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const jsonList = document.getElementById('json-list');
+        const srtList = document.getElementById('srt-list');
+        const pairBtn = document.getElementById('pair-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const pairedList = document.getElementById('paired-list');
+
+        let data = {};
+        let pairings = [];
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                data = JSON.parse(e.target.result);
+                renderLists();
+            };
+            reader.readAsText(file);
+        });
+
+        function renderLists() {
+            jsonList.innerHTML = '';
+            srtList.innerHTML = '';
+            
+            data.unassigned_json.forEach(item => {
+                const li = document.createElement('li');
+                li.dataset.id = item.id;
+                li.innerHTML = `(${item.id}) <span class="time">[${item.start.toFixed(2)} - ${item.end.toFixed(2)}]</span> ${item.text}`;
+                li.addEventListener('click', () => li.classList.toggle('selected'));
+                jsonList.appendChild(li);
+            });
+
+            data.unassigned_srt.forEach(item => {
+                const li = document.createElement('li');
+                li.dataset.id = item.id;
+                li.innerHTML = `(${item.id}) <span class="time">[${item.start.toFixed(2)} - ${item.end.toFixed(2)}]</span> ${item.text}`;
+                li.addEventListener('click', () => li.classList.toggle('selected'));
+                srtList.appendChild(li);
+            });
+        }
+        
+        function renderPairings() {
+            pairedList.innerHTML = '';
+            pairings.forEach((pair, index) => {
+                const li = document.createElement('li');
+                const jsonText = pair.json_ids.map(id => `J${id}`).join(', ');
+                const srtText = pair.srt_ids.map(id => `S${id}`).join(', ');
+                li.innerHTML = `<span><b>Pár ${index + 1}:</b> [${jsonText}] <-> [${srtText}]</span>`;
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Törlés';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = () => {
+                    pairings.splice(index, 1);
+                    renderPairings();
+                };
+                li.appendChild(deleteBtn);
+                pairedList.appendChild(li);
+            });
+        }
+
+        pairBtn.addEventListener('click', () => {
+            const selectedJson = Array.from(jsonList.querySelectorAll('.selected'));
+            const selectedSrt = Array.from(srtList.querySelectorAll('.selected'));
+
+            if (selectedJson.length === 0 || selectedSrt.length === 0) {
+                alert('Válassz ki legalább egy elemet mindkét listából!');
+                return;
+            }
+
+            const json_ids = selectedJson.map(li => parseInt(li.dataset.id));
+            const srt_ids = selectedSrt.map(li => parseInt(li.dataset.id));
+
+            pairings.push({ json_ids, srt_ids });
+
+            selectedJson.forEach(li => li.remove());
+            selectedSrt.forEach(li => li.remove());
+            
+            data.unassigned_json = data.unassigned_json.filter(item => !json_ids.includes(item.id));
+            data.unassigned_srt = data.unassigned_srt.filter(item => !srt_ids.includes(item.id));
+
+            renderPairings();
+        });
+
+        saveBtn.addEventListener('click', () => {
+            if (pairings.length === 0) {
+                alert('Nincsenek létrehozott párosítások a mentéshez!');
+                return;
+            }
+            const blob = new Blob([JSON.stringify(pairings, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'corrections_made.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+    </script>
+</body>
+</html>

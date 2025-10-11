@@ -13,3 +13,8 @@ flask-cors
 webrtcvad
 openai
 srt
+pyannote.audio>=3.0
+torch
+soundfile
+rich
+tqdm

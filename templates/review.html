@@ -215,145 +215,320 @@
                 }
             }
             
-            // ---- MÓDOSÍTOTT FÜGGVÉNY ----
-            function createTimelineSegments(currentPxPerSec) {
-                if (!segmentsTimelineContainer || !wavesurfer || segmentsData.length === 0) {
-                    if (segmentsTimelineContainer) segmentsTimelineContainer.innerHTML = '';
-                    return;
-                }
-                segmentsTimelineContainer.innerHTML = '';
-                
+            // ---- OPTIMALIZÁLT FÜGGVÉNYEK ----
+            
+            // Virtualizáció és teljesítmény optimalizálás
+            let segmentElementsCache = new Map();
+            let visibleSegments = new Set();
+            let renderQueue = [];
+            let isRendering = false;
+            let lastScrollLeft = 0;
+            let lastZoomLevel = 0;
+            
+            // Debounce függvény
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+            
+            // Optimalizált collision detection - O(n log n) helyett O(n²)
+            function calculateSegmentPositions(segments, currentPxPerSec) {
                 const verticalGap = 5;
-                const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
-
-                segmentsData.forEach((segment, index) => {
-                    const segmentContainer = document.createElement('div');
-                    segmentContainer.className = 'timeline-segment-container';
-                    let leftPositionPx = segment.start * currentPxPerSec;
-                    let segmentDuration = segment.end - segment.start;
-                    let containerWidthPx = Math.max(segmentDuration * currentPxPerSec - 10, 150);
-                    
-                    segmentContainer.style.position = 'absolute';
-                    segmentContainer.style.left = `${leftPositionPx}px`;
-                    segmentContainer.style.width = `${containerWidthPx}px`;
-
-                    const originalTextarea = document.createElement('textarea');
-                    originalTextarea.className = 'timeline-segment form-control form-control-sm original-text';
-                    originalTextarea.value = segment.text;
-                    originalTextarea.placeholder = "Original text";
-                    originalTextarea.style.resize = 'none';
-                    originalTextarea.style.overflowY = 'hidden';
-                    originalTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
-
-                    const translatedTextarea = document.createElement('textarea');
-                    translatedTextarea.className = 'timeline-segment form-control form-control-sm translated-text';
-                    translatedTextarea.value = segment.translated_text || '';
-                    translatedTextarea.placeholder = segment.translated_text ? "Fordított szöveg" : "Nincs fordítás";
-                    translatedTextarea.style.resize = 'none';
-                    translatedTextarea.style.overflowY = 'hidden';
-                    translatedTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
-                    
-                    segmentContainer.appendChild(originalTextarea);
-                    segmentContainer.appendChild(translatedTextarea);
-
-                    // --- ÚJ KÓD: AUDIO LEJÁTSZÓ HOZZÁADÁSA ---
-                    if (translatedSplitsDir) {
-                        const startTimeFormatted = formatTimeForFilename(segment.start);
-                        const endTimeFormatted = formatTimeForFilename(segment.end);
-                        const wavFilename = `${startTimeFormatted}_${endTimeFormatted}.wav`;
-                        
-                        const audioPlayer = document.createElement('audio');
-                        audioPlayer.controls = true;
-                        audioPlayer.src = `/workdir/${currentProjectName}/${translatedSplitsDir}/${wavFilename}`;
-                        audioPlayer.className = 'segment-audio-player';
-                        audioPlayer.preload = 'metadata';
-
-                        audioPlayer.addEventListener('error', function(e) {
-                            console.warn(`Nem tölthető be az audio a(z) ${index}. szegmenshez: ${this.src}`);
-                            this.style.display = 'none';
-                            updateTimelineContainerHeight();
-                        });
-                        
-                        segmentContainer.appendChild(audioPlayer);
-                    }
-                    // --- ÚJ KÓD VÉGE ---
-
-                    segmentsTimelineContainer.appendChild(segmentContainer);
-
-                    autoResizeTextarea(originalTextarea);
-                    autoResizeTextarea(translatedTextarea);
-
-                    let potentialTop = 0;
+                const positions = [];
+                const rows = [];
+                
+                // Szegmensek rendezése start idő szerint
+                const sortedSegments = segments.map((segment, index) => ({
+                    ...segment,
+                    originalIndex: index,
+                    leftPx: segment.start * currentPxPerSec,
+                    widthPx: Math.max((segment.end - segment.start) * currentPxPerSec - 10, 150)
+                })).sort((a, b) => a.start - b.start);
+                
+                sortedSegments.forEach(segment => {
+                    let rowIndex = 0;
                     let placed = false;
-                    while(!placed) {
-                        let collision = false;
-                        const siblingsOnThisLevel = Array.from(segmentsTimelineContainer.children)
-                            .filter(child => child !== segmentContainer && parseFloat(child.style.top) === potentialTop);
-
-                        for (const sibling of siblingsOnThisLevel) {
-                            const siblingLeft = parseFloat(sibling.style.left);
-                            const siblingWidth = sibling.offsetWidth;
-                            if (leftPositionPx < siblingLeft + siblingWidth && leftPositionPx + containerWidthPx > siblingLeft) {
-                                collision = true;
+                    
+                    while (!placed) {
+                        if (!rows[rowIndex]) {
+                            rows[rowIndex] = [];
+                        }
+                        
+                        // Ellenőrizzük az ütközést az aktuális sorban
+                        let hasCollision = false;
+                        for (const existingSegment of rows[rowIndex]) {
+                            if (segment.leftPx < existingSegment.rightPx &&
+                                segment.leftPx + segment.widthPx > existingSegment.leftPx) {
+                                hasCollision = true;
                                 break;
                             }
                         }
-
-                        if (!collision) {
-                            segmentContainer.style.top = `${potentialTop}px`;
+                        
+                        if (!hasCollision) {
+                            const segmentData = {
+                                leftPx: segment.leftPx,
+                                rightPx: segment.leftPx + segment.widthPx,
+                                rowIndex: rowIndex
+                            };
+                            rows[rowIndex].push(segmentData);
+                            positions[segment.originalIndex] = {
+                                top: rowIndex * (80 + verticalGap), // Becsült sor magasság
+                                left: segment.leftPx,
+                                width: segment.widthPx
+                            };
                             placed = true;
                         } else {
-                            let maxRowHeight = 0;
-                            siblingsOnThisLevel.forEach(sibling => {
-                                if (sibling.offsetHeight > maxRowHeight) maxRowHeight = sibling.offsetHeight;
-                            });
-                            potentialTop += maxRowHeight + verticalGap;
+                            rowIndex++;
                         }
                     }
-
-                    // Eseménykezelők
-                    [originalTextarea, translatedTextarea].forEach(textarea => {
-                         textarea.addEventListener('input', function() {
-                            autoResizeTextarea(this);
-                            updateTimelineContainerHeight();
-                        });
-                        textarea.addEventListener('keydown', function(event) {
-                            if (event.key === 'Enter') {
-                                event.preventDefault(); 
-                                this.blur(); 
-                            }
-                        });
-                        textarea.addEventListener('click', () => wavesurfer.pause());
-                        textarea.addEventListener('dblclick', function(event) {
-                            event.preventDefault(); 
-                            event.stopPropagation();
-                            currentContextMenuSegmentIndex = index;
-                            contextMenu.style.left = `${event.pageX}px`;
-                            contextMenu.style.top = `${event.pageY}px`;
-                            contextMenu.style.display = 'block';
-                        });
-                    });
-                    
-                    originalTextarea.addEventListener('blur', function() {
-                        const newText = this.value;
-                        if (newText !== segment.text) {
-                            updateSegmentOnServer(index, segment.start, segment.end, newText, segment.translated_text);
-                        }
-                    });
-
-                    translatedTextarea.addEventListener('blur', function() {
-                        const newTranslated = this.value;
-                        if (newTranslated !== segment.translated_text) {
-                            updateSegmentOnServer(index, segment.start, segment.end, segment.text, newTranslated);
-                        }
-                    });
                 });
                 
-                updateTimelineContainerHeight();
+                return positions;
             }
-            // ---- MÓDOSÍTOTT FÜGGVÉNY VÉGE ----
+            
+            // Viewport alapú virtualizáció
+            function getVisibleSegmentIndices(scrollLeft, viewportWidth, currentPxPerSec) {
+                const buffer = viewportWidth * 0.5; // 50% buffer mindkét oldalon
+                const startTime = Math.max(0, (scrollLeft - buffer) / currentPxPerSec);
+                const endTime = (scrollLeft + viewportWidth + buffer) / currentPxPerSec;
+                
+                const visibleIndices = [];
+                segmentsData.forEach((segment, index) => {
+                    if (segment.end >= startTime && segment.start <= endTime) {
+                        visibleIndices.push(index);
+                    }
+                });
+                
+                return visibleIndices;
+            }
+            
+            // Aszinkron DOM elem létrehozás
+            function createSegmentElement(segment, index, position, currentPxPerSec) {
+                return new Promise((resolve) => {
+                    requestAnimationFrame(() => {
+                        const segmentContainer = document.createElement('div');
+                        segmentContainer.className = 'timeline-segment-container';
+                        segmentContainer.style.position = 'absolute';
+                        segmentContainer.style.left = `${position.left}px`;
+                        segmentContainer.style.top = `${position.top}px`;
+                        segmentContainer.style.width = `${position.width}px`;
+                        segmentContainer.dataset.segmentIndex = index;
+
+                        const originalTextarea = document.createElement('textarea');
+                        originalTextarea.className = 'timeline-segment form-control form-control-sm original-text';
+                        originalTextarea.value = segment.text;
+                        originalTextarea.placeholder = "Original text";
+                        originalTextarea.style.resize = 'none';
+                        originalTextarea.style.overflowY = 'hidden';
+                        originalTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
+
+                        const translatedTextarea = document.createElement('textarea');
+                        translatedTextarea.className = 'timeline-segment form-control form-control-sm translated-text';
+                        translatedTextarea.value = segment.translated_text || '';
+                        translatedTextarea.placeholder = segment.translated_text ? "Fordított szöveg" : "Nincs fordítás";
+                        translatedTextarea.style.resize = 'none';
+                        translatedTextarea.style.overflowY = 'hidden';
+                        translatedTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
+                        
+                        segmentContainer.appendChild(originalTextarea);
+                        segmentContainer.appendChild(translatedTextarea);
+
+                        // Audio player hozzáadása
+                        const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
+                        if (translatedSplitsDir) {
+                            const startTimeFormatted = formatTimeForFilename(segment.start);
+                            const endTimeFormatted = formatTimeForFilename(segment.end);
+                            const wavFilename = `${startTimeFormatted}_${endTimeFormatted}.wav`;
+                            
+                            const audioPlayer = document.createElement('audio');
+                            audioPlayer.controls = true;
+                            audioPlayer.src = `/workdir/${currentProjectName}/${translatedSplitsDir}/${wavFilename}`;
+                            audioPlayer.className = 'segment-audio-player';
+                            audioPlayer.preload = 'none'; // Lazy loading
+                            audioPlayer.addEventListener('error', function(e) {
+                                console.warn(`Nem tölthető be az audio a(z) ${index}. szegmenshez: ${this.src}`);
+                                this.style.display = 'none';
+                            });
+                            
+                            segmentContainer.appendChild(audioPlayer);
+                        }
+
+                        autoResizeTextarea(originalTextarea);
+                        autoResizeTextarea(translatedTextarea);
+                        
+                        resolve({ element: segmentContainer, index, originalTextarea, translatedTextarea });
+                    });
+                });
+            }
+            
+            // Batch DOM műveletek
+            async function renderVisibleSegments(currentPxPerSec) {
+                if (isRendering) return;
+                isRendering = true;
+                
+                try {
+                    const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
+                    const scrollLeft = scrollWrapper ? scrollWrapper.scrollLeft : 0;
+                    const viewportWidth = scrollWrapper ? scrollWrapper.clientWidth : 1000;
+                    
+                    const visibleIndices = getVisibleSegmentIndices(scrollLeft, viewportWidth, currentPxPerSec);
+                    const positions = calculateSegmentPositions(segmentsData, currentPxPerSec);
+                    
+                    // Eltávolítjuk a már nem látható szegmenseket
+                    const elementsToRemove = [];
+                    visibleSegments.forEach(index => {
+                        if (!visibleIndices.includes(index)) {
+                            const element = segmentElementsCache.get(index);
+                            if (element && element.parentNode) {
+                                elementsToRemove.push(element);
+                            }
+                            visibleSegments.delete(index);
+                        }
+                    });
+                    
+                    // Batch removal
+                    elementsToRemove.forEach(element => {
+                        segmentsTimelineContainer.removeChild(element);
+                    });
+                    
+                    // Új látható szegmensek hozzáadása
+                    const newSegments = visibleIndices.filter(index => !visibleSegments.has(index));
+                    const renderPromises = [];
+                    
+                    for (const index of newSegments) {
+                        if (!segmentElementsCache.has(index)) {
+                            const segment = segmentsData[index];
+                            const position = positions[index];
+                            if (segment && position) {
+                                renderPromises.push(createSegmentElement(segment, index, position, currentPxPerSec));
+                            }
+                        } else {
+                            // Ha már van cache-elt elem, de nem látható, hozzáadjuk a láthatókhoz
+                            const cachedElement = segmentElementsCache.get(index);
+                            if (cachedElement && !cachedElement.parentNode) {
+                                visibleSegments.add(index);
+                                const position = positions[index];
+                                if (position) {
+                                    cachedElement.style.left = `${position.left}px`;
+                                    cachedElement.style.top = `${position.top}px`;
+                                    cachedElement.style.width = `${position.width}px`;
+                                    segmentsTimelineContainer.appendChild(cachedElement);
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Várjuk meg az összes új elem létrehozását
+                    const newElements = await Promise.all(renderPromises);
+                    
+                    // Batch DOM insertion
+                    const fragment = document.createDocumentFragment();
+                    newElements.forEach(({ element, index, originalTextarea, translatedTextarea }) => {
+                        segmentElementsCache.set(index, element);
+                        visibleSegments.add(index);
+                        fragment.appendChild(element);
+                        
+                        // Event listeners hozzáadása az új elemekhez
+                        attachSegmentEventListeners(originalTextarea, translatedTextarea, index);
+                    });
+                    
+                    segmentsTimelineContainer.appendChild(fragment);
+                    
+                    // Meglévő elemek pozíciójának frissítése
+                    visibleIndices.forEach(index => {
+                        if (segmentElementsCache.has(index) && !newSegments.includes(index)) {
+                            const element = segmentElementsCache.get(index);
+                            const position = positions[index];
+                            element.style.left = `${position.left}px`;
+                            element.style.top = `${position.top}px`;
+                            element.style.width = `${position.width}px`;
+                        }
+                    });
+                    
+                    updateTimelineContainerHeight();
+                    
+                } finally {
+                    isRendering = false;
+                }
+            }
+            
+            // Event listener csatolás
+            function attachSegmentEventListeners(originalTextarea, translatedTextarea, index) {
+                [originalTextarea, translatedTextarea].forEach(textarea => {
+                    textarea.addEventListener('input', debounce(function() {
+                        autoResizeTextarea(this);
+                        updateTimelineContainerHeight();
+                    }, 100));
+                    
+                    textarea.addEventListener('keydown', function(event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            this.blur();
+                        }
+                    });
+                    
+                    textarea.addEventListener('click', () => wavesurfer.pause());
+                    // Double-click esemény eltávolítva - event delegation használjuk helyette
+                });
+                
+                originalTextarea.addEventListener('blur', function() {
+                    const newText = this.value;
+                    const segment = segmentsData[index];
+                    if (newText !== segment.text) {
+                        updateSegmentOnServer(index, segment.start, segment.end, newText, segment.translated_text || '');
+                    }
+                });
+
+                translatedTextarea.addEventListener('blur', function() {
+                    const newTranslated = this.value;
+                    const segment = segmentsData[index];
+                    if (newTranslated !== (segment.translated_text || '')) {
+                        updateSegmentOnServer(index, segment.start, segment.end, segment.text, newTranslated);
+                    }
+                });
+            }
+            
+            // Optimalizált fő függvény
+            const debouncedRenderSegments = debounce(renderVisibleSegments, 50);
+            
+            function createTimelineSegments(currentPxPerSec) {
+                console.log(`[TIMELINE] Creating timeline segments, count: ${segmentsData.length}, pxPerSec: ${currentPxPerSec}`);
+                
+                if (!segmentsTimelineContainer || !wavesurfer || segmentsData.length === 0) {
+                    if (segmentsTimelineContainer) {
+                        segmentsTimelineContainer.innerHTML = '';
+                        console.log('[TIMELINE] Cleared timeline container - no segments or missing dependencies');
+                    }
+                    return;
+                }
+                
+                // Ha a zoom szint jelentősen változott, tisztítsuk a cache-t
+                if (Math.abs(currentPxPerSec - lastZoomLevel) > 1) {
+                    console.log(`[TIMELINE] Zoom level changed significantly: ${lastZoomLevel} -> ${currentPxPerSec}, clearing cache`);
+                    segmentElementsCache.clear();
+                    visibleSegments.clear();
+                    segmentsTimelineContainer.innerHTML = '';
+                    lastZoomLevel = currentPxPerSec;
+                }
+                
+                debouncedRenderSegments(currentPxPerSec);
+            }
+            // ---- OPTIMALIZÁLT FÜGGVÉNYEK VÉGE ----
 
             function updateSegmentOnServer(segmentIndex, newStart, newEnd, newText, newTranslatedText) {
+                // Validáció
+                if (segmentIndex < 0 || segmentIndex >= segmentsData.length) {
+                    console.error('Invalid segment index:', segmentIndex);
+                    return;
+                }
+                
                 const originalSegment = JSON.parse(JSON.stringify(segmentsData[segmentIndex]));
                 const payload = {
                     json_file_name: currentJsonFileName,
@@ -364,6 +539,7 @@
                     new_translated_text: newTranslatedText
                 };
                 
+                // Optimista frissítés
                 segmentsData[segmentIndex].start = payload.new_start;
                 segmentsData[segmentIndex].end = payload.new_end;
                 segmentsData[segmentIndex].text = newText;
@@ -379,15 +555,37 @@
                     if (!data.success) {
                         console.error('Szerver oldali hiba a mentéskor:', data.error);
                         alert(`Hiba a szegmens mentésekor: ${data.error}`);
-                        segmentsData[segmentIndex] = originalSegment; // Rollback
-                        createTimelineSegments(wavesurfer.options.minPxPerSec); // Refresh UI
+                        // Rollback
+                        segmentsData[segmentIndex] = originalSegment;
+                        // Frissítjük a cache-t és a UI-t
+                        segmentElementsCache.clear();
+                        visibleSegments.clear();
+                        createTimelineSegments(wavesurfer.options.minPxPerSec);
+                    } else {
+                        // Sikeres mentés esetén frissítjük a látható elemeket
+                        if (visibleSegments.has(segmentIndex)) {
+                            const element = segmentElementsCache.get(segmentIndex);
+                            if (element) {
+                                const originalTextarea = element.querySelector('.original-text');
+                                const translatedTextarea = element.querySelector('.translated-text');
+                                if (originalTextarea && originalTextarea.value !== newText) {
+                                    originalTextarea.value = newText;
+                                }
+                                if (translatedTextarea && translatedTextarea.value !== newTranslatedText) {
+                                    translatedTextarea.value = newTranslatedText;
+                                }
+                            }
+                        }
                     }
                 })
                 .catch(error => {
                     console.error('Hálózati vagy egyéb hiba a mentéskor:', error);
                     alert(`Hiba a szegmens mentésekor: ${error.error || error.message || 'Ismeretlen hiba'}`);
-                    segmentsData[segmentIndex] = originalSegment; // Rollback
-                    createTimelineSegments(wavesurfer.options.minPxPerSec); // Refresh UI
+                    // Rollback
+                    segmentsData[segmentIndex] = originalSegment;
+                    segmentElementsCache.clear();
+                    visibleSegments.clear();
+                    createTimelineSegments(wavesurfer.options.minPxPerSec);
                 });
             }
 
@@ -405,12 +603,20 @@
                 wavesurfer.on('ready', function () {
                     regionsPlugin = wavesurfer.registerPlugin(WaveSurfer.Regions.create());
 
-                    regionsPlugin.on('region-updated', (region) => { 
+                    regionsPlugin.on('region-updated', (region) => {
                         const originalIndex = regionIdToOriginalIndexMap[region.id];
-                        if (typeof originalIndex === 'undefined') return;
+                        if (typeof originalIndex === 'undefined') {
+                            console.warn('Region updated but no mapping found for region ID:', region.id);
+                            return;
+                        }
+                        if (originalIndex >= segmentsData.length) {
+                            console.warn('Region index out of bounds:', originalIndex, 'segments length:', segmentsData.length);
+                            return;
+                        }
+                        const segment = segmentsData[originalIndex];
                         const newStart = parseFloat(region.start.toFixed(3));
                         const newEnd = parseFloat(region.end.toFixed(3));
-                        updateSegmentOnServer(originalIndex, newStart, newEnd, segmentsData[originalIndex].text, segmentsData[originalIndex].translated_text);
+                        updateSegmentOnServer(originalIndex, newStart, newEnd, segment.text, segment.translated_text || '');
                     });
 
                     regionsPlugin.on('region-clicked', (region, e) => {
@@ -455,26 +661,63 @@
             wavesurfer.on('pause', () => document.getElementById('playPauseBtn').textContent = 'Lejátszás');
             wavesurfer.on('finish', () => document.getElementById('playPauseBtn').textContent = 'Lejátszás');
 
-            document.getElementById('waveform-scroll-wrapper')?.addEventListener('wheel', (event) => {
-                if (event.deltaY !== 0) {
+            // Optimalizált scroll kezelés
+            const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
+            if (scrollWrapper) {
+                // Wheel scroll optimalizálás
+                scrollWrapper.addEventListener('wheel', (event) => {
+                    if (event.deltaY !== 0) {
+                        event.preventDefault();
+                        event.currentTarget.scrollLeft += event.deltaY;
+                    }
+                }, { passive: false });
+                
+                // Scroll-alapú virtualizáció
+                const debouncedScrollHandler = debounce(() => {
+                    if (wavesurfer && wavesurfer.options) {
+                        debouncedRenderSegments(wavesurfer.options.minPxPerSec);
+                    }
+                }, 16); // ~60fps
+                
+                scrollWrapper.addEventListener('scroll', debouncedScrollHandler);
+            }
+            
+            // Event delegation a context menühöz
+            segmentsTimelineContainer.addEventListener('dblclick', function(event) {
+                const segmentContainer = event.target.closest('.timeline-segment-container');
+                if (segmentContainer && segmentContainer.dataset.segmentIndex) {
                     event.preventDefault();
-                    event.currentTarget.scrollLeft += event.deltaY;
+                    event.stopPropagation();
+                    currentContextMenuSegmentIndex = parseInt(segmentContainer.dataset.segmentIndex);
+                    contextMenu.style.left = `${event.pageX}px`;
+                    contextMenu.style.top = `${event.pageY}px`;
+                    contextMenu.style.display = 'block';
                 }
-            }, { passive: false });
+            });
 
             function fullRefreshUI() {
                 regionsPlugin.clearRegions();
                 regionIdToOriginalIndexMap = {};
-                segmentsTimelineContainer.innerHTML = '';
                 
+                // Cache és látható szegmensek törlése
+                segmentElementsCache.clear();
+                visibleSegments.clear();
+                segmentsTimelineContainer.innerHTML = '';
+                lastZoomLevel = 0; // Reset zoom level to force cache clear
+                
+                // Regions újra létrehozása
                 segmentsData.forEach((segment, index) => {
-                    const region = regionsPlugin.addRegion({
-                        start: segment.start,
-                        end: segment.end,
-                        color: 'rgba(0, 123, 255, 0.1)',
-                        resize: true
-                    });
-                    regionIdToOriginalIndexMap[region.id] = index;
+                    try {
+                        const region = regionsPlugin.addRegion({
+                            start: segment.start,
+                            end: segment.end,
+                            color: 'rgba(0, 123, 255, 0.1)',
+                            resize: true
+                        });
+                        regionIdToOriginalIndexMap[region.id] = index;
+                    } catch (e) {
+                        console.error(`Error adding region ${index}:`, e);
+                    }
                 });
                 
                 createTimelineSegments(wavesurfer.options.minPxPerSec);

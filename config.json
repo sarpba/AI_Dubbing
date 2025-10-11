@@ -25,8 +25,9 @@
         "logs": "logs"
     },
     "LAST_USED_PARAMS": {
-        "translation_context": "TV series.",
-        "tts_model_path": "TTS/hun_v1_v3",
+        "translation_context": "Foundation TV series",
+        "tts_model_path": "TTS/hun_v1_2509",
+        "tts_model_path_run4": "TTS/hun_v5",
         "lang_code": "hun"
     }
 }
