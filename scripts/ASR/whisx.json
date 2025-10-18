@@ -1,0 +1,37 @@
+{
+  "enviroment": "sync",
+  "script": "ASR/whisx.py",
+  "required": [
+    {
+      "name": "directory",
+      "type": "positional",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "gpus",
+      "flags": [
+        "--gpus"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "hf_token",
+      "flags": [
+        "--hf_token"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "language",
+      "flags": [
+        "--language"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ]
+}

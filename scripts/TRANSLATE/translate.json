@@ -1,0 +1,57 @@
+{
+  "enviroment": "sync",
+  "script": "TRANSLATE/translate.py",
+  "description": "Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.",
+  "required": [
+    {
+      "name": "input_dir",
+      "flags": [
+        "-input_dir"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "output_dir",
+      "flags": [
+        "-output_dir"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "input_language",
+      "flags": [
+        "-input_language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "output_language",
+      "flags": [
+        "-output_language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "auth_key",
+      "flags": [
+        "-auth_key"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

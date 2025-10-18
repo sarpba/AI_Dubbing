@@ -898,8 +898,15 @@
                 title.textContent = script.display_name || script.script;
                 const subtitle = document.createElement('div');
                 subtitle.className = 'small text-muted';
-                subtitle.textContent = script.script;
+                subtitle.textContent = script.description || script.script;
                 titleWrap.append(title, subtitle);
+
+                if (script.description && script.script && script.description !== script.script) {
+                    const pathInfo = document.createElement('div');
+                    pathInfo.className = 'small text-muted';
+                    pathInfo.textContent = script.script;
+                    titleWrap.append(pathInfo);
+                }
 
                 const addBtn = document.createElement('button');
                 addBtn.type = 'button';

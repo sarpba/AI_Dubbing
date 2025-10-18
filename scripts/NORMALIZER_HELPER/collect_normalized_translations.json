@@ -1,0 +1,26 @@
+{
+  "enviroment": "sync",
+  "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
+  "description": "Az idegen nyelvű szavakat kigyüjti a normalizáló canges_new.csv fileba.",
+  "required": [
+    {
+      "name": "project_dir",
+      "flags": [
+        "-p",
+        "--project"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

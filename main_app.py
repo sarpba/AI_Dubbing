@@ -53,7 +53,8 @@ VIDEO_MIME_MAP = {
     '.mpeg': 'video/mpeg'
 }
 
-SCRIPTS_CONFIG_PATH = Path(app.root_path) / 'scripts' / 'scripts.json'
+SCRIPTS_DIR = Path(app.root_path) / 'scripts'
+SCRIPTS_CONFIG_PATH = SCRIPTS_DIR / 'scripts.json'
 SCRIPTS_CACHE: Dict[str, Any] = {'mtime': None, 'data': []}
 SCRIPTS_CACHE_LOCK = threading.Lock()
 CONDA_INFO_CACHE: Optional[dict] = None
@@ -118,22 +119,80 @@ def infer_autofill_kind(param_name: str) -> Optional[str]:
 
 
 def load_scripts_file() -> List[Dict[str, Any]]:
-    if not SCRIPTS_CONFIG_PATH.is_file():
-        logging.warning("scripts.json nem található: %s", SCRIPTS_CONFIG_PATH)
+    entries = rebuild_scripts_config_file()
+    return entries
+
+
+def rebuild_scripts_config_file() -> List[Dict[str, Any]]:
+    if not SCRIPTS_DIR.exists():
+        logging.warning("scripts könyvtár nem található: %s", SCRIPTS_DIR)
         return []
-    try:
-        with SCRIPTS_CONFIG_PATH.open('r', encoding='utf-8') as fp:
-            payload = json.load(fp)
-    except json.JSONDecodeError as exc:
-        logging.error("Nem sikerült beolvasni a scripts.json fájlt: %s", exc)
-        return []
-    except OSError as exc:
-        logging.error("Nem olvasható a scripts.json fájl: %s", exc)
-        return []
-    if not isinstance(payload, list):
-        logging.error("A scripts.json tartalma nem lista.")
-        return []
-    return payload
+
+    collected_entries: List[Dict[str, Any]] = []
+    latest_source_mtime = 0.0
+
+    for json_path in SCRIPTS_DIR.rglob('*.json'):
+        if json_path == SCRIPTS_CONFIG_PATH:
+            continue
+
+        relative_json = json_path.relative_to(SCRIPTS_DIR)
+        py_candidate = SCRIPTS_DIR / relative_json.with_suffix('.py')
+        if not py_candidate.is_file():
+            continue
+
+        try:
+            with json_path.open('r', encoding='utf-8') as fp:
+                entry = json.load(fp)
+        except json.JSONDecodeError as exc:
+            logging.error("Hibás JSON fájl: %s (%s)", json_path, exc)
+            continue
+        except OSError as exc:
+            logging.error("Nem olvasható JSON fájl: %s (%s)", json_path, exc)
+            continue
+
+        if not isinstance(entry, dict):
+            logging.warning("A JSON fájl nem objektum: %s", json_path)
+            continue
+
+        # biztosítsuk, hogy a script mező a valós relatív útvonalra mutat
+        relative_script = relative_json.with_suffix('.py').as_posix()
+        # Szinkronban tartjuk a script mezőt a tényleges relatív útvonallal
+        entry['script'] = relative_script
+
+        collected_entries.append(entry)
+
+        try:
+            latest_source_mtime = max(
+                latest_source_mtime,
+                json_path.stat().st_mtime,
+                py_candidate.stat().st_mtime,
+            )
+        except OSError:
+            continue
+
+    collected_entries.sort(key=lambda item: item.get('script', ''))
+
+    existing_data: Optional[List[Dict[str, Any]]] = None
+    target_mtime = 0.0
+    if SCRIPTS_CONFIG_PATH.exists():
+        try:
+            target_mtime = SCRIPTS_CONFIG_PATH.stat().st_mtime
+            with SCRIPTS_CONFIG_PATH.open('r', encoding='utf-8') as fp:
+                existing_data = json.load(fp)
+        except (OSError, json.JSONDecodeError):
+            existing_data = None
+
+    if existing_data != collected_entries or target_mtime < latest_source_mtime:
+        try:
+            SCRIPTS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with SCRIPTS_CONFIG_PATH.open('w', encoding='utf-8') as fp:
+                json.dump(collected_entries, fp, ensure_ascii=False, indent=2)
+                fp.write('\n')
+        except OSError as exc:
+            logging.error("Nem sikerült frissíteni a scripts.json fájlt: %s", exc)
+            return collected_entries
+
+    return collected_entries
 
 
 def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -167,6 +226,7 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         'script': script_name,
         'display_name': raw_entry.get('name') or script_name,
         'environment': environment,
+        'description': raw_entry.get('description'),
         'parameters': parameters,
         'notes': raw_entry.get('notes'),
         'raw': raw_entry,
@@ -186,6 +246,10 @@ def get_scripts_catalog(force_reload: bool = False) -> List[Dict[str, Any]]:
             return copy.deepcopy(SCRIPTS_CACHE['data'])
 
         raw_entries = load_scripts_file()
+        try:
+            current_mtime = SCRIPTS_CONFIG_PATH.stat().st_mtime
+        except OSError:
+            current_mtime = None
         catalog = []
         for entry in raw_entries:
             prepared = prepare_script_entry(entry)
