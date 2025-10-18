@@ -3,13 +3,13 @@
   "steps": [
     {
       "script": "AV/extract_audio_easy_channels.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AV/separate_audio_easy_codex.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "chunk_size": 5,
@@ -17,8 +17,14 @@
       }
     },
     {
-      "script": "ASR/parakeet-tdt-0.6b-v2.py",
+      "script": "ASR/whisx.py",
       "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "ASR/parakeet-tdt-0.6b-v2.py",
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
