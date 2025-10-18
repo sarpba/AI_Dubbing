@@ -20,6 +20,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            font-weight: 600;
         }
         .file-browser-item {
             display: flex;
@@ -27,14 +28,12 @@
             gap: 0.5rem;
             padding: 0.15rem 0;
         }
-        .file-browser-icon {
-            width: 1.5rem;
-            display: inline-flex;
-            justify-content: center;
-            font-weight: 600;
-        }
         details.file-browser-directory > summary {
             cursor: pointer;
+        }
+        .file-browser-children {
+            margin-left: 1rem;
+            padding-left: 0.5rem;
         }
     </style>
     <script>
@@ -174,6 +173,129 @@
 
         function cloneObject(obj) {
             return JSON.parse(JSON.stringify(obj || {}));
+        }
+
+        function buildWorkdirUrl(relativePath) {
+            const segments = [PROJECT_NAME];
+            if (relativePath) {
+                relativePath.split('/').forEach(segment => {
+                    if (segment) {
+                        segments.push(segment);
+                    }
+                });
+            }
+            const encoded = segments.map(part => encodeURIComponent(part));
+            return `/workdir/${encoded.join('/')}`;
+        }
+
+        function createFileTreeList(entries) {
+            const list = document.createElement('ul');
+            list.className = 'file-browser-tree list-unstyled mb-0';
+            (entries || []).forEach(entry => {
+                const item = document.createElement('li');
+                if (entry.type === 'directory') {
+                    const details = document.createElement('details');
+                    details.className = 'file-browser-directory';
+                    details.dataset.path = entry.path || '';
+
+                    const summary = document.createElement('summary');
+                    summary.className = 'file-browser-summary';
+                    summary.textContent = entry.name || '(névtelen mappa)';
+                    details.append(summary);
+
+                    const children = document.createElement('div');
+                    children.className = 'file-browser-children';
+                    if (entry.children && entry.children.length) {
+                        children.appendChild(createFileTreeList(entry.children));
+                    }
+                    details.append(children);
+
+                    item.appendChild(details);
+                } else {
+                    const fileRow = document.createElement('div');
+                    fileRow.className = 'file-browser-item';
+
+                    const link = document.createElement('a');
+                    link.href = buildWorkdirUrl(entry.path || '');
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.textContent = entry.name || '(névtelen fájl)';
+
+                    fileRow.appendChild(link);
+                    item.appendChild(fileRow);
+                }
+                list.appendChild(item);
+            });
+            return list;
+        }
+
+        async function refreshDirectory(detailsElement) {
+            const childrenContainer = detailsElement.querySelector('.file-browser-children');
+            if (!childrenContainer) {
+                return;
+            }
+            const relativePath = detailsElement.dataset.path || '';
+            childrenContainer.innerHTML = '<div class="small text-muted">Betöltés...</div>';
+            try {
+                const url = `/api/project-tree/${encodeURIComponent(PROJECT_NAME)}?path=${encodeURIComponent(relativePath)}`;
+                const response = await fetch(url);
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba');
+                }
+                const entries = result.entries || [];
+                childrenContainer.innerHTML = '';
+                if (!entries.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'small text-muted';
+                    empty.textContent = 'A mappa üres.';
+                    childrenContainer.appendChild(empty);
+                } else {
+                    childrenContainer.appendChild(createFileTreeList(entries));
+                }
+            } catch (error) {
+                console.error('Directory refresh failed:', error);
+                childrenContainer.innerHTML = '<div class="text-danger small">Nem sikerült betölteni a könyvtár tartalmát.</div>';
+            }
+        }
+
+        function initFileBrowser() {
+            const browserRoot = document.getElementById('projectFileBrowser');
+            if (!browserRoot) {
+                return;
+            }
+
+            browserRoot.addEventListener('click', async (event) => {
+                const summary = event.target.closest('summary.file-browser-summary');
+                if (!summary || !browserRoot.contains(summary)) {
+                    return;
+                }
+
+                const details = summary.closest('details.file-browser-directory');
+                if (!details) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                if (details.dataset.loading === 'true') {
+                    return;
+                }
+
+                const isOpen = details.hasAttribute('open');
+                if (isOpen) {
+                    details.removeAttribute('open');
+                    return;
+                }
+
+                details.dataset.loading = 'true';
+                try {
+                    await refreshDirectory(details);
+                    details.setAttribute('open', '');
+                } finally {
+                    delete details.dataset.loading;
+                }
+            });
         }
 
         function findScriptById(scriptId) {
@@ -722,17 +844,27 @@
                     buttonRow.append(reviewBtn, continueBtn);
                     infoCell.append(buttonRow);
                 } else {
+                    const titleWrap = document.createElement('div');
                     const title = document.createElement('div');
                     title.className = 'fw-semibold';
                     title.textContent = (script && script.display_name) || step.script;
-                    infoCell.append(title);
+                    titleWrap.append(title);
 
-                    if (script) {
+                    if (script && script.description) {
+                        const desc = document.createElement('div');
+                        desc.className = 'small text-muted';
+                        desc.textContent = script.description;
+                        titleWrap.append(desc);
+                    }
+
+                    if (script && script.script) {
                         const scriptPath = document.createElement('div');
                         scriptPath.className = 'small text-muted';
                         scriptPath.textContent = script.script;
-                        infoCell.append(scriptPath);
+                        titleWrap.append(scriptPath);
                     }
+
+                    infoCell.append(titleWrap);
 
                     const summary = document.createElement('div');
                     summary.className = 'small mt-1';
@@ -2029,6 +2161,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            initFileBrowser();
             initWorkflowModals();
             initWorkflowButtons();
             initWorkflowKeyModal();
@@ -2046,16 +2179,18 @@
             {%- for entry in entries %}
                 <li>
                     {%- if entry.type == 'directory' %}
-                        <details class="file-browser-directory" open>
+                        <details class="file-browser-directory" data-path="{{ entry.path }}">
                             <summary class="file-browser-summary">
-                                <span class="file-browser-icon">[D]</span>
                                 <span>{{ entry.name }}</span>
                             </summary>
-                            {{ render_file_tree(entry.children) }}
+                            <div class="file-browser-children">
+                                {%- if entry.children %}
+                                    {{ render_file_tree(entry.children) }}
+                                {%- endif %}
+                            </div>
                         </details>
                     {%- else %}
                         <div class="file-browser-item">
-                            <span class="file-browser-icon">[F]</span>
                             <a href="{{ url_for('serve_workdir', filename=project.name + '/' + entry.path) }}" target="_blank" rel="noopener">
                                 {{ entry.name }}
                             </a>
@@ -2212,7 +2347,7 @@
             </div>
             <div class="card-body">
                 {% if project_tree %}
-                    <div class="file-browser">
+                    <div class="file-browser" id="projectFileBrowser">
                         {{ render_file_tree(project_tree) }}
                     </div>
                 {% else %}

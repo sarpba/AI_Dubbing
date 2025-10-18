@@ -105,6 +105,31 @@ def is_subpath(child_path, parent_path):
         return False
 
 
+def collect_directory_entries(root_path: str, target_path: str) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    try:
+        for name in sorted(os.listdir(target_path)):
+            if name.startswith('.'):
+                continue
+            full_path = os.path.join(target_path, name)
+            rel_path = os.path.relpath(full_path, root_path).replace('\\', '/')
+            if os.path.isdir(full_path):
+                entries.append({
+                    'name': name,
+                    'type': 'directory',
+                    'path': rel_path
+                })
+            else:
+                entries.append({
+                    'name': name,
+                    'type': 'file',
+                    'path': rel_path
+                })
+    except Exception as exc:
+        logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", target_path, exc)
+    return entries
+
+
 def infer_autofill_kind(param_name: str) -> Optional[str]:
     if not param_name:
         return None
@@ -1221,6 +1246,32 @@ def show_project(project_name):
                          video_mime_map=VIDEO_MIME_MAP,
                          can_review=can_review,
                          has_transcribable_audio=has_transcribable_audio)
+
+
+@app.route('/api/project-tree/<project_name>', methods=['GET'])
+def get_project_directory_listing(project_name):
+    sanitized_project = secure_filename(project_name)
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    base_dir = os.path.join(workdir_path, sanitized_project)
+    base_dir_abs = os.path.abspath(base_dir)
+
+    if not os.path.isdir(base_dir_abs):
+        return jsonify({'success': False, 'error': 'Projekt nem található'}), 404
+
+    requested_path = (request.args.get('path') or '').strip()
+    target_dir = base_dir_abs
+    if requested_path:
+        target_dir = os.path.abspath(os.path.join(base_dir_abs, requested_path))
+
+    if not is_subpath(target_dir, base_dir_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen útvonal'}), 400
+    if not os.path.isdir(target_dir):
+        return jsonify({'success': False, 'error': 'A megadott könyvtár nem található'}), 404
+
+    entries = collect_directory_entries(base_dir_abs, target_dir)
+    return jsonify({'success': True, 'entries': entries})
+
 
 @app.route('/review/<project_name>')
 def review_project(project_name):
