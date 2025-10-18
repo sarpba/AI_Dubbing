@@ -10,9 +10,21 @@ from types import ModuleType
 from typing import Any, Callable, Dict, Iterable, List
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = REPO_ROOT / "config.json"
+def resolve_repo_root() -> Path:
+    """
+    Locate the repository root by traversing parent directories until config.json is found.
+    This allows the script to run correctly even if it is moved deeper into the repo.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "config.json").exists():
+            return candidate
+    raise SystemExit(
+        "Unable to determine repository root. Ensure config.json is present in the repo."
+    )
 
+
+REPO_ROOT = resolve_repo_root()
+CONFIG_PATH = REPO_ROOT / "config.json"
 NORMALISER_PATH = REPO_ROOT / "normalisers" / "hun" / "normaliser.py"
 
 
