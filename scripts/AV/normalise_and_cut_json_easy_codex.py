@@ -15,6 +15,17 @@ from pathlib import Path
 from pydub import AudioSegment
 import json
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
 for candidate in Path(__file__).resolve().parents:
     if (candidate / "tools").is_dir():
         if str(candidate) not in sys.path:
@@ -285,18 +296,23 @@ if __name__ == "__main__":
     start_time = time.time()
     
     try:
-        script_dir = Path(__file__).resolve().parent
-        config_path = script_dir.parent / 'config.json'
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"[HIBA] {exc}")
+        sys.exit(1)
+
+    config_path = project_root / 'config.json'
+    try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
     except FileNotFoundError:
         print(f"[HIBA] A konfigurációs fájl nem található: {config_path}")
         sys.exit(1)
-    except json.JSONDecodeError:
-        print(f"[HIBA] A konfigurációs fájl hibás formátumú: {config_path}")
+    except json.JSONDecodeError as exc:
+        print(f"[HIBA] A konfigurációs fájl hibás formátumú ({config_path}): {exc}")
         sys.exit(1)
 
-    workdir_base = Path(config['DIRECTORIES']['workdir'])
+    workdir_base = project_root / config['DIRECTORIES']['workdir']
     project_path = workdir_base / args.project_name
     subdirs = config['PROJECT_SUBDIRS']
     input_dir = project_path / subdirs['translated_splits']

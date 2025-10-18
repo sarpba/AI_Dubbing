@@ -32,7 +32,22 @@
   },
   "LAST_WORKFLOW": [
     {
-      "script": "ASR/parakeet-tdt-0.6b-v3.py",
+      "script": "AV/extract_audio_easy_channels.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AV/separate_audio_easy_codex.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {
+        "chunk_size": 5,
+        "device": "cuda"
+      }
+    },
+    {
+      "script": "ASR/parakeet-tdt-0.6b-v2.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {}
@@ -41,31 +56,46 @@
       "script": "DIARIZE/split_segments_by_speaker_codex.py",
       "enabled": false,
       "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
+      "enabled": false,
+      "halt_on_fail": true,
       "params": {
-        "add_speaker_field": false,
-        "backup": false,
-        "debug": false,
-        "dry_run": false,
-        "inplace": false
+        "output_language": "HU"
       }
     },
     {
-      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
+      "script": "TTS/f5_tts_easy_codex_EQ.py",
       "enabled": true,
-      "halt_on_fail": false,
-      "params": {}
+      "halt_on_fail": true,
+      "params": {
+        "norm": "hun",
+        "phonetic_ref": false,
+        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
+        "remove_silence": false,
+        "normalize_ref_audio": false,
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
+        "save_failures": true,
+        "keep_best_over_tolerance": false,
+        "debug": false
+      }
     },
     {
-      "type": "widget",
-      "widget": "reviewContinue",
-      "enabled": true
-    },
-    {
-      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
+      "script": "AV/merge_chunks_with_background_easy.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {}
+    },
+    {
+      "script": "AV/merge_to_video_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "language": "hun"
+      }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "full_auto_szinkron_eng_-_hunaaaa"
+  "LAST_WORKFLOW_TEMPLATE": "default"
 }

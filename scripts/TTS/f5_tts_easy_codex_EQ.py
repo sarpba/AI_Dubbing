@@ -59,11 +59,22 @@ except ImportError:  # pragma: no cover - optional dependency
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+def find_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
+PROJECT_ROOT = find_project_root()
 DEFAULT_MEL_SPEC_TYPE = "vocos"
 NORMALIZER_TO_WHISPER_LANG = {"hun": "hu", "eng": "en"}
 WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
-DEFAULT_EQ_CONFIG_PATH = PROJECT_ROOT / "scripts" / "EQ.json"
+DEFAULT_EQ_CONFIG_PATH = PROJECT_ROOT / "scripts" / "TTS" / "EQ.json"
 
 REF_SILENCE_PADDING_SECONDS = 0.4
 SHORT_REF_DURATION_SECONDS = 1.5

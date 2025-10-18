@@ -24,16 +24,22 @@ from tools.debug_utils import add_debug_argument, configure_debug_mode
 
 # --- KONFIGURÁCIÓ ÉS KULCSKEZELÉS -------------------------------------------------
 
-def get_project_root() -> str:
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    project_root = os.path.abspath(os.path.join(script_dir, '..'))
-    if os.path.basename(project_root) == 'scripts':
-        return os.path.abspath(os.path.join(script_dir, '..'))
-    return os.getcwd()
+def get_project_root() -> Path:
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
 
 
 def load_config() -> Optional[Dict[str, Any]]:
-    config_path = os.path.join(get_project_root(), 'config.json')
+    try:
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"Hiba a konfigurációs gyökér meghatározásakor: {exc}")
+        return None
+
+    config_path = project_root / 'config.json'
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
@@ -45,7 +51,7 @@ def load_config() -> Optional[Dict[str, Any]]:
 
 
 def get_keyholder_path() -> str:
-    return os.path.join(get_project_root(), 'keyholder.json')
+    return str(get_project_root() / 'keyholder.json')
 
 
 def save_api_key(api_key: str) -> None:

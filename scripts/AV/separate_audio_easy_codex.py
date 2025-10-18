@@ -25,6 +25,17 @@ for candidate in Path(__file__).resolve().parents:
 from tools.debug_utils import add_debug_argument, configure_debug_mode
 
 
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
 def extract_audio(video_path: str, audio_path: str) -> bool:
     """Extract stereo PCM audio from a media file using ffmpeg."""
     command = [
@@ -260,8 +271,8 @@ def load_models(model_names: Sequence[str], device: torch.device):
 
 def process_file(
     base_name: str,
-    speech_output_dir: str,
-    background_output_dir: str,
+    speech_output_dir: Path,
+    background_output_dir: Path,
     mix_waveform: torch.Tensor,
     mix_sample_rate: int,
     models: Dict[str, any],
@@ -272,6 +283,8 @@ def process_file(
     non_speech_silence: bool,
     background_blend: float,
 ) -> bool:
+    speech_output_dir = Path(speech_output_dir)
+    background_output_dir = Path(background_output_dir)
     vocals_results: List[np.ndarray] = []
     non_speech_results: List[np.ndarray] = []
 
@@ -313,11 +326,11 @@ def process_file(
         blend_ratio=background_blend,
     )
 
-    vocals_path = os.path.join(speech_output_dir, f"{base_name}_speech.wav")
-    background_path = os.path.join(background_output_dir, f"{base_name}_non_speech.wav")
+    vocals_path = speech_output_dir / f"{base_name}_speech.wav"
+    background_path = background_output_dir / f"{base_name}_non_speech.wav"
 
-    save_audio_torchaudio(combined_vocals, vocals_path, mix_sample_rate)
-    save_audio_torchaudio(final_background, background_path, mix_sample_rate)
+    save_audio_torchaudio(combined_vocals, str(vocals_path), mix_sample_rate)
+    save_audio_torchaudio(final_background, str(background_path), mix_sample_rate)
 
     print(f"Szétválasztott fájlok mentve: {vocals_path}, {background_path}")
     return True
@@ -381,37 +394,44 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(project_root, "config.json")
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"Hiba: {exc}")
+        sys.exit(1)
+
+    config_path = project_root / "config.json"
+    try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
+    except FileNotFoundError:
+        print(f"Hiba: A config.json nem található itt: {config_path}")
+        sys.exit(1)
+    except json.JSONDecodeError as exc:
+        print(f"Hiba: A config.json fájl hibás formátumú ({config_path}): {exc}")
+        sys.exit(1)
 
+    try:
         workdir_name = config["DIRECTORIES"]["workdir"]
-        project_dir = os.path.join(project_root, workdir_name, args.project)
+        project_dir = project_root / workdir_name / args.project
 
-        if not os.path.isdir(project_dir):
+        if not project_dir.is_dir():
             print(f"Hiba: A projekt könyvtár nem létezik: {project_dir}")
             sys.exit(1)
 
-        input_dir = os.path.join(project_dir, config["PROJECT_SUBDIRS"]["extracted_audio"])
-        speech_output_dir = os.path.join(project_dir, config["PROJECT_SUBDIRS"]["separated_audio_speech"])
-        background_output_dir = os.path.join(
-            project_dir, config["PROJECT_SUBDIRS"]["separated_audio_background"]
-        )
+        input_dir = project_dir / config["PROJECT_SUBDIRS"]["extracted_audio"]
+        speech_output_dir = project_dir / config["PROJECT_SUBDIRS"]["separated_audio_speech"]
+        background_output_dir = project_dir / config["PROJECT_SUBDIRS"]["separated_audio_background"]
 
-    except FileNotFoundError:
-        print("Hiba: A config.json nem található. A szkriptnek a megfelelő könyvtárszerkezetben kell lennie.")
-        sys.exit(1)
     except KeyError as e:
         print(f"Hiba: A config.json feldolgozása közben. Hiányzó kulcs: {e}")
         sys.exit(1)
 
-    if not os.path.isdir(input_dir):
+    if not input_dir.is_dir():
         print(f"Hiba: A bemeneti könyvtár nem létezik: {input_dir}")
         sys.exit(1)
 
-    os.makedirs(speech_output_dir, exist_ok=True)
-    os.makedirs(background_output_dir, exist_ok=True)
+    speech_output_dir.mkdir(parents=True, exist_ok=True)
+    background_output_dir.mkdir(parents=True, exist_ok=True)
 
     models = load_models(model_list, device)
 
@@ -441,9 +461,9 @@ def main() -> None:
             if len(file_list) > 1:
                 print(f"\nNem található '_FC' sáv a '{group_name}' csoportban. Automatikus választás: {filename_to_process}")
 
-        audio_path = os.path.join(input_dir, filename_to_process)
+        audio_path = input_dir / filename_to_process
         base_name = os.path.splitext(filename_to_process)[0]
-        temp_audio_path = os.path.join(speech_output_dir, f"{base_name}_temp.wav")
+        temp_audio_path = speech_output_dir / f"{base_name}_temp.wav"
 
         print(f"--- Feldolgozás: {audio_path} ---")
 
@@ -452,12 +472,12 @@ def main() -> None:
             was_converted = False
         else:
             print(f"Konvertálás WAV formátumba: {temp_audio_path}")
-            if not extract_audio(audio_path, temp_audio_path):
+            if not extract_audio(str(audio_path), str(temp_audio_path)):
                 continue
             was_converted = True
 
         try:
-            waveform, sample_rate = torchaudio.load(temp_audio_path)
+            waveform, sample_rate = torchaudio.load(str(temp_audio_path))
         except Exception:
             print(f"Hiba a hang fájl betöltése közben: {temp_audio_path}")
             continue
@@ -466,9 +486,9 @@ def main() -> None:
         waveform, sample_rate = resample_if_needed(waveform, sample_rate, 44100)
 
         if args.keep_full_audio:
-            full_audio_path = os.path.join(speech_output_dir, f"{base_name}_full.wav")
+            full_audio_path = speech_output_dir / f"{base_name}_full.wav"
             try:
-                shutil.copy(temp_audio_path, full_audio_path)
+                shutil.copy(str(temp_audio_path), str(full_audio_path))
                 print(f"Teljes audio mentve: {full_audio_path}")
             except Exception as exc:
                 print(f"Hiba a teljes audio mentése közben: {exc}")
@@ -493,8 +513,8 @@ def main() -> None:
             traceback.print_exc()
             success = False
 
-        if was_converted and os.path.exists(temp_audio_path) and temp_audio_path != audio_path:
-            os.remove(temp_audio_path)
+        if was_converted and temp_audio_path.exists() and temp_audio_path != audio_path:
+            temp_audio_path.unlink()
 
         if not success:
             print(f"A szétválasztás sikertelen volt a következő fájlnál: {filename_to_process}")

@@ -52,6 +52,17 @@ def process_audio_to_raw_aac(audio_wav_file, target_sample_rate):
         print("Hiba az audió AAC formátumra alakítása során.")
         sys.exit(1)
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
 # --- DEMUX-REMUX LOGIKA (Felirat metaadatokkal bővítve) ---
 
 def get_stream_info(video_file):
@@ -148,27 +159,44 @@ def main():
 
     # --- Konfiguráció és útvonalak beállítása (Változatlan) ---
     try:
-        script_dir = os.path.dirname(os.path.realpath(__file__))
-        config_path = os.path.join(script_dir, '..', 'config.json')
-        with open(config_path, 'r', encoding='utf-8') as f: config = json.load(f)
-    except Exception as e: print(f"Hiba a config.json betöltése közben: {e}"); sys.exit(1)
-    
-    try:
-        workdir_base = config['DIRECTORIES']['workdir']
-        subdirs = config['PROJECT_SUBDIRS']
-        project_path = os.path.join(workdir_base, args.project_name)
-        upload_dir = os.path.join(project_path, subdirs['upload'])
-        audio_dir = os.path.join(project_path, subdirs['film_dubbing'])
-        output_dir = os.path.join(project_path, subdirs['download'])
-    except KeyError as e: print(f"Hiba: Hiányzó kulcs a config.json fájlban: {e}"); sys.exit(1)
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"Hiba: {exc}")
+        sys.exit(1)
 
-    input_video = find_first_video_file(upload_dir)
-    if not input_video: print(f"Hiba: Nem található videófájl a(z) '{upload_dir}' könyvtárban."); sys.exit(1)
+    config_path = project_root / "config.json"
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    except FileNotFoundError:
+        print(f"Hiba: A config.json fájl nem található itt: {config_path}")
+        sys.exit(1)
+    except json.JSONDecodeError as exc:
+        print(f"Hiba: A config.json fájl hibás formátumú ({config_path}): {exc}")
+        sys.exit(1)
+
+    try:
+        workdir_base = project_root / config['DIRECTORIES']['workdir']
+        subdirs = config['PROJECT_SUBDIRS']
+        project_path = workdir_base / args.project_name
+        upload_dir = project_path / subdirs['upload']
+        audio_dir = project_path / subdirs['film_dubbing']
+        output_dir = project_path / subdirs['download']
+    except KeyError as e:
+        print(f"Hiba: Hiányzó kulcs a config.json fájlban: {e}")
+        sys.exit(1)
+
+    input_video = find_first_video_file(str(upload_dir))
+    if not input_video:
+        print(f"Hiba: Nem található videófájl a(z) '{upload_dir}' könyvtárban.")
+        sys.exit(1)
     
-    input_wav_audio = find_latest_audio_file(audio_dir)
-    if not input_wav_audio: print(f"Hiba: Nem található WAV audiófájl a(z) '{audio_dir}' könyvtárban."); sys.exit(1)
+    input_wav_audio = find_latest_audio_file(str(audio_dir))
+    if not input_wav_audio:
+        print(f"Hiba: Nem található WAV audiófájl a(z) '{audio_dir}' könyvtárban.")
+        sys.exit(1)
     
-    os.makedirs(output_dir, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     temp_dir = tempfile.mkdtemp(prefix="demux_")
     
@@ -181,7 +209,7 @@ def main():
         
         video_basename = os.path.basename(input_video)
         video_name, video_ext = os.path.splitext(video_basename)
-        output_file = os.path.join(output_dir, f"{video_name}_with_{args.language}_dub{video_ext}")
+        output_file = str(output_dir / f"{video_name}_with_{args.language}_dub{video_ext}")
         
         remux_video(demuxed_files, processed_aac_path, args.language, output_file)
 

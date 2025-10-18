@@ -37,6 +37,17 @@ from tools.debug_utils import add_debug_argument, configure_debug_mode
 console = Console()
 
 
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
 @dataclass
 class SegmentStats:
     """Aggregate counters for reporting."""
@@ -72,6 +83,7 @@ class SpeakerSegmentSplitterCodex:
         log_level: int = logging.INFO,
     ):
         self.project = project
+        self.repo_root = get_project_root()
 
         self.hf_token = self._resolve_hf_token(hf_token)
         self.audio_exts = [ext.strip() for ext in audio_exts.split(",") if ext.strip()]
@@ -84,7 +96,6 @@ class SpeakerSegmentSplitterCodex:
         self.min_word_overlap = float(min_word_overlap)
         self.output_suffix = output_suffix.strip()
         self.log_level = log_level
-
         self.config = self._load_config()
         self.base_path = self._get_base_path()
         self.log_path = self._setup_logging()
@@ -97,7 +108,7 @@ class SpeakerSegmentSplitterCodex:
     # --------------------------------------------------------------------- #
     def _resolve_hf_token(self, cli_token: Optional[str]) -> Optional[str]:
         """Load/remember the Hugging Face token, mirroring the original script."""
-        keyholder_path = Path("keyholder.json")
+        keyholder_path = self.repo_root / "keyholder.json"
         keyholder_data: Dict[str, Any] = {}
 
         if keyholder_path.exists():
@@ -140,18 +151,18 @@ class SpeakerSegmentSplitterCodex:
         return token
 
     def _load_config(self) -> Dict[str, Any]:
-        config_path = Path("config.json")
+        config_path = self.repo_root / "config.json"
         if not config_path.exists():
-            raise FileNotFoundError("config.json not found in project root")
+            raise FileNotFoundError(f"config.json nem található: {config_path}")
         return json.loads(config_path.read_text(encoding="utf-8"))
 
     def _get_base_path(self) -> Path:
-        workdir = Path(self.config["DIRECTORIES"]["workdir"])
+        workdir = self.repo_root / self.config["DIRECTORIES"]["workdir"]
         separated_audio_speech = self.config["PROJECT_SUBDIRS"]["separated_audio_speech"]
         return workdir / self.project / separated_audio_speech
 
     def _setup_logging(self) -> Path:
-        workdir = Path(self.config["DIRECTORIES"]["workdir"])
+        workdir = self.repo_root / self.config["DIRECTORIES"]["workdir"]
         logs_dir = self.config["PROJECT_SUBDIRS"]["logs"]
         log_dir = workdir / self.project / logs_dir
         log_dir.mkdir(parents=True, exist_ok=True)

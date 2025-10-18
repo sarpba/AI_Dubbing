@@ -13,6 +13,17 @@ for candidate in Path(__file__).resolve().parents:
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
 def get_audio_stream_info(video_path):
     """
     Lekérdezi a legelső audió sáv (a:0) minden jellemzőjét JSON formátumban.
@@ -147,33 +158,52 @@ if __name__ == "__main__":
     configure_debug_mode(args.debug)
     
     try:
-        with open('config.json', 'r', encoding='utf-8') as f: config = json.load(f)
-        workdir = config['DIRECTORIES']['workdir']
-        upload_subdir = config['PROJECT_SUBDIRS']['upload']
-        extracted_audio_subdir = config['PROJECT_SUBDIRS']['extracted_audio']
-    except (FileNotFoundError, KeyError) as e:
-        print(f"Hiba a 'config.json' beolvasásakor: {e}")
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"Hiba: {exc}")
         sys.exit(1)
 
-    project_path = os.path.join(workdir, args.project_dir_name)
-    upload_dir = os.path.join(project_path, upload_subdir)
-    extracted_audio_dir = os.path.join(project_path, extracted_audio_subdir)
+    config_path = project_root / "config.json"
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        workdir = project_root / config['DIRECTORIES']['workdir']
+        upload_subdir = config['PROJECT_SUBDIRS']['upload']
+        extracted_audio_subdir = config['PROJECT_SUBDIRS']['extracted_audio']
+    except FileNotFoundError:
+        print(f"Hiba: A config.json fájl nem található itt: {config_path}")
+        sys.exit(1)
+    except KeyError as e:
+        print(f"Hiba: Hiányzó kulcs a config.json fájlban: {e}")
+        sys.exit(1)
+    except json.JSONDecodeError as exc:
+        print(f"Hiba: A config.json fájl hibás formátumú ({config_path}): {exc}")
+        sys.exit(1)
+
+    project_path = workdir / args.project_dir_name
+    upload_dir = project_path / upload_subdir
+    extracted_audio_dir = project_path / extracted_audio_subdir
     
     VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv', '.mts')
-    video_files = [f for f in os.listdir(upload_dir) if f.lower().endswith(VIDEO_EXTENSIONS)]
+    try:
+        video_files = [f for f in os.listdir(upload_dir) if f.lower().endswith(VIDEO_EXTENSIONS)]
+    except FileNotFoundError:
+        print(f"Hiba: Nem található feltöltési könyvtár: {upload_dir}")
+        sys.exit(1)
     if not video_files:
         print(f"Hiba: Nem található videófájl: {upload_dir}")
         sys.exit(1)
     
     video_filename = video_files[0]
-    video_path = os.path.join(upload_dir, video_filename)
+    video_path = upload_dir / video_filename
+    video_path_str = str(video_path)
     if len(video_files) > 1:
         print(f"Figyelem: Több videó található, az elsőt használom: {video_filename}")
 
     print(f"\nProjekt: {args.project_dir_name}\nBemeneti videó: {video_path}")
 
     # 1. Eredeti audió infók beolvasása memóriába
-    original_audio_info = get_audio_stream_info(video_path)
+    original_audio_info = get_audio_stream_info(video_path_str)
     if not original_audio_info:
         print("Kritikus hiba: Nem sikerült lekérdezni az eredeti audió sáv adatait. A folyamat leáll.")
         sys.exit(1)
@@ -192,7 +222,12 @@ if __name__ == "__main__":
         print("\nMód: Csatornák szétválasztása egyedi fájlokba.")
         layout_string = original_audio_info.get('channel_layout')
         
-        success, extracted_files_map = extract_individual_channels(video_path, extracted_audio_dir, channels, layout_string)
+        success, extracted_files_map = extract_individual_channels(
+            video_path_str,
+            str(extracted_audio_dir),
+            channels,
+            layout_string,
+        )
         
         if success:
             original_audio_info['extraction_mode'] = 'channels'
@@ -206,17 +241,17 @@ if __name__ == "__main__":
         print("\nMód: Sztereó audió kinyerése.")
         base_name = os.path.splitext(video_filename)[0]
         audio_filename = f"{base_name}_stereo.wav"
-        audio_path = os.path.join(extracted_audio_dir, audio_filename)
+        audio_path = extracted_audio_dir / audio_filename
         
-        success = extract_stereo_audio(video_path, audio_path)
+        success = extract_stereo_audio(video_path_str, str(audio_path))
         if success:
             original_audio_info['extraction_mode'] = 'stereo'
             original_audio_info['extracted_file'] = audio_filename
 
     # 3. A teljes információs csomag mentése, CSAK ha a kinyerés sikeres volt
     if success:
-        info_file_path = os.path.join(extracted_audio_dir, 'original_audio_info.json')
-        if not save_audio_info_to_json(original_audio_info, info_file_path):
+        info_file_path = extracted_audio_dir / 'original_audio_info.json'
+        if not save_audio_info_to_json(original_audio_info, str(info_file_path)):
             print("Figyelem: Az audió kinyerése sikeres volt, de az információs fájl mentése nem.")
             sys.exit(1)
 

@@ -1,37 +1,36 @@
 {
   "name": "Alapértelmezett",
-  "description": "Automatizált feldolgozási lánc az elérhető szkriptekkel.",
   "steps": [
     {
       "script": "AV/extract_audio_easy_channels.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AV/separate_audio_easy_codex.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "device": "cuda",
-        "chunk_size": 5
+        "chunk_size": 5,
+        "device": "cuda"
       }
     },
     {
       "script": "ASR/parakeet-tdt-0.6b-v2.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "DIARIZE/split_segments_by_speaker_codex.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "output_language": "HU"
@@ -43,7 +42,14 @@
       "halt_on_fail": true,
       "params": {
         "norm": "hun",
-        "phonetic_ref": true
+        "phonetic_ref": false,
+        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
+        "remove_silence": false,
+        "normalize_ref_audio": false,
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
+        "save_failures": true,
+        "keep_best_over_tolerance": false,
+        "debug": false
       }
     },
     {
@@ -60,5 +66,6 @@
         "language": "hun"
       }
     }
-  ]
+  ],
+  "description": "Automatizált feldolgozási lánc az elérhető szkriptekkel."
 }

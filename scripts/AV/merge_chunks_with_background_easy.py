@@ -16,6 +16,17 @@ for candidate in Path(__file__).resolve().parents:
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
 def parse_time_string(time_str):
     """
     Parse a time string in HH-MM-SS-mmm format to milliseconds.
@@ -146,20 +157,24 @@ def main():
     project_name = args.project_name
 
     try:
-        # A szkript a 'scripts' könyvtárban van, a config.json egy szinttel feljebb
-        script_dir = os.path.dirname(os.path.realpath(__file__))
-        config_path = os.path.join(script_dir, '..', 'config.json')
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"Hiba: {exc}")
+        return
+
+    config_path = project_root / "config.json"
+    try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
     except FileNotFoundError:
         print(f"Hiba: A config.json fájl nem található itt: {config_path}")
         return
-    except json.JSONDecodeError:
-        print(f"Hiba: A config.json fájl hibás formátumú.")
+    except json.JSONDecodeError as exc:
+        print(f"Hiba: A config.json fájl hibás formátumú ({config_path}): {exc}")
         return
     
     try:
-        workdir_base = config['DIRECTORIES']['workdir']
+        workdir_base = project_root / config['DIRECTORIES']['workdir']
         subdirs = config['PROJECT_SUBDIRS']
         input_subdir = subdirs['translated_splits']
         output_subdir = subdirs['film_dubbing']
@@ -169,19 +184,19 @@ def main():
         return
 
     # Teljes útvonalak összeállítása
-    project_path = os.path.join(workdir_base, project_name)
-    input_folder = os.path.join(project_path, input_subdir)
-    output_dir = os.path.join(project_path, output_subdir)
-    background_dir = os.path.join(project_path, background_subdir)
+    project_path = workdir_base / project_name
+    input_folder = project_path / input_subdir
+    output_dir = project_path / output_subdir
+    background_dir = project_path / background_subdir
 
     # Háttérzene fájl automatikus megkeresése
     background_file = None
-    if os.path.isdir(background_dir):
+    if background_dir.is_dir():
         supported_formats = ('.wav', '.mp3', '.aac', '.flac', 'm4a', 'ogg')
         # Fájlok rendezése a determinisztikus viselkedésért
-        for f in sorted(os.listdir(background_dir)):
-            if f.lower().endswith(supported_formats):
-                background_file = os.path.join(background_dir, f)
+        for audio_file in sorted(background_dir.iterdir()):
+            if audio_file.suffix.lower() in supported_formats:
+                background_file = str(audio_file)
                 print(f"Megtalált háttérzene fájl: {background_file}")
                 break  # Az első találtat használjuk
     
@@ -189,14 +204,14 @@ def main():
         print("Nem található háttérzene fájl. A folyamat háttérzene nélkül folytatódik.")
 
     # Ellenőrizzük, hogy az input könyvtár létezik-e
-    if not os.path.isdir(input_folder):
+    if not input_folder.is_dir():
         print(f"Hiba: Az input könyvtár '{input_folder}' nem létezik vagy nem elérhető.")
         return
 
     # Ellenőrizzük, hogy az output könyvtár létezik-e, ha nem, létrehozzuk
-    if not os.path.isdir(output_dir):
+    if not output_dir.is_dir():
         try:
-            os.makedirs(output_dir, exist_ok=True)
+            output_dir.mkdir(parents=True, exist_ok=True)
             print(f"Létrehozva az output könyvtár: {output_dir}")
         except Exception as e:
             print(f"Hiba az output könyvtár létrehozásakor: {e}")
@@ -204,10 +219,10 @@ def main():
 
     # Generáljuk a fájlnevet a futtatás ideje alapján (YYYY.MM.DD_HH.MM.SS.wav)
     timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
-    output_file = os.path.join(output_dir, f"{timestamp}.wav")
+    output_file = str(output_dir / f"{timestamp}.wav")
     print(f"A kimeneti fájl neve: {output_file}")
     
-    merge_wav_files(input_folder, output_file, background_file)
+    merge_wav_files(str(input_folder), output_file, background_file)
 
 if __name__ == "__main__":
     main()

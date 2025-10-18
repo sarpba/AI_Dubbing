@@ -884,9 +884,11 @@
                 return;
             }
 
-            filtered.forEach(script => {
+            const normalizeScriptPath = (path) => (path || '').replace(/\\/g, '/');
+
+            const createScriptListItem = (script) => {
                 const item = document.createElement('div');
-                item.className = 'list-group-item';
+                item.className = 'list-group-item ps-4';
                 const header = document.createElement('div');
                 header.className = 'd-flex justify-content-between align-items-start gap-3';
 
@@ -942,7 +944,44 @@
                     item.append(notes);
                 }
 
-                list.append(item);
+                return item;
+            };
+
+            const groupMap = new Map();
+            filtered.forEach(script => {
+                const normalizedPath = normalizeScriptPath(script.script);
+                const lastSlashIndex = normalizedPath.lastIndexOf('/');
+                const groupKey = lastSlashIndex > -1 ? normalizedPath.slice(0, lastSlashIndex) : '';
+                if (!groupMap.has(groupKey)) {
+                    groupMap.set(groupKey, []);
+                }
+                groupMap.get(groupKey).push(script);
+            });
+
+            const compareGroupNames = (a, b) => {
+                if (a === b) {
+                    return 0;
+                }
+                if (!a) {
+                    return -1;
+                }
+                if (!b) {
+                    return 1;
+                }
+                return a.localeCompare(b);
+            };
+
+            const groupedEntries = Array.from(groupMap.entries()).sort((entryA, entryB) => compareGroupNames(entryA[0], entryB[0]));
+
+            groupedEntries.forEach(([groupName, scriptsInGroup]) => {
+                const header = document.createElement('div');
+                header.className = 'list-group-item list-group-item-secondary fw-semibold';
+                header.textContent = groupName ? groupName : 'scripts/ (gyökér)';
+                list.append(header);
+
+                scriptsInGroup.forEach(script => {
+                    list.append(createScriptListItem(script));
+                });
             });
         }
 

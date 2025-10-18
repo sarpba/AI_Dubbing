@@ -65,6 +65,18 @@ LANG_CODE_MAP = {
     'wol': 'wo', 'xho': 'xh', 'yid': 'yi', 'yor': 'yo', 'zha': 'za', 'zul': 'zu'
 }
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
 def check_dependencies():
     """Ellenőrzi, hogy az MKVToolNix telepítve van-e és elérhető-e."""
     try:
@@ -82,15 +94,20 @@ def check_dependencies():
 def load_config():
     """Beolvassa a konfigurációs fájlt a projekt gyökeréből."""
     try:
-        # A szkript a 'scripts' mappában van, a config egy szinttel feljebb
-        config_path = Path(__file__).resolve().parent.parent / "config.json"
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"HIBA: {exc}")
+        sys.exit(1)
+
+    config_path = project_root / "config.json"
+    try:
         with open(config_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"HIBA: A konfigurációs fájl nem található itt: {config_path}")
         sys.exit(1)
     except json.JSONDecodeError:
-        print(f"HIBA: A konfigurációs fájl ({config_path}) hibás formátumú.")
+        print(f"HIBA: A konfigurációs fájl hibás formátumú: {config_path}")
         sys.exit(1)
 
 def extract_subtitles_from_mkv(mkv_file_path: Path, output_dir: Path):
