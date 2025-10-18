@@ -50,6 +50,10 @@ try:
     from num2words import num2words
 except ImportError:  # pragma: no cover - optional dependency
     num2words = None
+try:
+    from pydub import AudioSegment
+except ImportError:  # pragma: no cover - optional dependency
+    AudioSegment = None
 from Levenshtein import distance as levenshtein_distance
 
 try:
@@ -268,7 +272,7 @@ def parse_arguments() -> argparse.Namespace:
         "--narrator",
         type=str,
         required=True,
-        help="Narrátor referencia könyvtár, amely azonos nevű .wav és .txt párokat tartalmaz.",
+        help="Narrátor referencia könyvtár, amely azonos nevű .wav/.mp3 és .txt párokat tartalmaz.",
     )
     parser.add_argument("--model_dir", type=str, default=None, help="Opcionális: a TTS modell könyvtárának elérési útja.")
     parser.add_argument("--speed", type=float, default=1.0, help="A generált hang sebessége (0.3-2.0).")
@@ -491,21 +495,56 @@ def load_normalizer(normaliser_path: Path) -> Optional[Callable[[str], str]]:
     return None
 
 
+def load_reference_audio_file(audio_path: Path) -> Tuple[np.ndarray, int]:
+    """Betölti a narrátor referencia audiót és np.float32 formátumban visszaadja."""
+    suffix = audio_path.suffix.lower()
+    if suffix == ".wav":
+        audio_data, sample_rate = sf.read(audio_path)
+    elif suffix == ".mp3":
+        if AudioSegment is None:
+            raise RuntimeError("MP3 támogatásához a 'pydub' csomag és az ffmpeg szükséges.")
+        try:
+            segment = AudioSegment.from_file(audio_path)
+        except Exception as exc:
+            raise RuntimeError(f"A(z) {audio_path} MP3 fájl beolvasása sikertelen: {exc}") from exc
+        sample_rate = segment.frame_rate
+        samples = np.array(segment.get_array_of_samples(), dtype=np.float32)
+        if segment.channels > 1:
+            samples = samples.reshape((-1, segment.channels)).mean(axis=1)
+        scale = float(1 << (8 * segment.sample_width - 1))
+        if scale:
+            samples /= scale
+        audio_data = samples
+    else:
+        raise ValueError(f"Nem támogatott narrátor audio kiterjesztés: {audio_path.suffix}")
+
+    if audio_data.ndim > 1:
+        audio_data = audio_data.mean(axis=1)
+    return audio_data.astype(np.float32, copy=False), sample_rate
+
+
 def load_narrator_reference_corpus(narrator_dir: Path) -> Tuple[np.ndarray, int, str, int]:
     """Betölti a narrátor referencia audió/text párokat és összefűzi őket."""
     if not narrator_dir.is_dir():
         raise FileNotFoundError(f"A megadott narrátor könyvtár nem található: {narrator_dir}")
 
-    wav_files = sorted(narrator_dir.glob("*.wav"))
-    if not wav_files:
-        raise FileNotFoundError(f"Nem található .wav fájl a narrátor könyvtárban: {narrator_dir}")
+    supported_extensions = {".wav", ".mp3"}
+    audio_files = sorted(
+        audio_path
+        for audio_path in narrator_dir.iterdir()
+        if audio_path.suffix.lower() in supported_extensions
+    )
+    if not audio_files:
+        raise FileNotFoundError(
+            f"Nem található .wav vagy .mp3 fájl a narrátor könyvtárban: {narrator_dir}"
+        )
 
     audio_segments: List[np.ndarray] = []
     texts: List[str] = []
     sample_rate: Optional[int] = None
 
-    for wav_path in wav_files:
-        txt_path = wav_path.with_suffix(".txt")
+    for audio_path in audio_files:
+        txt_path = audio_path.with_suffix(".txt")
         if not txt_path.is_file():
             raise FileNotFoundError(f"Hiányzik a hozzá tartozó .txt fájl: {txt_path}")
 
@@ -514,9 +553,7 @@ def load_narrator_reference_corpus(narrator_dir: Path) -> Tuple[np.ndarray, int,
         if not text:
             raise ValueError(f"A narrátor szöveg üres: {txt_path}")
 
-        audio_data, sr = sf.read(wav_path)
-        if audio_data.ndim > 1:
-            audio_data = audio_data.mean(axis=1)
+        audio_data, sr = load_reference_audio_file(audio_path)
         if sample_rate is None:
             sample_rate = sr
         elif sr != sample_rate:
