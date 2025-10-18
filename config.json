@@ -32,18 +32,6 @@
   },
   "LAST_WORKFLOW": [
     {
-      "script": "extract_audio_easy_channels.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "separate_audio_easy_codex.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
       "script": "ASR/parakeet-tdt-0.6b-v3.py",
       "enabled": false,
       "halt_on_fail": true,
@@ -62,17 +50,22 @@
       }
     },
     {
-      "script": "translate_chatgpt_srt_easy_codex.py",
+      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
       "enabled": true,
-      "halt_on_fail": true,
+      "halt_on_fail": false,
       "params": {}
     },
     {
-      "script": "collect_normalized_translations.py",
+      "type": "widget",
+      "widget": "reviewContinue",
+      "enabled": true
+    },
+    {
+      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {}
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "full_auto_szinkron_eng_-_hun"
+  "LAST_WORKFLOW_TEMPLATE": "full_auto_szinkron_eng_-_hunaaaa"
 }

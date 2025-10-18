@@ -1,7 +1,7 @@
 [
   {
     "enviroment": "sync",
-    "script": "collect_normalized_translations.py",
+    "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
     "required": [
       {
         "name": "project_dir",
@@ -24,7 +24,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "extract_audio_easy_channels.py",
+    "script": "AV/extract_audio_easy_channels.py",
     "required": [
       {
         "name": "project_dir_name",
@@ -195,7 +195,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "merge_chunks_with_background_easy.py",
+    "script": "AV/merge_chunks_with_background_easy.py",
     "required": [
       {
         "name": "project_name",
@@ -214,34 +214,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "merge_to_video_easy.py",
-    "required": [
-      {
-        "name": "project_name",
-        "type": "positional"
-      },
-      {
-        "name": "language",
-        "flags": [
-          "-lang",
-          "--language"
-        ],
-        "type": "option"
-      }
-    ],
-    "optional": [
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag"
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
-    "script": "merge_to_video_easy_with_subs.py",
+    "script": "AV/merge_to_video_easy.py",
     "required": [
       {
         "name": "project_name",
@@ -268,7 +241,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "normalise_and_cut_json_easy_codex.py",
+    "script": "AV/normalise_and_cut_json_easy_codex.py",
     "required": [
       {
         "name": "project_name",
@@ -309,7 +282,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "separate_audio_easy_codex.py",
+    "script": "AV/separate_audio_easy_codex.py",
     "required": [
       {
         "name": "project",
@@ -474,7 +447,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "translate_chatgpt_srt_easy_codex.py",
+    "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
     "required": [
       {
         "name": "project_name",
@@ -546,7 +519,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "translate.py",
+    "script": "TRANSLATE/translate.py",
     "required": [
       {
         "name": "input_dir",
@@ -596,7 +569,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "unpack_srt_from_mkv_easy.py",
+    "script": "AV/unpack_srt_from_mkv_easy.py",
     "required": [
       {
         "name": "project_name",

@@ -63,6 +63,95 @@
             huggingface: { wrapperId: 'workflowKeyFieldHuggingface', inputId: 'workflowKeyHuggingface', payloadKey: 'huggingface_token' }
         };
 
+        const workflowWidgets = [
+            {
+                id: 'reviewContinue',
+                name: 'Review + Continue',
+                description: 'Felülvizsgálati nézet megnyitása és kézi folytatás.',
+                continueLabel: 'Continue',
+                reviewLabel: 'Review'
+            }
+        ];
+
+        function findWidgetById(widgetId) {
+            if (!widgetId) {
+                return null;
+            }
+            return workflowWidgets.find(widget => widget.id === widgetId) || null;
+        }
+
+        function normalizeWorkflowStep(step) {
+            if (!step || typeof step !== 'object') {
+                return;
+            }
+            if (!step.type) {
+                if (step.widget) {
+                    step.type = 'widget';
+                } else if (step.script) {
+                    step.type = 'script';
+                }
+            }
+            if (step.type === 'widget') {
+                if (!step.widget) {
+                    step.widget = 'unknownWidget';
+                }
+                if (step.enabled === undefined) {
+                    step.enabled = true;
+                }
+            } else {
+                step.type = 'script';
+                if (step.enabled === undefined) {
+                    step.enabled = true;
+                }
+                if (step.halt_on_fail === undefined) {
+                    step.halt_on_fail = true;
+                }
+                if (!step.params || typeof step.params !== 'object') {
+                    step.params = {};
+                }
+            }
+        }
+
+        function normalizeWorkflowStepList(steps) {
+            (steps || []).forEach(normalizeWorkflowStep);
+            return steps || [];
+        }
+
+        function collectScriptStepsForRun(startIndex = 0) {
+            const stepsForRun = [];
+            for (let i = startIndex; i < workflowSteps.length; i++) {
+                const step = workflowSteps[i];
+                if (step.type === 'widget') {
+                    if (step.enabled !== false) {
+                        break;
+                    }
+                    continue;
+                }
+                if (step.enabled === false) {
+                    continue;
+                }
+                stepsForRun.push({
+                    script: step.script,
+                    enabled: true,
+                    halt_on_fail: step.halt_on_fail !== false,
+                    params: cloneObject(step.params)
+                });
+            }
+            return stepsForRun;
+        }
+
+        function collectWorkflowState() {
+            return cloneSteps(workflowSteps);
+        }
+
+        function buildRunPayload(startIndex = 0) {
+            return {
+                steps: collectScriptStepsForRun(startIndex),
+                template_id: currentTemplateId,
+                workflow_state: collectWorkflowState()
+            };
+        }
+
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-bs-theme');
             const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -79,7 +168,8 @@
         }
 
         function cloneSteps(steps) {
-            return JSON.parse(JSON.stringify(steps || []));
+            const cloned = JSON.parse(JSON.stringify(steps || []));
+            return normalizeWorkflowStepList(cloned);
         }
 
         function cloneObject(obj) {
@@ -140,7 +230,11 @@
         function updateMissingBadge() {
             const badge = document.getElementById('workflowMissingBadge');
             if (!badge) return;
-            const hasMissing = workflowSteps.some(step => step.enabled !== false && getMissingParams(step, findScriptById(step.script)).length);
+            const hasMissing = workflowSteps.some(step =>
+                step.type !== 'widget' &&
+                step.enabled !== false &&
+                getMissingParams(step, findScriptById(step.script)).length
+            );
             badge.classList.toggle('d-none', !hasMissing);
         }
 
@@ -294,11 +388,11 @@
                 return;
             }
 
-            const payload = collectWorkflowPayload();
+            const workflowState = collectWorkflowState();
             const body = {
                 name,
                 description,
-                steps: payload.steps,
+                steps: workflowState,
                 overwrite
             };
             if (overwrite && currentTemplateId) {
@@ -320,7 +414,7 @@
                 }
                 const savedTemplate = result.template || {};
                 currentTemplateId = savedTemplate.id || currentTemplateId;
-                defaultWorkflow = cloneSteps(payload.steps);
+                defaultWorkflow = cloneSteps(workflowState);
                 await refreshWorkflowTemplates(currentTemplateId);
                 populateWorkflowTemplateSelect(currentTemplateId);
                 updateInfoBox('success', `Workflow sablon elmentve: ${savedTemplate.name || currentTemplateId}.`);
@@ -398,6 +492,18 @@
             const searchInput = document.getElementById('workflowStepSearch');
             if (searchInput) {
                 searchInput.addEventListener('input', event => populateWorkflowStepList(event.target.value || ''));
+            }
+
+            const widgetMenu = document.getElementById('workflowWidgetMenu');
+            if (widgetMenu) {
+                widgetMenu.querySelectorAll('[data-widget-id]').forEach(item => {
+                    item.addEventListener('click', event => {
+                        const widgetId = event.currentTarget.getAttribute('data-widget-id');
+                        if (widgetId) {
+                            addWorkflowWidget(widgetId);
+                        }
+                    });
+                });
             }
         }
 
@@ -491,16 +597,23 @@
                     startWorkflowPolling(result.latest_job.job_id, true);
                 }
 
+                const hasScriptSteps = workflowSteps.some(step => step.type !== 'widget');
+                const hasEnabledScripts = workflowSteps.some(step => step.type !== 'widget' && step.enabled !== false);
+                const runnableSegment = collectScriptStepsForRun(0);
                 if (statusText) {
-                    if (!workflowSteps.length) {
-                        statusText.textContent = 'Adj hozzá lépéseket az indításhoz.';
+                    if (!hasScriptSteps) {
+                        statusText.textContent = 'Adj hozzá futtatható lépéseket az indításhoz.';
+                    } else if (!hasEnabledScripts) {
+                        statusText.textContent = 'Engedélyezz legalább egy lépést az indításhoz.';
+                    } else if (!runnableSegment.length) {
+                        statusText.textContent = 'Az első widget előtt nincs futtatható lépés. Használd a Continue gombot.';
                     } else {
                         statusText.textContent = 'Workflow készen áll az indításra.';
                     }
                 }
 
                 if (startButton) {
-                    startButton.disabled = workflowSteps.length === 0;
+                    startButton.disabled = !runnableSegment.length;
                 }
             } catch (error) {
                 console.error('Hiba a workflow opciók betöltésekor:', error);
@@ -529,18 +642,25 @@
                 row.append(cell);
                 tbody.append(row);
                 updateMissingBadge();
-                const startButton = document.getElementById('startWorkflowBtn');
-                if (startButton) {
-                    startButton.disabled = true;
+                const startButtonEmpty = document.getElementById('startWorkflowBtn');
+                if (startButtonEmpty) {
+                    startButtonEmpty.disabled = true;
                 }
                 return;
             }
 
             workflowSteps.forEach((step, index) => {
-                const script = findScriptById(step.script);
+                normalizeWorkflowStep(step);
+                const isWidget = step.type === 'widget';
+                const script = !isWidget ? findScriptById(step.script) : null;
                 const row = document.createElement('tr');
-                const missing = step.enabled !== false ? getMissingParams(step, script) : [];
-
+                if (isWidget) {
+                    row.classList.add('table-info');
+                }
+                if (step.enabled === false) {
+                    row.classList.add('table-light', 'text-muted');
+                }
+                const missing = (!isWidget && step.enabled !== false) ? getMissingParams(step, script) : [];
                 if (missing.length) {
                     row.classList.add('table-warning');
                 }
@@ -561,39 +681,85 @@
                 row.append(enabledCell);
 
                 const infoCell = document.createElement('td');
-                const title = document.createElement('div');
-                title.className = 'fw-semibold';
-                title.textContent = (script && script.display_name) || step.script;
-                infoCell.append(title);
+                if (isWidget) {
+                    const widget = findWidgetById(step.widget);
+                    const title = document.createElement('div');
+                    title.className = 'fw-semibold';
+                    title.textContent = widget ? widget.name : 'Speciális widget';
+                    infoCell.append(title);
 
-                if (script) {
-                    const scriptPath = document.createElement('div');
-                    scriptPath.className = 'small text-muted';
-                    scriptPath.textContent = script.script;
-                    infoCell.append(scriptPath);
-                }
+                    if (widget && widget.description) {
+                        const desc = document.createElement('div');
+                        desc.className = 'small text-muted';
+                        desc.textContent = widget.description;
+                        infoCell.append(desc);
+                    }
 
-                const summary = document.createElement('div');
-                summary.className = 'small mt-1';
-                summary.textContent = describeStepParameters(step, script, missing);
-                infoCell.append(summary);
+                    const buttonRow = document.createElement('div');
+                    buttonRow.className = 'd-flex flex-wrap gap-2 mt-2';
 
-                if (script && script.required_keys && script.required_keys.length) {
-                    const keyLine = document.createElement('div');
-                    keyLine.className = 'small mt-1';
-                    script.required_keys.forEach(key => {
-                        const badge = document.createElement('span');
-                        badge.className = 'badge bg-secondary me-1';
-                        badge.textContent = key;
-                        keyLine.append(badge);
+                    const reviewBtn = document.createElement('button');
+                    reviewBtn.type = 'button';
+                    reviewBtn.className = 'btn btn-sm btn-outline-info';
+                    reviewBtn.textContent = widget && widget.reviewLabel ? widget.reviewLabel : 'Review';
+                    reviewBtn.disabled = step.enabled === false;
+                    reviewBtn.addEventListener('click', () => {
+                        const url = `/review/${encodeURIComponent(PROJECT_NAME)}`;
+                        window.open(url, '_blank', 'noopener');
                     });
-                    infoCell.append(keyLine);
-                }
 
+                    const continueBtn = document.createElement('button');
+                    continueBtn.type = 'button';
+                    continueBtn.className = 'btn btn-sm btn-success';
+                    continueBtn.textContent = widget && widget.continueLabel ? widget.continueLabel : 'Continue';
+                    const hasRemainingScripts = collectScriptStepsForRun(index + 1).length > 0;
+                    continueBtn.disabled = step.enabled === false || !hasRemainingScripts;
+                    if (!hasRemainingScripts) {
+                        continueBtn.title = 'Nincs további futtatható lépés.';
+                    }
+                    continueBtn.addEventListener('click', () => handleWidgetContinue(index));
+
+                    buttonRow.append(reviewBtn, continueBtn);
+                    infoCell.append(buttonRow);
+                } else {
+                    const title = document.createElement('div');
+                    title.className = 'fw-semibold';
+                    title.textContent = (script && script.display_name) || step.script;
+                    infoCell.append(title);
+
+                    if (script) {
+                        const scriptPath = document.createElement('div');
+                        scriptPath.className = 'small text-muted';
+                        scriptPath.textContent = script.script;
+                        infoCell.append(scriptPath);
+                    }
+
+                    const summary = document.createElement('div');
+                    summary.className = 'small mt-1';
+                    summary.textContent = describeStepParameters(step, script, missing);
+                    infoCell.append(summary);
+
+                    if (script && script.required_keys && script.required_keys.length) {
+                        const keyLine = document.createElement('div');
+                        keyLine.className = 'small mt-1';
+                        script.required_keys.forEach(key => {
+                            const badge = document.createElement('span');
+                            badge.className = 'badge bg-secondary me-1';
+                            badge.textContent = key;
+                            keyLine.append(badge);
+                        });
+                        infoCell.append(keyLine);
+                    }
+                }
                 row.append(infoCell);
 
                 const envCell = document.createElement('td');
-                if (script && script.environment) {
+                if (isWidget) {
+                    const widgetBadge = document.createElement('span');
+                    widgetBadge.className = 'badge bg-light text-dark border';
+                    widgetBadge.textContent = 'Widget';
+                    envCell.append(widgetBadge);
+                } else if (script && script.environment) {
                     const envBadge = document.createElement('span');
                     envBadge.className = 'badge bg-light text-dark border';
                     envBadge.textContent = script.environment;
@@ -604,30 +770,37 @@
                 row.append(envCell);
 
                 const haltCell = document.createElement('td');
-                const haltWrapper = document.createElement('div');
-                haltWrapper.className = 'form-check form-switch';
-                const haltCheckbox = document.createElement('input');
-                haltCheckbox.type = 'checkbox';
-                haltCheckbox.className = 'form-check-input';
-                haltCheckbox.checked = step.halt_on_fail !== false;
-                const haltLabel = document.createElement('label');
-                haltLabel.className = 'form-check-label small';
-                haltLabel.textContent = haltCheckbox.checked ? 'Megáll hibánál' : 'Tovább hiba után';
-                haltCheckbox.addEventListener('change', () => {
-                    step.halt_on_fail = haltCheckbox.checked;
+                if (isWidget) {
+                    haltCell.innerHTML = '&mdash;';
+                } else {
+                    const haltWrapper = document.createElement('div');
+                    haltWrapper.className = 'form-check form-switch';
+                    const haltCheckbox = document.createElement('input');
+                    haltCheckbox.type = 'checkbox';
+                    haltCheckbox.className = 'form-check-input';
+                    haltCheckbox.checked = step.halt_on_fail !== false;
+                    haltCheckbox.addEventListener('change', () => {
+                        step.halt_on_fail = haltCheckbox.checked;
+                        renderWorkflowSteps();
+                    });
+                    const haltLabel = document.createElement('label');
+                    haltLabel.className = 'form-check-label small';
                     haltLabel.textContent = haltCheckbox.checked ? 'Megáll hibánál' : 'Tovább hiba után';
-                });
-                haltWrapper.append(haltCheckbox, haltLabel);
-                haltCell.append(haltWrapper);
+                    haltWrapper.append(haltCheckbox, haltLabel);
+                    haltCell.append(haltWrapper);
+                }
                 row.append(haltCell);
 
                 const actionsCell = document.createElement('td');
                 actionsCell.className = 'text-end';
-                const editBtn = document.createElement('button');
-                editBtn.type = 'button';
-                editBtn.className = 'btn btn-sm btn-outline-primary me-2';
-                editBtn.textContent = 'Paraméterek';
-                editBtn.addEventListener('click', () => openWorkflowParams(index));
+                if (!isWidget) {
+                    const editBtn = document.createElement('button');
+                    editBtn.type = 'button';
+                    editBtn.className = 'btn btn-sm btn-outline-primary me-2';
+                    editBtn.textContent = 'Paraméterek';
+                    editBtn.addEventListener('click', () => openWorkflowParams(index));
+                    actionsCell.append(editBtn);
+                }
 
                 const upBtn = document.createElement('button');
                 upBtn.type = 'button';
@@ -649,7 +822,7 @@
                 removeBtn.innerHTML = '&times;';
                 removeBtn.addEventListener('click', () => removeWorkflowStep(index));
 
-                actionsCell.append(editBtn, upBtn, downBtn, removeBtn);
+                actionsCell.append(upBtn, downBtn, removeBtn);
                 row.append(actionsCell);
 
                 tbody.append(row);
@@ -659,7 +832,24 @@
 
             const startButton = document.getElementById('startWorkflowBtn');
             if (startButton) {
-                startButton.disabled = workflowSteps.length === 0;
+                const runnableSegment = collectScriptStepsForRun(0);
+                startButton.disabled = runnableSegment.length === 0;
+            }
+
+            const statusText = document.getElementById('workflowStatusText');
+            if (statusText && !currentWorkflowJobId) {
+                const hasAnyScript = workflowSteps.some(step => step.type !== 'widget');
+                const hasEnabledScripts = workflowSteps.some(step => step.type !== 'widget' && step.enabled !== false);
+                const runnableSegment = collectScriptStepsForRun(0);
+                if (!hasAnyScript) {
+                    statusText.textContent = 'Adj hozzá futtatható lépéseket az indításhoz.';
+                } else if (!hasEnabledScripts) {
+                    statusText.textContent = 'Engedélyezz legalább egy lépést az indításhoz.';
+                } else if (!runnableSegment.length) {
+                    statusText.textContent = 'Az első widget előtt nincs futtatható lépés. Használd a Continue gombot.';
+                } else {
+                    statusText.textContent = 'Workflow készen áll az indításra.';
+                }
             }
         }
 
@@ -774,6 +964,68 @@
             updateInfoBox('secondary', `${script.display_name || script.script} hozzáadva a workflow-hoz.`);
         }
 
+        function addWorkflowWidget(widgetId) {
+            const widget = findWidgetById(widgetId);
+            if (!widget) {
+                alert(`Ismeretlen widget: ${widgetId}`);
+                return;
+            }
+            const newStep = {
+                type: 'widget',
+                widget: widget.id,
+                enabled: true
+            };
+            workflowSteps.push(newStep);
+            renderWorkflowSteps();
+            updateInfoBox('secondary', `${widget.name} widget hozzáadva a workflow-hoz.`);
+        }
+
+        async function handleWidgetContinue(widgetIndex) {
+            if (currentWorkflowJobId) {
+                updateInfoBox('warning', 'Már fut egy workflow. Várj a befejezésig.');
+                return;
+            }
+            const widgetStep = workflowSteps[widgetIndex];
+            if (!widgetStep || widgetStep.type !== 'widget') {
+                return;
+            }
+            if (widgetStep.enabled === false) {
+                updateInfoBox('info', 'Ez a widget le van tiltva.');
+                return;
+            }
+            const validation = validateWorkflowSegment(widgetIndex + 1);
+            if (!validation.hasRunnableStep) {
+                updateInfoBox('info', 'Nincs további futtatható lépés.');
+                return;
+            }
+            if (!validation.valid) {
+                const messages = [...validation.errors];
+                validation.missingSummary.forEach(item => {
+                    messages.push(`${item.script.display_name || item.script.script}: hiányzó paraméterek – ${item.missing.join(', ')}`);
+                });
+                updateInfoBox('warning', messages.join(' | '));
+                updateMissingBadge();
+                return;
+            }
+
+            const payload = buildRunPayload(widgetIndex + 1);
+            if (!payload.steps.length) {
+                updateInfoBox('info', 'Nincs további futtatható lépés.');
+                return;
+            }
+
+            try {
+                const ready = await ensureWorkflowKeys(payload);
+                if (!ready) {
+                    return;
+                }
+                await executeWorkflow(payload);
+            } catch (error) {
+                console.error('Widget folytatási hiba:', error);
+                alert('Nem sikerült folytatni a workflow-t: ' + error.message);
+            }
+        }
+
         function moveWorkflowStep(index, delta) {
             const newIndex = index + delta;
             if (newIndex < 0 || newIndex >= workflowSteps.length) {
@@ -788,7 +1040,12 @@
             const [removed] = workflowSteps.splice(index, 1);
             renderWorkflowSteps();
             if (removed) {
-                updateInfoBox('secondary', `${removed.script} eltávolítva a workflow-ból.`);
+                let label = removed.script;
+                if (removed.type === 'widget') {
+                    const widget = findWidgetById(removed.widget);
+                    label = widget ? widget.name : 'Widget';
+                }
+                updateInfoBox('secondary', `${label} eltávolítva a workflow-ból.`);
             }
         }
 
@@ -936,45 +1193,46 @@
             renderWorkflowSteps();
         }
 
-        function validateWorkflow() {
+        function validateWorkflowSegment(startIndex = 0) {
             const errors = [];
             const missingSummary = [];
-            const enabledSteps = workflowSteps.filter(step => step.enabled !== false);
-            if (!enabledSteps.length) {
-                errors.push('Legalább egy engedélyezett lépés szükséges a futtatáshoz.');
-            }
-            enabledSteps.forEach((step, index) => {
+            let hasRunnableStep = false;
+            for (let i = startIndex; i < workflowSteps.length; i++) {
+                const step = workflowSteps[i];
+                if (step.type === 'widget') {
+                    if (step.enabled !== false) {
+                        break;
+                    }
+                    continue;
+                }
+                if (step.enabled === false) {
+                    continue;
+                }
+                hasRunnableStep = true;
                 const script = findScriptById(step.script);
                 if (!script) {
                     errors.push(`Ismeretlen szkript: ${step.script}`);
-                    return;
+                    continue;
                 }
                 const missing = getMissingParams(step, script);
                 if (missing.length) {
-                    missingSummary.push({ index, script, missing });
+                    missingSummary.push({ script, missing });
                 }
-            });
+            }
             return {
-                valid: errors.length === 0 && missingSummary.length === 0,
+                valid: hasRunnableStep && errors.length === 0 && missingSummary.length === 0,
+                hasRunnableStep,
                 errors,
                 missingSummary
             };
         }
 
-        function collectWorkflowPayload() {
-            return {
-                steps: workflowSteps.map(step => ({
-                    script: step.script,
-                    enabled: step.enabled !== false,
-                    halt_on_fail: step.halt_on_fail !== false,
-                    params: cloneObject(step.params)
-                })),
-                template_id: currentTemplateId
-            };
-        }
-
         async function handleStartWorkflow() {
-            const validation = validateWorkflow();
+            const validation = validateWorkflowSegment(0);
+            if (!validation.hasRunnableStep) {
+                updateInfoBox('info', 'Nincs futtatható lépés az első widget előtt. Használd a Continue gombot a folytatáshoz.');
+                return;
+            }
             if (!validation.valid) {
                 const messages = [...validation.errors];
                 if (validation.missingSummary.length) {
@@ -988,7 +1246,11 @@
                 return;
             }
 
-            const payload = collectWorkflowPayload();
+            const payload = buildRunPayload(0);
+            if (!payload.steps.length) {
+                updateInfoBox('info', 'Nincs futtatható lépés az első widget előtt. Használd a Continue gombot a folytatáshoz.');
+                return;
+            }
             try {
                 const ready = await ensureWorkflowKeys(payload);
                 if (!ready) {
@@ -1245,6 +1507,8 @@
                 renderWorkflowStatus(job);
                 if (['completed', 'failed', 'cancelled'].includes(job.status)) {
                     stopWorkflowPolling();
+                    stopLogPolling();
+                    currentWorkflowJobId = null;
                 }
             } catch (error) {
                 console.error('Állapot lekérdezési hiba:', error);
@@ -1280,13 +1544,13 @@
                     setWorkflowBadge(null);
                 }
                 if (statusText) {
-                    statusText.textContent = workflowSteps.length ? 'Workflow még nem futott ezen a projekten.' : 'Adj hozzá lépéseket az indításhoz.';
+                    statusText.textContent = collectScriptStepsForRun(0).length ? 'Workflow még nem futott ezen a projekten.' : 'Adj hozzá lépéseket az indításhoz.';
                 }
                 if (logLink) {
                     logLink.innerHTML = '';
                 }
                 if (startButton) {
-                    startButton.disabled = workflowSteps.length === 0;
+                    startButton.disabled = collectScriptStepsForRun(0).length === 0;
                     startButton.classList.remove('btn-processing');
                 }
                 if (startSpinner) {
@@ -1335,7 +1599,7 @@
                 }
             } else {
                 if (startButton) {
-                    startButton.disabled = workflowSteps.length === 0;
+                    startButton.disabled = collectScriptStepsForRun(0).length === 0;
                     startButton.classList.remove('btn-processing');
                 }
                 if (startSpinner) {
@@ -1785,7 +2049,20 @@
                     </div>
                     <div class="d-flex flex-wrap align-items-center gap-2">
                         <div class="d-flex flex-wrap gap-2">
-                            <button type="button" class="btn btn-primary" id="addWorkflowStepBtn">Lépés hozzáadása</button>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-primary" id="addWorkflowStepBtn">Lépés hozzáadása</button>
+                                <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Widget hozzáadása
+                                </button>
+                                <ul class="dropdown-menu" id="workflowWidgetMenu">
+                                    <li><h6 class="dropdown-header">Speciális widgetek</h6></li>
+                                    <li>
+                                        <button class="dropdown-item" type="button" data-widget-id="reviewContinue">
+                                            Review + Continue widget
+                                        </button>
+                                    </li>
+                                </ul>
+                            </div>
                             <button type="button" class="btn btn-outline-secondary" id="resetWorkflowBtn">Alapértelmezett lépések</button>
                         </div>
                         <span class="badge bg-warning text-dark d-none" id="workflowMissingBadge">Hiányzó paraméterek</span>

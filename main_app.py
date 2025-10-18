@@ -82,6 +82,7 @@ PROJECT_AUTOFILL_OVERRIDES = {
     'project_path': 'project_path',
 }
 SECRET_PARAM_NAMES = {'auth_key', 'hf_token'}
+ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue'}
 
 
 class WorkflowValidationError(Exception):
@@ -605,6 +606,20 @@ def normalize_workflow_steps(payload: Any) -> Tuple[List[Dict[str, Any]], Set[st
         if not isinstance(step, dict):
             raise WorkflowValidationError(f"A(z) {index}. lépés formátuma hibás.")
 
+        step_type = step.get('type')
+        if step_type == 'widget' or (step.get('widget') and not step.get('script')):
+            widget_id = step.get('widget')
+            if not widget_id:
+                raise WorkflowValidationError(f"A(z) {index}. widget lépéshez hiányzik a widget azonosítója.")
+            if widget_id not in ALLOWED_WORKFLOW_WIDGETS:
+                logging.warning("Ismeretlen workflow widget: %s", widget_id)
+            normalized_steps.append({
+                'type': 'widget',
+                'widget': widget_id,
+                'enabled': coerce_bool(step.get('enabled', True))
+            })
+            continue
+
         script_id = step.get('script')
         script_meta = get_script_definition(script_id)
         if not script_meta:
@@ -856,9 +871,19 @@ def run_workflow_job(job_id, project_name, workflow_payload):
 
         template_id = workflow_payload.get('template_id')
         steps = workflow_payload.get('steps') or []
-        active_steps = [step for step in steps if step.get('enabled', True)]
+        workflow_state = workflow_payload.get('workflow_state') or steps
+        active_steps = [
+            step for step in steps
+            if step.get('enabled', True) and step.get('type') != 'widget'
+        ]
         total_steps = len(active_steps)
-        update_workflow_job(job_id, total_steps=total_steps, template_id=template_id)
+        update_workflow_job(
+            job_id,
+            total_steps=total_steps,
+            template_id=template_id,
+            workflow=workflow_state,
+            execution_steps=steps
+        )
 
         keyholder_snapshot = load_keyholder_data()
         executed_steps: List[Dict[str, Any]] = []
@@ -2110,6 +2135,15 @@ def run_workflow_api(project_name):
     except WorkflowValidationError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
 
+    workflow_state_payload = data.get('workflow_state')
+    if workflow_state_payload is not None:
+        try:
+            normalized_full_steps, _, _ = normalize_workflow_steps(workflow_state_payload)
+        except WorkflowValidationError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+    else:
+        normalized_full_steps = normalized_steps
+
     template_id = (data.get('template_id') or '').strip() or None
 
     current_config = get_config_copy()
@@ -2140,7 +2174,7 @@ def run_workflow_api(project_name):
         }), 400
 
     updated_config = copy.deepcopy(current_config)
-    updated_config['LAST_WORKFLOW'] = normalized_steps
+    updated_config['LAST_WORKFLOW'] = normalized_full_steps
     if template_id:
         updated_config['LAST_WORKFLOW_TEMPLATE'] = template_id
     else:
@@ -2156,7 +2190,8 @@ def run_workflow_api(project_name):
         'message': 'Feladat sorban áll.',
         'log': None,
         'cancel_requested': False,
-        'workflow': normalized_steps,
+        'workflow': normalized_full_steps,
+        'execution_steps': normalized_steps,
         'required_keys': list(required_keys),
         'template_id': template_id
     }
@@ -2164,7 +2199,7 @@ def run_workflow_api(project_name):
 
     thread = threading.Thread(
         target=run_workflow_job,
-        args=(job_id, sanitized_project, {'steps': normalized_steps, 'template_id': template_id}),
+        args=(job_id, sanitized_project, {'steps': normalized_steps, 'workflow_state': normalized_full_steps, 'template_id': template_id}),
         daemon=True
     )
     set_workflow_thread(job_id, thread)
