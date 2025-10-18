@@ -4,6 +4,7 @@ import argparse
 import deepl
 import json
 from pathlib import Path
+from typing import Optional, Tuple
 
 for candidate in Path(__file__).resolve().parents:
     if (candidate / "tools").is_dir():
@@ -12,6 +13,66 @@ for candidate in Path(__file__).resolve().parents:
         break
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
+
+
+def get_project_root() -> Path:
+    """Visszaadja a projekt gyökerét, ahol a config.json található."""
+    for candidate in Path(__file__).resolve().parents:
+        config_candidate = candidate / "config.json"
+        if config_candidate.is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
+def load_config() -> Tuple[dict, Path]:
+    """Betölti a config.json-t, és visszaadja a konfigurációt a projekt gyökérrel együtt."""
+    try:
+        project_root = get_project_root()
+    except FileNotFoundError as exc:
+        print(f"Hiba a projektgyökér meghatározásakor: {exc}")
+        sys.exit(1)
+
+    config_path = project_root / "config.json"
+    try:
+        with open(config_path, "r", encoding="utf-8") as fp:
+            config = json.load(fp)
+        return config, project_root
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        print(f"Hiba a konfiguráció betöltésekor ({config_path}): {exc}")
+        sys.exit(1)
+
+
+def resolve_project_paths(project_name: str, config: dict, project_root: Path) -> Tuple[Path, Path]:
+    """A config alapján meghatározza a projekt bemeneti- és kimeneti mappáit."""
+    try:
+        workdir = project_root / config["DIRECTORIES"]["workdir"]
+        subdirs = config["PROJECT_SUBDIRS"]
+        input_dir = workdir / project_name / subdirs["separated_audio_speech"]
+        output_dir = workdir / project_name / subdirs["translated"]
+    except KeyError as exc:
+        print(f"Hiba: Hiányzó kulcs a config.json fájlban: {exc}")
+        sys.exit(1)
+
+    if not input_dir.is_dir():
+        print(f"Hiba: A bemeneti mappa nem található: {input_dir}")
+        sys.exit(1)
+
+    return input_dir, output_dir
+
+
+def resolve_language_params(
+    config: dict,
+    input_language: Optional[str],
+    output_language: Optional[str],
+) -> Tuple[str, str]:
+    """Nyelvi paraméterek előállítása CLI / config alapján."""
+    defaults = config.get("CONFIG", {})
+    default_input = str(defaults.get("default_source_lang", "en") or "en").upper()
+    default_output = str(defaults.get("default_target_lang", "hu") or "hu").upper()
+
+    resolved_input = (input_language or default_input).strip().upper()
+    resolved_output = (output_language or default_output).strip().upper()
+    return resolved_input, resolved_output
 
 def find_json_file(directory):
     """
@@ -34,7 +95,20 @@ def find_json_file(directory):
     
     return json_files[0], None
 
-def main(input_dir, output_dir, input_lang, output_lang, auth_key):
+def main(project_name: str, input_lang: Optional[str], output_lang: Optional[str], auth_key: str):
+    config, project_root = load_config()
+    input_dir_path, output_dir_path = resolve_project_paths(project_name, config, project_root)
+    input_dir = str(input_dir_path)
+    output_dir = str(output_dir_path)
+    input_lang_resolved, output_lang_resolved = resolve_language_params(config, input_lang, output_lang)
+
+    print("Projekt beállítások betöltve:")
+    print(f"  - Projekt név:             {project_name}")
+    print(f"  - Bemeneti mappa:          {input_dir_path}")
+    print(f"  - Kimeneti mappa:          {output_dir_path}")
+    print(f"  - Bemeneti nyelv (DeepL):  {input_lang_resolved}")
+    print(f"  - Kimeneti nyelv (DeepL):  {output_lang_resolved}")
+
     # DeepL fordító inicializálása
     translator = deepl.Translator(auth_key)
 
@@ -98,8 +172,8 @@ def main(input_dir, output_dir, input_lang, output_lang, auth_key):
     try:
         result = translator.translate_text(
             text_block,
-            source_lang=input_lang,
-            target_lang=output_lang
+            source_lang=input_lang_resolved,
+            target_lang=output_lang_resolved
         )
         translated_lines = result.text.split('\n')
     except deepl.DeepLException as e:
@@ -129,14 +203,37 @@ def main(input_dir, output_dir, input_lang, output_lang, auth_key):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Szövegszegmensek fordítása JSON fájlból DeepL segítségével és az eredmény hozzáadása a fájlhoz.')
-    parser.add_argument('-input_dir', required=True, help='A könyvtár, amely a fordítandó JSON fájlt tartalmazza.')
-    parser.add_argument('-output_dir', required=True, help='A könyvtár, ahová a kiegészített fájl kerül.')
-    parser.add_argument('-input_language', required=True, help='A bemeneti nyelv kódja (pl. EN, HU)')
-    parser.add_argument('-output_language', required=True, help='A kimeneti nyelv kódja (pl. EN, HU)')
-    parser.add_argument('-auth_key', required=True, help='A DeepL API hitelesítési kulcs')
+    parser = argparse.ArgumentParser(
+        description='Projekt-alapú JSON fordítás DeepL segítségével. A config.json alapján keresi a feldolgozandó fájlokat.'
+    )
+    parser.add_argument(
+        '-p',
+        '--project-name',
+        required=True,
+        help="A workdir-en belüli projektmappa neve."
+    )
+    parser.add_argument(
+        '-input_language',
+        '--input-language',
+        dest='input_language',
+        default=None,
+        help='A bemeneti nyelv kódja (pl. EN, HU). Ha nincs megadva, a config.json default_source_lang értéke lesz használva.'
+    )
+    parser.add_argument(
+        '-output_language',
+        '--output-language',
+        dest='output_language',
+        default=None,
+        help='A kimeneti nyelv kódja (pl. EN, HU). Ha nincs megadva, a config.json default_target_lang értéke lesz használva.'
+    )
+    parser.add_argument(
+        '-auth_key',
+        '--auth-key',
+        required=True,
+        help='A DeepL API hitelesítési kulcs.'
+    )
     add_debug_argument(parser)
 
     args = parser.parse_args()
     configure_debug_mode(args.debug)
-    main(args.input_dir, args.output_dir, args.input_language, args.output_language, args.auth_key)
+    main(args.project_name, args.input_language, args.output_language, args.auth_key)

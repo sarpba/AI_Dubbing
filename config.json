@@ -42,13 +42,16 @@
       "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "chunk_size": 5,
-        "device": "cuda"
+        "chunk_size": "5",
+        "debug": false,
+        "device": "cuda",
+        "keep_full_audio": false,
+        "non_speech_silence": true
       }
     },
     {
       "script": "ASR/whisx.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
@@ -66,11 +69,28 @@
     },
     {
       "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "output_language": "HU"
       }
+    },
+    {
+      "script": "TRANSLATE/translate.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {
+        "auth_key": "c385c56b-6b23-4917-9309-e0cd2ca79aa9:fx",
+        "debug": false,
+        "input_language": "en",
+        "output_language": "hu"
+      }
+    },
+    {
+      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
     },
     {
       "type": "widget",
@@ -79,7 +99,7 @@
     },
     {
       "script": "TTS/f5_tts_easy_codex_EQ.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "debug": false,
@@ -91,6 +111,22 @@
         "phonetic_ref": false,
         "remove_silence": false,
         "save_failures": true
+      }
+    },
+    {
+      "script": "TTS/f5_tts_narrator.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "debug": false,
+        "keep_best_over_tolerance": false,
+        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "norm": "hun",
+        "normalize_ref_audio": false,
+        "phonetic_ref": false,
+        "remove_silence": false,
+        "save_failures": false
       }
     },
     {

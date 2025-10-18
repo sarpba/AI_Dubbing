@@ -807,33 +807,10 @@
     "description": "Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.",
     "required": [
       {
-        "name": "input_dir",
+        "name": "project_name",
         "flags": [
-          "-input_dir"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "output_dir",
-        "flags": [
-          "-output_dir"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "input_language",
-        "flags": [
-          "-input_language"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "output_language",
-        "flags": [
-          "-output_language"
+          "-p",
+          "--project-name"
         ],
         "type": "option",
         "default": null
@@ -841,13 +818,32 @@
       {
         "name": "auth_key",
         "flags": [
-          "-auth_key"
+          "-auth_key",
+          "--auth-key"
         ],
         "type": "option",
         "default": null
       }
     ],
     "optional": [
+      {
+        "name": "input_language",
+        "flags": [
+          "-input_language",
+          "--input-language"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "output_language",
+        "flags": [
+          "-output_language",
+          "--output-language"
+        ],
+        "type": "option",
+        "default": null
+      },
       {
         "name": "debug",
         "flags": [
@@ -954,6 +950,180 @@
         "name": "norm",
         "flags": [
           "--norm"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "model_dir",
+        "flags": [
+          "--model_dir"
+        ],
+        "type": "option",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "speed",
+        "flags": [
+          "--speed"
+        ],
+        "type": "option",
+        "default": 1.0
+      },
+      {
+        "name": "nfe_step",
+        "flags": [
+          "--nfe_step"
+        ],
+        "type": "option",
+        "default": 32
+      },
+      {
+        "name": "remove_silence",
+        "flags": [
+          "--remove_silence"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "phonetic_ref",
+        "flags": [
+          "--phonetic-ref"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "normalize_ref_audio",
+        "flags": [
+          "--normalize-ref-audio"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "eq_config",
+        "flags": [
+          "--eq-config"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "ref_audio_peak",
+        "flags": [
+          "--ref-audio-peak"
+        ],
+        "type": "option",
+        "default": 0.95
+      },
+      {
+        "name": "max_workers",
+        "flags": [
+          "--max_workers"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "seed",
+        "flags": [
+          "--seed"
+        ],
+        "type": "option",
+        "default": -1
+      },
+      {
+        "name": "max_retries",
+        "flags": [
+          "--max-retries"
+        ],
+        "type": "option",
+        "default": 5
+      },
+      {
+        "name": "tolerance_factor",
+        "flags": [
+          "--tolerance-factor"
+        ],
+        "type": "option",
+        "default": 1.0
+      },
+      {
+        "name": "min_tolerance",
+        "flags": [
+          "--min-tolerance"
+        ],
+        "type": "option",
+        "default": 2
+      },
+      {
+        "name": "whisper_model",
+        "flags": [
+          "--whisper-model"
+        ],
+        "type": "option",
+        "default": "openai/whisper-large-v3"
+      },
+      {
+        "name": "beam_size",
+        "flags": [
+          "--beam-size"
+        ],
+        "type": "option",
+        "default": 5
+      },
+      {
+        "name": "save_failures",
+        "flags": [
+          "--save-failures"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "keep_best_over_tolerance",
+        "flags": [
+          "--keep-best-over-tolerance"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "f5-tts_hun",
+    "script": "TTS/f5_tts_narrator.py",
+    "description": "Narrátor referencia alapján generálja az összes szinkron szegmenst F5-TTS-sel.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      },
+      {
+        "name": "norm",
+        "flags": [
+          "--norm"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "narrator",
+        "flags": [
+          "--narrator"
         ],
         "type": "option",
         "default": null

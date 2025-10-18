@@ -4,33 +4,10 @@
   "description": "Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.",
   "required": [
     {
-      "name": "input_dir",
+      "name": "project_name",
       "flags": [
-        "-input_dir"
-      ],
-      "type": "option",
-      "default": null
-    },
-    {
-      "name": "output_dir",
-      "flags": [
-        "-output_dir"
-      ],
-      "type": "option",
-      "default": null
-    },
-    {
-      "name": "input_language",
-      "flags": [
-        "-input_language"
-      ],
-      "type": "option",
-      "default": null
-    },
-    {
-      "name": "output_language",
-      "flags": [
-        "-output_language"
+        "-p",
+        "--project-name"
       ],
       "type": "option",
       "default": null
@@ -38,13 +15,32 @@
     {
       "name": "auth_key",
       "flags": [
-        "-auth_key"
+        "-auth_key",
+        "--auth-key"
       ],
       "type": "option",
       "default": null
     }
   ],
   "optional": [
+    {
+      "name": "input_language",
+      "flags": [
+        "-input_language",
+        "--input-language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "output_language",
+      "flags": [
+        "-output_language",
+        "--output-language"
+      ],
+      "type": "option",
+      "default": null
+    },
     {
       "name": "debug",
       "flags": [
