@@ -904,7 +904,12 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Fordítás elindult! Az oldal frissítése szükséges az eredmények megtekintéséhez, amint a folyamat befejeződött.');
+                        const modeMessages = {
+                            srt_align: 'Meglévő célnyelvi SRT igazítása indul.',
+                            deepl: 'DeepL alapú fordítás indul (SRT nem található).'
+                        };
+                        const modeText = modeMessages[data.mode] || 'Fordítási folyamat elindult.';
+                        alert(`${modeText} Az oldal frissítése szükséges az eredmények megtekintéséhez, amint a folyamat befejeződött.`);
                         translationModal.hide();
                     } else {
                         alert('Hiba a fordítás indításakor: ' + data.error);

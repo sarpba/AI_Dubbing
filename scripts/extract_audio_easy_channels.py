@@ -3,6 +3,15 @@ import sys
 import subprocess
 import json
 import argparse
+from pathlib import Path
+
+for candidate in Path(__file__).resolve().parents:
+    if (candidate / "tools").is_dir():
+        if str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+        break
+
+from tools.debug_utils import add_debug_argument, configure_debug_mode
 
 def get_audio_stream_info(video_path):
     """
@@ -133,7 +142,9 @@ if __name__ == "__main__":
              "Ha a forrás hangsáv sztereó (2 csatornás), ez a kapcsoló figyelmen kívül lesz hagyva,\n"
              "és a kinyerés egyetlen sztereó fájlba történik."
     )
+    add_debug_argument(parser)
     args = parser.parse_args()
+    configure_debug_mode(args.debug)
     
     try:
         with open('config.json', 'r', encoding='utf-8') as f: config = json.load(f)

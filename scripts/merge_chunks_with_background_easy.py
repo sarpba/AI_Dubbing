@@ -3,7 +3,18 @@ import re
 import argparse
 import json
 from datetime import datetime
+from pathlib import Path
 from pydub import AudioSegment
+
+import sys
+
+for candidate in Path(__file__).resolve().parents:
+    if (candidate / "tools").is_dir():
+        if str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+        break
+
+from tools.debug_utils import add_debug_argument, configure_debug_mode
 
 def parse_time_string(time_str):
     """
@@ -129,7 +140,9 @@ def main():
                     "A könyvtárstruktúrát a 'config.json' fájl alapján határozza meg."
     )
     parser.add_argument('project_name', help='A feldolgozandó projekt könyvtár neve a "workdir"-en belül.')
+    add_debug_argument(parser)
     args = parser.parse_args()
+    configure_debug_mode(args.debug)
     project_name = args.project_name
 
     try:

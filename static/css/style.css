@@ -91,9 +91,87 @@ body {
   box-shadow: 0 0 0 0.25rem rgba(13, 202, 240, 0.25);
 }
 
+.focus-ring {
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  border-color: var(--primary-color) !important;
+}
+
 .modal-content {
   background-color: var(--card-bg);
   color: var(--text-color);
+}
+
+.file-group-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.file-group-card {
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  background-color: var(--card-bg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.file-group-header {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding-bottom: 0.35rem;
+}
+
+.file-group-title {
+  font-weight: 600;
+}
+
+.file-name {
+  word-break: break-all;
+}
+
+.group-toggle[data-collapsed="false"] {
+  color: var(--primary-color);
+}
+
+.file-video-preview {
+  max-width: 220px;
+  height: auto;
+  border-radius: 0.5rem;
+  background: #000;
+}
+
+.log-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  background-color: var(--card-bg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 0.75rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.log-panel .btn-outline-secondary {
+  border-radius: 0.5rem;
+}
+
+.log-viewer {
+  flex: 1;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background-color: rgba(0, 0, 0, 0.03);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-size: 0.85rem;
+  line-height: 1.3em;
+  max-height: calc(1.3em * 15);
+}
+
+[data-bs-theme="dark"] .log-viewer {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 /* Waveform styles */

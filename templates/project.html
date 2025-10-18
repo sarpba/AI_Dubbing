@@ -29,27 +29,131 @@
 
     <div class="container mt-4">
         <h1 class="mb-4">Projekt: {{ project.name }}</h1>
-        
+
+        <div class="card mb-4">
+            <div class="card-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <h5 class="mb-0">Automatikus AI workflow</h5>
+                    <span id="workflowStatusBadge" class="badge bg-secondary">Nincs aktív feladat</span>
+                </div>
+                <small id="workflowStatusHint" class="text-muted">Válassz kontextust és modelleket, majd indítsd a teljes feldolgozást.</small>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-stretch">
+                    <div class="col-lg-7">
+                        <form id="workflowForm">
+                            <div class="alert alert-info small mb-3" role="alert" id="workflowInfo">
+                                A folyamat magában foglalja az audio kivonást, szétválasztást, beolvasást, fordítást és a szinkron hang generálását. A státuszt folyamatosan frissítjük, a részletes napló a log fájlban érhető el.
+                            </div>
+                            <div class="mb-3">
+                                <label for="workflowTranslationContext" class="form-label">Fordítási kontextus</label>
+                                <textarea class="form-control" id="workflowTranslationContext" rows="2" placeholder="Pl.: sorozat/film címe, szereplők, hangulat" required></textarea>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="workflowTtsModel" class="form-label">TTS modell (futtatás 1-3)</label>
+                                    <select class="form-select" id="workflowTtsModel" required></select>
+                                    <small class="text-muted">Általános modell a fő futásokhoz.</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="workflowTtsModelRun4" class="form-label">TTS modell (4. futtatás)</label>
+                                    <select class="form-select" id="workflowTtsModelRun4" required></select>
+                                    <small class="text-muted">Finomhangolt modell a legjobb eredmény kiválasztásához.</small>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="workflowLangCode" class="form-label">Nyelvi kód</label>
+                                <select class="form-select" id="workflowLangCode" required></select>
+                                <small class="text-muted">A kész anyag cél nyelve.</small>
+                            </div>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <button type="button" class="btn btn-success d-flex align-items-center gap-2" id="startWorkflowBtn" onclick="startWorkflow()">
+                                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="workflowSpinner"></span>
+                                    <span>Workflow indítása</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger d-flex align-items-center gap-2 d-none" id="stopWorkflowBtn" onclick="stopWorkflow()">
+                                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="stopWorkflowSpinner"></span>
+                                    <span id="stopWorkflowLabel">Workflow megszakítása</span>
+                                </button>
+                                <span id="workflowStatusText" class="text-muted small">Állapot frissítése folyamatban...</span>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="log-panel h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">Workflow log</h6>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshWorkflowLogBtn">Frissítés</button>
+                            </div>
+                            <div id="workflowLogStatus" class="small text-muted mb-2">
+                                A log a workflow indítása után jelenik meg.
+                            </div>
+                            <div id="workflowLogLink" class="small mb-2"></div>
+                            <pre id="workflowLogContent" class="log-viewer">—</pre>
+                        </div>
+                    </div>
+                </div>
+                <div id="workflowTips" class="small text-muted mt-3">
+                    Tipp: a log fájlban azonnal láthatók a parancsok kimenetei. Ha hibát észlelsz, a log segít beazonosítani a lépést.
+                </div>
+            </div>
+        </div>
+
         <div class="row">
             <div class="col-md-6">
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Feltöltött videó</h5>
                         {% if project.files.upload %}
-<button class="btn btn-sm btn-primary" id="extractBtn" onclick="runAudioExtraction('{{ project.name }}', '{{ project.files.upload[0] }}', this)">
+<button class="btn btn-sm btn-primary" id="extractBtn" onclick="runAudioExtraction('{{ project.name }}', this)">
     Audio kivonás
 </button>
                         {% endif %}
                     </div>
                     <div class="card-body">
-                        {% if project.files.upload %}
-                            <ul class="list-group" id="speechAudioList">
-                                {% for file in project.files.upload %}
-                                    <li class="list-group-item">
-                                        {{ file }}
-                                    </li>
+                        {% if project.files.upload_grouped %}
+                            <div class="file-group-container">
+                                {% for group in project.files.upload_grouped %}
+                                    {% set group_id = 'upload-group-' ~ loop.index %}
+                                    <div class="file-group-card">
+                                        <div class="file-group-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <span class="file-group-title">
+                                                {{ '.' + group.display if group.extension else group.display }} &middot; {{ group.count }} fájl
+                                            </span>
+                                            {% if group.count > 3 %}
+                                                <button type="button" class="btn btn-sm btn-outline-secondary group-toggle" data-target="{{ group_id }}" data-collapsed="true">
+                                                    További fájlok megjelenítése
+                                                </button>
+                                            {% endif %}
+                                        </div>
+                                        <ul class="list-group mt-2" id="{{ group_id }}">
+                                            {% for file in group.files %}
+                                                {% set is_extra = loop.index > 3 %}
+                                                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 {% if is_extra %}group-extra d-none{% endif %}">
+                                                    <span class="file-name">{{ file }}</span>
+                                                    {% set ext = group.extension %}
+                                                    {% if ext in audio_extensions %}
+                                                        <audio controls style="height: 36px;">
+                                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.upload + '/' + file) }}" type="{{ audio_mime_map.get(ext, 'audio/mpeg') }}">
+                                                        </audio>
+                                                    {% elif ext in video_extensions %}
+                                                        <video controls class="file-video-preview">
+                                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.upload + '/' + file) }}" type="{{ video_mime_map.get(ext, 'video/mp4') }}">
+                                                        </video>
+                                                    {% endif %}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% if group.count > 3 %}
+                                            <div class="text-end mt-2">
+                                                <button type="button" class="btn btn-sm btn-link group-toggle" data-target="{{ group_id }}" data-collapsed="true">
+                                                    További fájlok megjelenítése
+                                                </button>
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 {% endfor %}
-                            </ul>
+                            </div>
                         {% else %}
                             <p>Nincs feltöltött videó</p>
                         {% endif %}
@@ -68,17 +172,44 @@
                         {% endif %}
                     </div>
                     <div class="card-body">
-                        {% if project.files.extracted_audio %}
-                            <ul class="list-group" id="speechAudioList">
-                                {% for file in project.files.extracted_audio %}
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        {{ file }}
-                                        <audio controls style="height: 30px;">
-                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.extracted_audio + '/' + file) }}" type="audio/wav">
-                                        </audio>
-                                    </li>
+                        {% if project.files.extracted_audio_grouped %}
+                            <div class="file-group-container">
+                                {% for group in project.files.extracted_audio_grouped %}
+                                    {% set group_id = 'extracted-group-' ~ loop.index %}
+                                    <div class="file-group-card">
+                                        <div class="file-group-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <span class="file-group-title">
+                                                {{ '.' + group.display if group.extension else group.display }} &middot; {{ group.count }} fájl
+                                            </span>
+                                            {% if group.count > 3 %}
+                                                <button type="button" class="btn btn-sm btn-outline-secondary group-toggle" data-target="{{ group_id }}" data-collapsed="true">
+                                                    További fájlok megjelenítése
+                                                </button>
+                                            {% endif %}
+                                        </div>
+                                        <ul class="list-group mt-2" id="{{ group_id }}">
+                                            {% for file in group.files %}
+                                                {% set is_extra = loop.index > 3 %}
+                                                <li class="list-group-item d-flex justify-content-between align-items-center gap-2 {% if is_extra %}group-extra d-none{% endif %}">
+                                                    <span class="file-name">{{ file }}</span>
+                                                    {% if group.extension in audio_extensions %}
+                                                        <audio controls style="height: 36px;">
+                                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.extracted_audio + '/' + file) }}" type="{{ audio_mime_map.get(group.extension, 'audio/mpeg') }}">
+                                                        </audio>
+                                                    {% endif %}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% if group.count > 3 %}
+                                            <div class="text-end mt-2">
+                                                <button type="button" class="btn btn-sm btn-link group-toggle" data-target="{{ group_id }}" data-collapsed="true">
+                                                    További fájlok megjelenítése
+                                                </button>
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 {% endfor %}
-                            </ul>
+                            </div>
                         {% else %}
                             <p>Nincs kinyert audió</p>
                         {% endif %}
@@ -137,17 +268,44 @@
                         <h5>Háttérzaj</h5>
                     </div>
                     <div class="card-body">
-                        {% if project.files.separated_audio_background %}
-                            <ul class="list-group">
-                                {% for file in project.files.separated_audio_background %}
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        {{ file }}
-                                        <audio controls style="height: 30px;">
-                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.separated_audio_background + '/' + file) }}" type="audio/wav">
-                                        </audio>
-                                    </li>
+                        {% if project.files.separated_audio_background_grouped %}
+                            <div class="file-group-container">
+                                {% for group in project.files.separated_audio_background_grouped %}
+                                    {% set group_id = 'background-group-' ~ loop.index %}
+                                    <div class="file-group-card">
+                                        <div class="file-group-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <span class="file-group-title">
+                                                {{ '.' + group.display if group.extension else group.display }} &middot; {{ group.count }} fájl
+                                            </span>
+                                            {% if group.count > 3 %}
+                                                <button type="button" class="btn btn-sm btn-outline-secondary group-toggle" data-target="{{ group_id }}" data-collapsed="true">
+                                                    További fájlok megjelenítése
+                                                </button>
+                                            {% endif %}
+                                        </div>
+                                        <ul class="list-group mt-2" id="{{ group_id }}">
+                                            {% for file in group.files %}
+                                                {% set is_extra = loop.index > 3 %}
+                                                <li class="list-group-item d-flex justify-content-between align-items-center gap-2 {% if is_extra %}group-extra d-none{% endif %}">
+                                                    <span class="file-name">{{ file }}</span>
+                                                    {% if group.extension in audio_extensions %}
+                                                        <audio controls style="height: 36px;">
+                                                            <source src="{{ url_for('serve_workdir', filename=project.name + '/' + config.PROJECT_SUBDIRS.separated_audio_background + '/' + file) }}" type="{{ audio_mime_map.get(group.extension, 'audio/mpeg') }}">
+                                                        </audio>
+                                                    {% endif %}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% if group.count > 3 %}
+                                            <div class="text-end mt-2">
+                                                <button type="button" class="btn btn-sm btn-link group-toggle" data-target="{{ group_id }}" data-collapsed="true">
+                                                    További fájlok megjelenítése
+                                                </button>
+                                            </div>
+                                        {% endif %}
+                                    </div>
                                 {% endfor %}
-                            </ul>
+                            </div>
                         {% else %}
                             <p>Nincs feldolgozott háttérzaj</p>
                         {% endif %}
@@ -221,17 +379,27 @@
                     <form id="transcribeForm">
                         <input type="hidden" id="transcribeProjectName">
                         <input type="hidden" id="transcribeFileName">
-                        <div class="mb-3">
-                            <label for="language" class="form-label">Nyelv</label>
-                            <input type="text" class="form-control" id="language" placeholder="Pl.: en, vagy hagyd üresen az automatikus nyelvfelismeréshez">
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="autoChunk" checked>
+                            <label class="form-check-label" for="autoChunk">Automatikus chunk-méret kalibráció</label>
                         </div>
                         <div class="mb-3">
-                            <label for="gpus" class="form-label">GPU-k (vesszővel elválasztva)</label>
-                            <input type="text" class="form-control" id="gpus" placeholder="Pl.: 0,1">
+                            <label for="chunkSeconds" class="form-label">Fix chunk-méret (másodperc)</label>
+                            <input type="number" class="form-control" id="chunkSeconds" value="30" min="1">
+                            <small class="text-muted">Csak akkor kerül felhasználásra, ha az automatikus kalibráció ki van kapcsolva.</small>
                         </div>
                         <div class="mb-3">
-                            <label for="hfToken" class="form-label">Hugging Face Token (opcionális)</label>
-                            <input type="text" class="form-control" id="hfToken" placeholder="HF token a diarizáláshoz">
+                            <label for="maxPause" class="form-label">Maximális szünet a mondatok között (másodperc)</label>
+                            <input type="number" class="form-control" id="maxPause" value="0.6" min="0" step="0.1">
+                        </div>
+                        <div class="mb-3">
+                            <label for="timestampPadding" class="form-label">Időbélyeg kiterjesztés (másodperc)</label>
+                            <input type="number" class="form-control" id="timestampPadding" value="0.2" min="0" step="0.1">
+                        </div>
+                        <div class="mb-3">
+                            <label for="maxSegmentDuration" class="form-label">Mondatszegmens maximális hossza (másodperc)</label>
+                            <input type="number" class="form-control" id="maxSegmentDuration" value="11.5" min="0" step="0.5">
+                            <small class="text-muted">Állítsd 0-ra, ha nem szeretnéd korlátozni a szegmens hosszát.</small>
                         </div>
                     </form>
                 </div>
@@ -243,8 +411,81 @@
         </div>
     </div>
 
+    <!-- Workflow API Keys Modal -->
+    <div class="modal fade" id="workflowKeysModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">API kulcsok megadása</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning small" id="workflowKeysInfo">
+                        A workflow indításához add meg a hiányzó API kulcsokat.
+                    </div>
+                    <div class="mb-3 d-none" id="workflowKeyFieldChatgpt">
+                        <label for="workflowKeyChatgpt" class="form-label">OpenAI / ChatGPT API kulcs</label>
+                        <input type="password" class="form-control" id="workflowKeyChatgpt" placeholder="sk-..." autocomplete="off">
+                    </div>
+                    <div class="mb-3 d-none" id="workflowKeyFieldDeepl">
+                        <label for="workflowKeyDeepl" class="form-label">DeepL API kulcs</label>
+                        <input type="password" class="form-control" id="workflowKeyDeepl" placeholder="DeepL API kulcs" autocomplete="off">
+                    </div>
+                    <div class="mb-3 d-none" id="workflowKeyFieldHuggingface">
+                        <label for="workflowKeyHuggingface" class="form-label">Hugging Face token</label>
+                        <input type="password" class="form-control" id="workflowKeyHuggingface" placeholder="hf_..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-primary d-flex align-items-center gap-2" id="workflowKeysSubmitBtn">
+                        <span class="spinner-border spinner-border-sm d-none" id="workflowKeysSpinner" role="status" aria-hidden="true"></span>
+                        <span id="workflowKeysSubmitLabel">Mentés és indítás</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        const PROJECT_NAME = "{{ project.name }}";
+        let workflowPollInterval = null;
+        let workflowLogInterval = null;
+        let currentWorkflowJobId = null;
+        let currentLogJobId = null;
+        let workflowInfoDismissed = false;
+        let workflowKeysModal = null;
+        let pendingWorkflowPayload = null;
+        const workflowKeyFieldMap = {
+            chatgpt: { wrapperId: 'workflowKeyFieldChatgpt', inputId: 'workflowKeyChatgpt', payloadKey: 'chatgpt_api_key' },
+            deepl: { wrapperId: 'workflowKeyFieldDeepl', inputId: 'workflowKeyDeepl', payloadKey: 'deepl_api_key' },
+            huggingface: { wrapperId: 'workflowKeyFieldHuggingface', inputId: 'workflowKeyHuggingface', payloadKey: 'huggingface_token' }
+        };
+
+        document.addEventListener('DOMContentLoaded', function () {
+            attachFocusHighlights();
+            initFileGroupToggles();
+            const refreshLogBtn = document.getElementById('refreshWorkflowLogBtn');
+            if (refreshLogBtn) {
+                refreshLogBtn.addEventListener('click', () => fetchWorkflowLog());
+            }
+            loadWorkflowOptions(PROJECT_NAME);
+
+            const workflowKeysModalElement = document.getElementById('workflowKeysModal');
+            if (workflowKeysModalElement) {
+                workflowKeysModal = new bootstrap.Modal(workflowKeysModalElement);
+                workflowKeysModalElement.addEventListener('hidden.bs.modal', () => {
+                    resetWorkflowKeyModal();
+                    pendingWorkflowPayload = null;
+                });
+                const submitBtn = document.getElementById('workflowKeysSubmitBtn');
+                if (submitBtn) {
+                    submitBtn.addEventListener('click', saveWorkflowKeys);
+                }
+            }
+        });
+
         // Theme toggle function
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-bs-theme');
@@ -261,21 +502,699 @@
             localStorage.setItem('theme', newTheme);
         }
 
+        function attachFocusHighlights() {
+            document.querySelectorAll('#workflowForm select, #workflowForm textarea').forEach(element => {
+                element.addEventListener('focus', () => element.classList.add('focus-ring'));
+                element.addEventListener('blur', () => element.classList.remove('focus-ring'));
+            });
+        }
+
+        function initFileGroupToggles() {
+            const toggles = document.querySelectorAll('.group-toggle');
+            toggles.forEach(button => {
+                if (button.dataset.initialized === 'true') {
+                    return;
+                }
+                button.dataset.initialized = 'true';
+                button.addEventListener('click', () => toggleFileGroup(button.dataset.target));
+            });
+        }
+
+        function toggleFileGroup(groupId) {
+            const list = document.getElementById(groupId);
+            if (!list) return;
+            const extras = list.querySelectorAll('.group-extra');
+            if (!extras.length) return;
+            const shouldExpand = Array.from(extras).some(item => item.classList.contains('d-none'));
+            extras.forEach(item => item.classList.toggle('d-none', !shouldExpand));
+            document.querySelectorAll(`.group-toggle[data-target="${groupId}"]`).forEach(button => {
+                button.dataset.collapsed = shouldExpand ? 'false' : 'true';
+                button.textContent = shouldExpand ? 'Kevesebb fájl megjelenítése' : 'További fájlok megjelenítése';
+            });
+        }
+
+        function startLogPolling(jobId, immediate = true) {
+            if (!jobId) {
+                return;
+            }
+            if (currentLogJobId === jobId && workflowLogInterval) {
+                return;
+            }
+            stopLogPolling();
+            currentLogJobId = jobId;
+            if (immediate) {
+                fetchWorkflowLog();
+            }
+            workflowLogInterval = setInterval(fetchWorkflowLog, 4000);
+        }
+
+        function stopLogPolling(resetId = false) {
+            if (workflowLogInterval) {
+                clearInterval(workflowLogInterval);
+                workflowLogInterval = null;
+            }
+            if (resetId) {
+                currentLogJobId = null;
+            }
+        }
+
+        async function fetchWorkflowLog() {
+            const jobId = currentLogJobId || currentWorkflowJobId;
+            if (!jobId) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/workflow-log/${jobId}`);
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    updateLogStatus(result.error || 'Log nem érhető el.', 'danger');
+                    return;
+                }
+
+                const logContent = document.getElementById('workflowLogContent');
+                if (logContent) {
+                    logContent.textContent = result.log || (result.log_available ? '' : 'Log még nem érhető el.');
+                    logContent.scrollTop = logContent.scrollHeight;
+                }
+
+                if (result.log_available) {
+                    updateLogStatus(
+                        result.completed ? 'A workflow befejeződött.' : 'A log folyamatosan frissül.',
+                        result.completed ? 'success' : 'muted'
+                    );
+                } else {
+                    updateLogStatus('A log fájl előkészítése folyamatban...', 'muted');
+                }
+
+                if (result.completed) {
+                    stopLogPolling();
+                }
+            } catch (error) {
+                updateLogStatus(`Log lekérése sikertelen: ${error.message}`, 'danger');
+            }
+        }
+
+        function updateLogStatus(message, tone = 'muted') {
+            const statusEl = document.getElementById('workflowLogStatus');
+            if (!statusEl) return;
+            statusEl.textContent = message;
+            statusEl.classList.remove('text-muted', 'text-danger', 'text-success');
+            if (tone === 'danger') {
+                statusEl.classList.add('text-danger');
+            } else if (tone === 'success') {
+                statusEl.classList.add('text-success');
+            } else {
+                statusEl.classList.add('text-muted');
+            }
+        }
+
+        function setWorkflowBadge(status) {
+            const badge = document.getElementById('workflowStatusBadge');
+            badge.classList.remove('bg-secondary', 'bg-success', 'bg-danger', 'bg-warning', 'bg-info', 'text-dark');
+            const mapping = {
+                queued: 'bg-warning text-dark',
+                running: 'bg-info text-dark',
+                completed: 'bg-success',
+                failed: 'bg-danger',
+                cancelling: 'bg-warning text-dark',
+                cancelled: 'bg-secondary'
+            };
+            const classes = mapping[status];
+            if (classes) {
+                classes.split(' ').forEach(cls => badge.classList.add(cls));
+            } else {
+                badge.classList.add('bg-secondary');
+            }
+        }
+
+        function updateInfoBox(type, message) {
+            const infoBox = document.getElementById('workflowInfo');
+            if (!infoBox) return;
+            infoBox.classList.remove('alert-info', 'alert-warning', 'alert-danger', 'alert-secondary');
+            infoBox.classList.add(`alert-${type}`);
+            infoBox.textContent = message;
+            infoBox.classList.remove('d-none');
+        }
+
+        function renderWorkflowStatus(job) {
+            const badge = document.getElementById('workflowStatusBadge');
+            const statusText = document.getElementById('workflowStatusText');
+            const logLink = document.getElementById('workflowLogLink');
+            const startButton = document.getElementById('startWorkflowBtn');
+            const startButtonSpinner = document.getElementById('workflowSpinner');
+            const stopButton = document.getElementById('stopWorkflowBtn');
+            const stopSpinner = document.getElementById('stopWorkflowSpinner');
+            const stopLabel = document.getElementById('stopWorkflowLabel');
+            const hint = document.getElementById('workflowStatusHint');
+            const infoBox = document.getElementById('workflowInfo');
+            const tipsBox = document.getElementById('workflowTips');
+
+            const statusLabels = {
+                queued: 'Sorban áll',
+                running: 'Folyamatban',
+                completed: 'Kész',
+                failed: 'Hiba',
+                cancelling: 'Megszakítás folyamatban',
+                cancelled: 'Megszakítva'
+            };
+
+            const activeStatuses = ['queued', 'running', 'cancelling'];
+            if (!job) {
+                badge.textContent = 'Nincs aktív feladat';
+                setWorkflowBadge(null);
+                statusText.textContent = 'Workflow még nem futott ezen a projekten.';
+                if (logLink) logLink.innerHTML = '';
+                if (stopButton) {
+                    stopButton.classList.add('d-none');
+                    stopButton.disabled = false;
+                    if (stopSpinner) stopSpinner.classList.add('d-none');
+                    if (stopLabel) stopLabel.textContent = 'Workflow megszakítása';
+                }
+                startButton.disabled = false;
+                startButton.classList.remove('btn-processing');
+                startButtonSpinner.classList.add('d-none');
+                if (!workflowInfoDismissed && infoBox) {
+                    infoBox.classList.remove('d-none');
+                }
+                tipsBox.classList.remove('text-danger');
+                if (hint) {
+                    hint.textContent = 'Válassz kontextust és modelleket, majd indítsd a teljes feldolgozást.';
+                }
+                updateLogStatus('A log a workflow indítása után jelenik meg.');
+                stopLogPolling(true);
+                return;
+            }
+
+            if (job.job_id) {
+                currentWorkflowJobId = job.job_id;
+            }
+
+            badge.textContent = statusLabels[job.status] || job.status || 'ismeretlen';
+            setWorkflowBadge(job.status);
+            statusText.textContent = job.message || '';
+
+            if (logLink) {
+                if (job.log && job.log.url) {
+                    logLink.innerHTML = `<a href="${job.log.url}" target="_blank" rel="noopener">Log megnyitása</a>`;
+                } else {
+                    logLink.innerHTML = '';
+                }
+            }
+
+            if (activeStatuses.includes(job.status)) {
+                const activeJobId = currentWorkflowJobId || job.job_id;
+                if (activeJobId) {
+                    startLogPolling(activeJobId);
+                }
+                startButton.disabled = true;
+                startButton.classList.add('btn-processing');
+                startButtonSpinner.classList.remove('d-none');
+                if (infoBox) {
+                    infoBox.classList.remove('alert-info', 'alert-warning', 'alert-danger', 'alert-secondary');
+                    infoBox.classList.add(job.status === 'cancelling' ? 'alert-warning' : 'alert-secondary');
+                    infoBox.classList.remove('d-none');
+                }
+                if (hint) {
+                    if (job.status === 'queued') {
+                        hint.textContent = 'Feladat sorban áll – néhány másodpercen belül indul.';
+                    } else if (job.status === 'cancelling') {
+                        hint.textContent = 'Megszakítás folyamatban – várakozás a folyamat leállítására.';
+                    } else {
+                        hint.textContent = 'Folyamatban lévő workflow – a logban követheted a lépéseket.';
+                    }
+                }
+                if (stopButton) {
+                    stopButton.classList.remove('d-none');
+                    const cancelRequested = Boolean(job.cancel_requested);
+                    stopButton.disabled = cancelRequested;
+                    if (stopSpinner && !cancelRequested) {
+                        stopSpinner.classList.add('d-none');
+                    }
+                    if (stopLabel) {
+                        stopLabel.textContent = cancelRequested ? 'Megszakítás kérése folyamatban...' : 'Workflow megszakítása';
+                    }
+                }
+            } else {
+                stopLogPolling();
+                startButton.disabled = false;
+                startButton.classList.remove('btn-processing');
+                startButtonSpinner.classList.add('d-none');
+                workflowInfoDismissed = true;
+                if (infoBox) {
+                    infoBox.classList.add('d-none');
+                }
+                const isFailed = job.status === 'failed';
+                const isCancelled = job.status === 'cancelled';
+                tipsBox.classList.toggle('text-danger', isFailed);
+                if (hint) {
+                    if (isFailed) {
+                        hint.textContent = 'Hiba történt – nyisd meg a logot és ellenőrizd, melyik lépés állt le.';
+                    } else if (isCancelled) {
+                        hint.textContent = 'Workflow megszakítva – szükség esetén indíts új feldolgozást.';
+                    } else {
+                        hint.textContent = 'Workflow sikeresen lefutott – a fájlok a projekt könyvtárban találhatók.';
+                    }
+                }
+                if (stopButton) {
+                    stopButton.classList.add('d-none');
+                    stopButton.disabled = false;
+                    if (stopSpinner) stopSpinner.classList.add('d-none');
+                    if (stopLabel) stopLabel.textContent = 'Workflow megszakítása';
+                }
+                if (isFailed) {
+                    updateLogStatus('A workflow hibával leállt. Ellenőrizd a logot.', 'danger');
+                } else if (isCancelled) {
+                    updateLogStatus('A workflow megszakítva.', 'danger');
+                } else if (job.status === 'completed') {
+                    updateLogStatus('A workflow befejeződött.', 'success');
+                }
+            }
+        }
+
+        async function loadWorkflowOptions(projectName) {
+            const statusText = document.getElementById('workflowStatusText');
+            const startButton = document.getElementById('startWorkflowBtn');
+
+            try {
+                const response = await fetch(`/api/workflow-options/${encodeURIComponent(projectName)}`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba');
+                }
+
+                const modelSelect = document.getElementById('workflowTtsModel');
+                const modelRun4Select = document.getElementById('workflowTtsModelRun4');
+                const langSelect = document.getElementById('workflowLangCode');
+                const contextField = document.getElementById('workflowTranslationContext');
+
+                modelSelect.innerHTML = '';
+                modelRun4Select.innerHTML = '';
+                langSelect.innerHTML = '';
+
+                (result.models || []).forEach(model => {
+                    const opt = document.createElement('option');
+                    opt.value = model;
+                    opt.textContent = model;
+                    modelSelect.appendChild(opt.cloneNode(true));
+                    modelRun4Select.appendChild(opt);
+                });
+
+                (result.languages || []).forEach(lang => {
+                    const opt = document.createElement('option');
+                    opt.value = lang;
+                    opt.textContent = lang;
+                    langSelect.appendChild(opt);
+                });
+
+                if (result.defaults) {
+                    contextField.value = result.defaults.translation_context || '';
+                    if (result.defaults.tts_model) {
+                        modelSelect.value = result.defaults.tts_model;
+                    }
+                    if (result.defaults.tts_model_run4) {
+                        modelRun4Select.value = result.defaults.tts_model_run4;
+                    }
+                    if (result.defaults.lang_code) {
+                        langSelect.value = result.defaults.lang_code;
+                    }
+                }
+
+                if (!modelSelect.value || !modelRun4Select.value) {
+                    startButton.disabled = true;
+                    statusText.textContent = 'Nem találhatók TTS modellek. Ellenőrizd a TTS mappát.';
+                    updateInfoBox('warning', 'Nem találtunk TTS modelleket. Ellenőrizd, hogy a TTS könyvtárban elérhetőek-e a modellek, majd frissítsd az oldalt.');
+                } else {
+                    statusText.textContent = 'Workflow készen áll az indításra.';
+                    if (!workflowInfoDismissed) {
+                        updateInfoBox('info', 'A folyamat magában foglalja az audio kivonást, szétválasztást, beolvasást, fordítást és a szinkron hang generálását. A státuszt folyamatosan frissítjük, a részletes napló a log fájlban érhető el.');
+                    }
+                }
+
+                renderWorkflowStatus(result.latest_job);
+
+                if (result.latest_job && ['queued', 'running', 'cancelling'].includes(result.latest_job.status)) {
+                    currentWorkflowJobId = result.latest_job.job_id;
+                    startWorkflowPolling(result.latest_job.job_id, true);
+                }
+            } catch (error) {
+                console.error('Hiba a workflow opciók betöltésekor:', error);
+                statusText.textContent = `Hiba: ${error.message}`;
+                startButton.disabled = true;
+            }
+        }
+
+        function stopWorkflowPolling() {
+            if (workflowPollInterval) {
+                clearInterval(workflowPollInterval);
+                workflowPollInterval = null;
+            }
+        }
+
+        async function pollWorkflowStatus() {
+            try {
+                if (!currentWorkflowJobId) {
+                    return;
+                }
+                const response = await fetch(`/api/workflow-status/${currentWorkflowJobId}`);
+                if (!response.ok) {
+                    throw new Error('Nem sikerült lekérdezni a feladat állapotát.');
+                }
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba');
+                }
+                const job = result.job;
+                renderWorkflowStatus(job);
+                if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+                    stopWorkflowPolling();
+                }
+            } catch (error) {
+                console.error('Állapot lekérdezési hiba:', error);
+                stopWorkflowPolling();
+                stopLogPolling();
+                currentWorkflowJobId = null;
+            }
+        }
+
+        function startWorkflowPolling(jobId, triggerImmediate = true) {
+            stopWorkflowPolling();
+            currentWorkflowJobId = jobId;
+            if (triggerImmediate) {
+                pollWorkflowStatus();
+            }
+            workflowPollInterval = setInterval(pollWorkflowStatus, 5000);
+        }
+
+        function resetWorkflowKeyModal() {
+            Object.values(workflowKeyFieldMap).forEach(cfg => {
+                const wrapper = document.getElementById(cfg.wrapperId);
+                if (wrapper) {
+                    wrapper.classList.add('d-none');
+                }
+                const input = document.getElementById(cfg.inputId);
+                if (input) {
+                    input.value = '';
+                }
+            });
+            const info = document.getElementById('workflowKeysInfo');
+            if (info) {
+                info.textContent = 'A workflow indításához add meg a hiányzó API kulcsokat.';
+            }
+        }
+
+        function prepareWorkflowKeyModal(missingKeys) {
+            const labels = missingKeys.map(item => item.label);
+            const info = document.getElementById('workflowKeysInfo');
+            if (info) {
+                info.textContent = 'A workflow indításához add meg a következő kulcsokat: ' + labels.join(', ');
+            }
+            Object.entries(workflowKeyFieldMap).forEach(([key, cfg]) => {
+                const wrapper = document.getElementById(cfg.wrapperId);
+                const input = document.getElementById(cfg.inputId);
+                const shouldShow = missingKeys.some(item => item.key === key);
+                if (wrapper) {
+                    wrapper.classList.toggle('d-none', !shouldShow);
+                }
+                if (input) {
+                    input.value = '';
+                }
+            });
+        }
+
+        async function ensureWorkflowKeys(payload) {
+            const response = await fetch(`/api/workflow-key-status/${encodeURIComponent(PROJECT_NAME)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lang_code: payload.lang_code })
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Nem sikerült ellenőrizni az API kulcsokat.');
+            }
+            const missingPairs = Object.entries(result.keys).filter(([, info]) => info.required && !info.present);
+            if (missingPairs.length === 0) {
+                pendingWorkflowPayload = null;
+                return true;
+            }
+            const missingList = missingPairs.map(([key, info]) => ({ key, label: info.label || key }));
+            prepareWorkflowKeyModal(missingList);
+            pendingWorkflowPayload = payload;
+            if (!workflowKeysModal) {
+                const modalElement = document.getElementById('workflowKeysModal');
+                workflowKeysModal = modalElement ? new bootstrap.Modal(modalElement) : null;
+            }
+            if (workflowKeysModal) {
+                workflowKeysModal.show();
+            } else {
+                alert('Hiányzó API kulcsok: ' + missingList.map(item => item.label).join(', '));
+            }
+            return false;
+        }
+
+        async function saveWorkflowKeys() {
+            if (!pendingWorkflowPayload) {
+                if (workflowKeysModal) {
+                    workflowKeysModal.hide();
+                }
+                return;
+            }
+            const submitBtn = document.getElementById('workflowKeysSubmitBtn');
+            const spinner = document.getElementById('workflowKeysSpinner');
+            const bodyPayload = {};
+            let firstEmptyField = null;
+            Object.values(workflowKeyFieldMap).forEach(cfg => {
+                const wrapper = document.getElementById(cfg.wrapperId);
+                if (wrapper && !wrapper.classList.contains('d-none')) {
+                    const input = document.getElementById(cfg.inputId);
+                    const value = (input ? input.value : '').trim();
+                    if (!value) {
+                        if (!firstEmptyField && input) {
+                            firstEmptyField = input;
+                        }
+                    } else {
+                        bodyPayload[cfg.payloadKey] = value;
+                    }
+                }
+            });
+            if (firstEmptyField) {
+                firstEmptyField.focus();
+                alert('Kérjük add meg az összes hiányzó kulcsot.');
+                return;
+            }
+            if (!Object.keys(bodyPayload).length) {
+                if (workflowKeysModal) {
+                    workflowKeysModal.hide();
+                }
+                return;
+            }
+            if (submitBtn) {
+                submitBtn.disabled = true;
+            }
+            if (spinner) {
+                spinner.classList.remove('d-none');
+            }
+            try {
+                const response = await fetch('/save-workflow-keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyPayload)
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Nem sikerült menteni az API kulcsokat.');
+                }
+                const payloadToRun = pendingWorkflowPayload;
+                pendingWorkflowPayload = null;
+                if (workflowKeysModal) {
+                    workflowKeysModal.hide();
+                }
+                await executeWorkflow(payloadToRun);
+            } catch (error) {
+                alert('API kulcs mentése sikertelen: ' + error.message);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                }
+                if (spinner) {
+                    spinner.classList.add('d-none');
+                }
+            }
+        }
+
+        async function executeWorkflow(payload) {
+            const statusText = document.getElementById('workflowStatusText');
+            const startButton = document.getElementById('startWorkflowBtn');
+            const spinner = document.getElementById('workflowSpinner');
+            const stopButton = document.getElementById('stopWorkflowBtn');
+            const stopSpinner = document.getElementById('stopWorkflowSpinner');
+            const stopLabel = document.getElementById('stopWorkflowLabel');
+            const logContent = document.getElementById('workflowLogContent');
+            const logLink = document.getElementById('workflowLogLink');
+
+            currentWorkflowJobId = null;
+            stopLogPolling(true);
+            if (startButton) {
+                startButton.disabled = true;
+                startButton.classList.add('btn-processing');
+            }
+            if (statusText) {
+                statusText.textContent = 'Workflow indítása...';
+            }
+            if (spinner) {
+                spinner.classList.remove('d-none');
+            }
+            updateInfoBox('secondary', 'Workflow indítása... Az első lépés néhány másodpercig eltarthat.');
+            if (stopButton) {
+                stopButton.classList.remove('d-none');
+                stopButton.disabled = true;
+            }
+            if (stopSpinner) {
+                stopSpinner.classList.add('d-none');
+            }
+            if (stopLabel) {
+                stopLabel.textContent = 'Workflow megszakítása';
+            }
+            if (logLink) {
+                logLink.innerHTML = '';
+            }
+            if (logContent) {
+                logContent.textContent = 'Log inicializálása...';
+            }
+            updateLogStatus('Workflow indítása... várakozás a logra.', 'muted');
+
+            try {
+                const response = await fetch(`/api/run-workflow/${encodeURIComponent(PROJECT_NAME)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba a workflow indításakor.');
+                }
+
+                if (statusText) {
+                    statusText.textContent = 'Workflow elindult, állapot frissítése folyamatban...';
+                }
+                startWorkflowPolling(result.job_id);
+            } catch (error) {
+                console.error('Workflow indítási hiba:', error);
+                if (statusText) {
+                    statusText.textContent = `Hiba: ${error.message}`;
+                }
+                if (startButton) {
+                    startButton.disabled = false;
+                    startButton.classList.remove('btn-processing');
+                }
+                if (spinner) {
+                    spinner.classList.add('d-none');
+                }
+                updateInfoBox('danger', `Workflow indítása sikertelen: ${error.message}`);
+                updateLogStatus('A log a workflow indítása után jelenik meg.', 'muted');
+                if (stopButton) {
+                    stopButton.classList.add('d-none');
+                    stopButton.disabled = false;
+                }
+            }
+        }
+
+        async function startWorkflow() {
+            const contextField = document.getElementById('workflowTranslationContext');
+            const modelSelect = document.getElementById('workflowTtsModel');
+            const modelRun4Select = document.getElementById('workflowTtsModelRun4');
+            const langSelect = document.getElementById('workflowLangCode');
+            const payload = {
+                translation_context: contextField ? contextField.value.trim() : '',
+                tts_model: modelSelect ? modelSelect.value : '',
+                tts_model_run4: modelRun4Select ? modelRun4Select.value : '',
+                lang_code: langSelect ? langSelect.value : ''
+            };
+            try {
+                const ready = await ensureWorkflowKeys(payload);
+                if (!ready) {
+                    return;
+                }
+                await executeWorkflow(payload);
+            } catch (error) {
+                console.error('Kulcs ellenőrzési hiba:', error);
+                alert('API kulcs ellenőrzése sikertelen: ' + error.message);
+            }
+        }
+
+        async function stopWorkflow() {
+            if (!currentWorkflowJobId) {
+                return;
+            }
+            const stopButton = document.getElementById('stopWorkflowBtn');
+            const stopSpinner = document.getElementById('stopWorkflowSpinner');
+            const stopLabel = document.getElementById('stopWorkflowLabel');
+            const statusText = document.getElementById('workflowStatusText');
+
+            if (stopButton) {
+                stopButton.disabled = true;
+            }
+            if (stopSpinner) {
+                stopSpinner.classList.remove('d-none');
+            }
+            if (stopLabel) {
+                stopLabel.textContent = 'Megszakítás kérve...';
+            }
+
+            try {
+                const response = await fetch(`/api/stop-workflow/${currentWorkflowJobId}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba a megszakítás során.');
+                }
+                if (statusText) {
+                    statusText.textContent = result.message || 'Megszakítás kérve. Várakozás a leállásra...';
+                }
+                updateLogStatus('Megszakítás kérve. Várakozás a folyamat befejezésére.', 'muted');
+            } catch (error) {
+                alert('Megszakítás sikertelen: ' + error.message);
+                if (stopButton) {
+                    stopButton.disabled = false;
+                }
+                if (stopLabel) {
+                    stopLabel.textContent = 'Workflow megszakítása';
+                }
+            } finally {
+                if (stopSpinner) {
+                    stopSpinner.classList.add('d-none');
+                }
+            }
+        }
+
         function showTranscribeModal(projectName, fileName) {
             document.getElementById('transcribeProjectName').value = projectName;
             document.getElementById('transcribeFileName').value = fileName;
-            const modal = new bootstrap.Modal(document.getElementById('transcribeModal'));
+            const modalElement = document.getElementById('transcribeModal');
+            const modal = new bootstrap.Modal(modalElement);
+            modalElement.addEventListener('hidden.bs.modal', function handleHide() {
+                const btn = document.getElementById('transcribeBtn');
+                if (btn) {
+                    btn.classList.remove('btn-processing');
+                }
+                modalElement.removeEventListener('hidden.bs.modal', handleHide);
+            });
             modal.show();
         }
 
         function runTranscription() {
             const projectName = document.getElementById('transcribeProjectName').value;
             const fileName = document.getElementById('transcribeFileName').value;
-            const language = document.getElementById('language').value;
-            const gpus = document.getElementById('gpus').value;
-            const hfToken = document.getElementById('hfToken').value;
+            const autoChunk = document.getElementById('autoChunk').checked;
+            const chunkSeconds = document.getElementById('chunkSeconds').value;
+            const maxPause = document.getElementById('maxPause').value;
+            const timestampPadding = document.getElementById('timestampPadding').value;
+            const maxSegmentDuration = document.getElementById('maxSegmentDuration').value;
 
-            const buttonId = `transcribeBtn-${fileName}`;
+            const buttonId = 'transcribeBtn';
             setButtonLoading(buttonId, true);
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('transcribeModal'));
@@ -287,9 +1206,11 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    language: language,
-                    gpus: gpus,
-                    hf_token: hfToken
+                    auto_chunk: autoChunk,
+                    chunk: chunkSeconds,
+                    max_pause: maxPause,
+                    timestamp_padding: timestampPadding,
+                    max_segment_duration: maxSegmentDuration
                 })
             })
             .then(response => response.json())
@@ -304,6 +1225,9 @@
             .catch(error => {
                 console.error('Hiba:', error);
                 alert('Hiba történt a beolvasás során');
+            })
+            .finally(() => {
+                setButtonLoading(buttonId, false);
             });
         }
         function setButtonLoading(buttonId, isLoading) {
@@ -315,17 +1239,27 @@
                 } else {
                     btn.classList.remove('btn-loading');
                     btn.disabled = false;
+                    btn.classList.remove('btn-processing');
                 }
             }
         }
 
-        function runAudioExtraction(projectName, fileName, button) {
+        function runAudioExtraction(projectName, button) {
             if (!button.classList.contains('btn-processing')) {
                 button.classList.add('btn-processing');
             }
-            
+
+            const keepChannelsToggle = document.getElementById('extractKeepChannels');
+            const keepChannels = keepChannelsToggle ? keepChannelsToggle.checked : false;
+
             fetch(`/api/extract-audio/${projectName}`, {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    keep_channels: keepChannels
+                })
             })
             .then(response => response.json())
             .then(data => {

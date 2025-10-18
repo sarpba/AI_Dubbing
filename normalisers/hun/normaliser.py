@@ -1,8 +1,85 @@
 import csv
-import re
-from num2words import num2words
 import os
 import random
+import re
+from num2words import num2words
+
+try:
+    from phonemizer import phonemize
+    from phonemizer.separator import Separator
+    HAS_PHONEMIZER = True
+    PHONEMIZER_SEPARATOR = Separator(phone=' ', syllable='-', word='|')
+except ImportError:  # phonemizer is an optional dependency
+    HAS_PHONEMIZER = False
+    PHONEMIZER_SEPARATOR = None
+
+HunspellClass = None
+HAS_HUNSPELL = False
+
+try:
+    from hunspell import Hunspell as HunspellClass  # pyhunspell naming
+    HAS_HUNSPELL = True
+except ImportError:
+    try:
+        from hunspell import HunSpell as HunspellClass  # cyhunspell naming
+        HAS_HUNSPELL = True
+    except ImportError:
+        HunspellClass = None
+        HAS_HUNSPELL = False
+
+_hunspell_instance = None
+
+
+def get_hunspell():
+    global _hunspell_instance
+    if not HAS_HUNSPELL:
+        return None
+    if _hunspell_instance is not None:
+        return _hunspell_instance or None
+
+    dictionary_candidates = ['hu_HU', 'hu']
+    hunspell_dirs = []
+    env_dir = os.environ.get('HUNSPELL_DICT_PATH')
+    if env_dir:
+        hunspell_dirs.append(env_dir)
+    hunspell_dirs.extend([
+        None,  # let Hunspell use its default search path
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hunspell'),
+        '/usr/share/hunspell',
+        '/usr/local/share/hunspell'
+    ])
+
+    def try_init(dic_code, directory):
+        try:
+            if HunspellClass.__name__ == 'HunSpell':
+                dic_filename = f'{dic_code}.dic'
+                aff_filename = f'{dic_code}.aff'
+                if directory:
+                    dic_path = os.path.join(directory, dic_filename)
+                    aff_path = os.path.join(directory, aff_filename)
+                else:
+                    dic_path = dic_filename
+                    aff_path = aff_filename
+                if os.path.exists(dic_path) and os.path.exists(aff_path):
+                    return HunspellClass(dic_path, aff_path)
+                # fallback: let HunSpell attempt even if path doesn't exist (may be resolved via default)
+                return HunspellClass(dic_path, aff_path)
+            else:
+                if directory:
+                    return HunspellClass(dic_code, hunspell_data_dir=directory)
+                return HunspellClass(dic_code)
+        except Exception:
+            return None
+
+    for dic in dictionary_candidates:
+        for directory in hunspell_dirs:
+            instance = try_init(dic, directory)
+            if instance:
+                _hunspell_instance = instance
+                return _hunspell_instance
+
+    _hunspell_instance = False
+    return None
 
 # Határozzuk meg a normaliser.py könyvtárát
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,8 +93,110 @@ letter_pronunciations = {
     'Á': 'á', 'É': 'é', 'Í': 'í', 'Ó': 'ó', 'Ö': 'ö', 'Ő': 'ő', 'Ú': 'ú', 'Ü': 'ü', 'Ű': 'ű'
 }
 
+HUNGARIAN_BASE_CHARS = set('abcdefghijklmnopqrstuvwxyzáéíóöőúüű')
+HUNGARIAN_ACCENTED_CHARS = set('áéíóöőúüű')
+HUNGARIAN_COMMON_SUFFIXES = (
+    't', 'n', 'ban', 'ben', 'nak', 'nek', 'val', 'vel', 'hoz', 'hez', 'höz',
+    'ról', 'ről', 'tól', 'től', 'ba', 'be', 'ra', 're',
+    'ig', 'ként', 'kkal', 'kkel', 'unk', 'ünk', 'etek', 'tok', 'jük',
+    'ások', 'ések', 'áson', 'ésen', 'ásban', 'ésben', 'ással', 'éssel'
+)
+SORTED_HU_SUFFIXES = tuple(sorted(HUNGARIAN_COMMON_SUFFIXES, key=len, reverse=True))
+
+ESPEAK_HU_PHONEME_MAP = {
+    'a': 'a', 'a:': 'á', 'ɑ': 'a', 'ɑ:': 'á', 'ɐ': 'a', 'ɒ': 'a', 'ɒ:': 'á', 'ʌ': 'a',
+    'e': 'e', 'e:': 'é', 'ɛ': 'e', 'ɛ:': 'é', 'æ': 'e', 'ə': 'ö', 'ɜ': 'ö', 'ɜ:': 'őr', 'ɚ': 'ör', 'ɝ': 'őr',
+    'i': 'i', 'i:': 'í', 'ɪ': 'i', 'ɪ:': 'í',
+    'o': 'o', 'o:': 'ó', 'ɔ': 'o', 'ɔ:': 'ó', 'ɞ': 'ö',
+    'u': 'u', 'u:': 'ú', 'ʊ': 'u', 'ʊ:': 'ú',
+    '2': 'ö', '2:': 'ő', 'y': 'ü', 'y:': 'ű', 'ø': 'ö', 'ø:': 'ő',
+    'ju': 'ju', 'ju:': 'jú', 'jʊ': 'jü',
+    'aɪ': 'áj', 'aI': 'áj', 'eɪ': 'éj', 'eI': 'éj', 'oʊ': 'ó', 'oU': 'ó', 'uə': 'ua',
+    'əʊ': 'ó', 'aʊ': 'au', 'aU': 'au', 'ɔɪ': 'oj', 'OI': 'oj', 'ɪʊ': 'iu',
+    'ɪə': 'ia', 'iə': 'ia', 'eə': 'eö', 'ʊə': 'ua',
+    'r': 'r', 'ɹ': 'r', 'R': 'r', 'ɾ': 'r',
+    'l': 'l', 'ɫ': 'l', 'L': 'ly',
+    'j': 'j', 'J': 'j', 'ʎ': 'j',
+    'm': 'm', 'n': 'n', 'N': 'ny', 'ŋ': 'ng', 'ɲ': 'ny', 'n̩': 'an', 'm̩': 'm',
+    'p': 'p', 'b': 'b', 'pʰ': 'p', 'bʰ': 'b',
+    't': 't', 'd': 'd', 'tʰ': 't', 'dʰ': 'd',
+    'k': 'k', 'g': 'g', 'ɡ': 'g', 'kʰ': 'k', 'gʰ': 'g',
+    'f': 'f', 'v': 'v', 'w': 'v', 'ʍ': 'hu',
+    's': 'sz', 'S': 's', 'ʃ': 's', 'ʂ': 's',
+    'z': 'z', 'Z': 'zs', 'ʒ': 'zs', 'ʐ': 'zs',
+    'ts': 'c', 'dz': 'dz', 'dʒ': 'dzs', 'dZ': 'dzs',
+    'tʃ': 'cs', 'tS': 'cs',
+    'h': 'h', 'x': 'x', 'χ': 'h',
+    'θ': 'sz', 'ð': 'z', 'β': 'v', 'ɣ': 'g',
+    'ʔ': 'tt', 'ɸ': 'f', 'ʋ': 'v'
+}
+
+PHONEME_MULTI_TOKEN_MAP = {
+    ('d', 'ʒ'): 'dzs',
+    ('t', 'ʃ'): 'cs',
+    ('d', 'Z'): 'dzs',
+    ('t', 'S'): 'cs',
+    ('j', 'u'): 'ju',
+    ('j', 'uː'): 'ju',
+    ('j', 'ʊ'): 'jü',
+    ('i', 'ə'): 'ia',
+    ('i', 'e'): 'ie',
+    ('ə', 'ʊ'): 'ó',
+    ('ə', 'ɹ'): 'er',
+    ('ɑ', 'ɹ'): 'ar',
+    ('ɒ', 'ɹ'): 'ar',
+    ('ɔ', 'ɹ'): 'or',
+    ('ɔ:', 'ɹ'): 'or',
+    ('o:', 'ɹ'): 'or',
+    ('a:', 'ɹ'): 'ár'
+}
+
+PHONEME_SEQUENCE_REPLACEMENTS = [
+    (re.compile(r'mju'), 'mu'),
+    (re.compile(r'mjú'), 'mu'),
+    (re.compile(r'mj'), 'm'),
+    (re.compile(r'árk'), 'ark'),
+    (re.compile(r'ziam'), 'zeum'),
+    (re.compile(r'ziem'), 'zeum'),
+    (re.compile(r'ziom'), 'zeum'),
+    (re.compile(r'ingtan'), 'ington'),
+    (re.compile(r'han$'), 'hatán'),
+    #(re.compile(r'manhan'), 'manhattan'),
+    (re.compile(r'ávn'), 'ovn'),
+    (re.compile(r'ávan'), 'ovn')
+]
+
 def pronounce_letters(word):
     return ' '.join(letter_pronunciations.get(char.upper(), char) for char in word)
+
+
+def is_probably_hungarian(word):
+    if not word:
+        return False
+    speller = get_hunspell()
+    if not speller:
+        return False
+    try:
+        return speller.spell(word.lower())
+    except Exception:
+        return False
+
+
+def strip_hungarian_suffix(word):
+    stripped = word.strip()
+    # kezeli a "word-ról" formát
+    hyphenated = re.match(r"(.+?)-([a-záéíóöőúüű]+)$", stripped, re.IGNORECASE)
+    if hyphenated:
+        base, suffix = hyphenated.groups()
+        lower_suffix = suffix.lower()
+        if lower_suffix in HUNGARIAN_COMMON_SUFFIXES:
+            return base, '-' + suffix
+
+    lower = word.lower()
+    for suffix in SORTED_HU_SUFFIXES:
+        if lower.endswith(suffix) and len(lower) > len(suffix):
+            return word[:-len(suffix)], word[-len(suffix):]
+    return word, ''
 
 def replace_acronyms(text):
     """
@@ -149,6 +328,29 @@ def load_force_changes(filename="force_changes.csv"):
             force_changes[key] = (value, before, after)
     return force_changes
 
+
+def load_force_changes_end(filename="force_changes_end.csv"):
+    """
+    A normalizálás legvégén futó erőltetett cserékhez tartozó CSV két oszlopot tartalmaz:
+    key, value
+    """
+    file_path = os.path.join(base_dir, filename)
+    if not os.path.exists(file_path):
+        return []
+
+    replacements = []
+    with open(file_path, encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            if not row:
+                continue
+            key = row[0].strip()
+            value = row[1].strip() if len(row) > 1 else ''
+            if key:
+                replacements.append((key, value))
+    return replacements
+
+
 def apply_force_changes(text, force_changes):
     """
     A CSV-ben megadott szócsere minden előfordulására alkalmazza a változtatást,
@@ -160,16 +362,26 @@ def apply_force_changes(text, force_changes):
         text = re.sub(re.escape(key), replacement, text)
     return text
 
-def load_changes(filename="changes.csv"):
-    # A fájl elérési útja a base_dir könyvtárhoz képest
-    file_path = os.path.join(base_dir, filename)
+def load_changes(filenames=("changes.csv", "changes_new.csv")):
+    if isinstance(filenames, str):
+        filenames = (filenames,)
+
     changes = {}
-    with open(file_path, encoding='utf-8') as csvfile:
-        reader = csv.reader(csvfile)
-        for row in reader:
-            if row:
-                key, value = row
-                changes[key.strip()] = value.strip()
+    for filename in filenames:
+        file_path = os.path.join(base_dir, filename)
+        if not os.path.exists(file_path):
+            continue
+        with open(file_path, encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                if not row:
+                    continue
+                if len(row) < 2:
+                    continue
+                key = row[0].strip()
+                value = row[1].strip()
+                if key:
+                    changes[key] = value
     return changes
 
 def apply_changes(text, changes):
@@ -178,6 +390,204 @@ def apply_changes(text, changes):
         pattern = r'\b{}\b'.format(re.escape(key))
         text = re.sub(pattern, value, text, flags=re.IGNORECASE)
     return text
+
+
+def apply_force_changes_end(text, replacements):
+    """
+    Egyszerű (nem regex) cseréket hajt végre a normalizálás legvégén.
+    """
+    for key, value in replacements:
+        text = text.replace(key, value)
+    return text
+
+
+def _map_phoneme_token(token):
+    if not token:
+        return None
+    normalized = token.replace('ː', ':').strip()
+    if not normalized:
+        return None
+    direct = ESPEAK_HU_PHONEME_MAP.get(normalized)
+    if direct is not None:
+        return direct
+    if normalized.endswith(':'):
+        base = normalized.rstrip(':')
+        long_variant = ESPEAK_HU_PHONEME_MAP.get(base + ':')
+        if long_variant is not None:
+            return long_variant
+        base_variant = ESPEAK_HU_PHONEME_MAP.get(base)
+        if base_variant is not None:
+            return base_variant + base_variant[-1]
+    base_direct = ESPEAK_HU_PHONEME_MAP.get(normalized.lower())
+    if base_direct is not None:
+        return base_direct
+    return normalized.replace(':', '')
+
+
+def _should_use_english_backend(word):
+    return bool(re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", word)) and not any(
+        ch in HUNGARIAN_ACCENTED_CHARS for ch in word.lower()
+    )
+
+
+def _map_token_sequence(tokens):
+    mapped_tokens = []
+    i = 0
+    while i < len(tokens):
+        token = tokens[i].strip()
+        if not token or token in {'ˈ', 'ˌ', '.'}:
+            i += 1
+            continue
+        normalized = token.replace('|', '').replace('ː', ':')
+        if i + 1 < len(tokens):
+            next_token = tokens[i + 1].strip().replace('|', '').replace('ː', ':')
+            pair = (normalized, next_token)
+            if pair in PHONEME_MULTI_TOKEN_MAP:
+                mapped_tokens.append(PHONEME_MULTI_TOKEN_MAP[pair])
+                i += 2
+                continue
+        mapped = _map_phoneme_token(normalized)
+        if mapped:
+            mapped_tokens.append(mapped)
+        i += 1
+    if not mapped_tokens:
+        return None
+    text = ''.join(mapped_tokens)
+    for pattern, replacement in PHONEME_SEQUENCE_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
+    return _finalize_phoneme_text(text.lower())
+
+
+def _finalize_phoneme_text(text):
+    char_replacements = {
+        'ɑ': 'a',
+        'ɒ': 'a',
+        'ɔ': 'o',
+        'ɹ': 'r',
+        'ʔ': '',
+        '̩': '',
+        'ɡ': 'g',
+        'ʃ': 's',
+        'ʒ': 'zs',
+        '|': '',
+        'ø': 'ö'
+    }
+    for src, dst in char_replacements.items():
+        text = text.replace(src, dst)
+    return text
+
+
+def phonemize_to_hungarian(word):
+    if not HAS_PHONEMIZER or not word:
+        return None
+
+    stripped = word.strip("'\"")
+    if not stripped:
+        return None
+    base_word, suffix = strip_hungarian_suffix(stripped)
+    target_word = base_word if suffix else stripped
+
+    languages = []
+    if _should_use_english_backend(target_word):
+        languages.append('en-us')
+    languages.append('hu')
+
+    for language in languages:
+        try:
+            phoneme_sequence = phonemize(
+                target_word.strip('-'),
+                language=language,
+                backend='espeak',
+                separator=PHONEMIZER_SEPARATOR,
+                strip=True,
+                preserve_punctuation=False,
+                with_stress=False,
+                njobs=1
+            )
+        except TypeError:
+            try:
+                phoneme_sequence = phonemize(
+                    stripped,
+                    language=language,
+                    backend='espeak',
+                    separator=PHONEMIZER_SEPARATOR,
+                    strip=True,
+                    preserve_punctuation=False,
+                    njobs=1
+                )
+            except Exception:
+                continue
+        except Exception:
+            continue
+
+        if not phoneme_sequence:
+            continue
+
+        tokens = [token.replace('|', '') for token in phoneme_sequence.split() if token and token != '|']
+        mapped = _map_token_sequence(tokens)
+        if mapped:
+            raw_phonemes = ' '.join(tokens)
+            mapped_text = mapped
+            if suffix:
+                if suffix.startswith('-'):
+                    mapped_text += suffix
+                else:
+                    mapped_text += suffix.lower()
+            return mapped_text, raw_phonemes
+
+    return None
+
+
+def should_phonemize_word(word, existing_lower):
+    if not word:
+        return False
+    stripped = word.strip("'\"")
+    if not stripped:
+        return False
+    lower = stripped.lower()
+    if lower in existing_lower:
+        return False
+    if is_probably_hungarian(stripped):
+        return False
+    # Ha a hunspell modul nem elérhető, minden szót phonemizálunk
+    if not HAS_HUNSPELL:
+        return True
+    return True
+
+
+def collect_new_changes(text, existing_changes):
+    if not HAS_PHONEMIZER:
+        return {}
+
+    existing_lower = {key.lower() for key in existing_changes}
+    candidates = re.findall(r"\b[\wÁÉÍÓÖŐÚÜŰáéíóöőúüű'-]+\b", text)
+    new_entries = {}
+
+    for word in candidates:
+        if not should_phonemize_word(word, existing_lower):
+            continue
+        phonetic = phonemize_to_hungarian(word)
+        if not phonetic:
+            continue
+        mapped_value, raw_phoneme = phonetic
+        if mapped_value.lower() == word.lower():
+            continue
+        if word not in new_entries:
+            new_entries[word] = (mapped_value, raw_phoneme)
+            existing_lower.add(word.lower())
+
+    return new_entries
+
+
+def append_changes_to_file(new_entries, filename="changes_new.csv"):
+    if not new_entries:
+        return
+    file_path = os.path.join(base_dir, filename)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, 'a', encoding='utf-8', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        for key, (value, phoneme) in new_entries.items():
+            writer.writerow([key, value, phoneme])
 
 
 def replace_ordinals(text):
@@ -427,14 +837,20 @@ def convert_to_lowercase(text):
 def normalize(text):
     # A szöveg normalizálása a megadott lépésekkel
     force_changes = load_force_changes('force_changes.csv')
-    changes = load_changes('changes.csv')
+    force_changes_end = load_force_changes_end('force_changes_end.csv')
+    changes = load_changes()
 
-    text = replace_roman_numerals(text) # Római számok arabra (pl. IV. -> 4.)
-    # Időpontok kezelése előbb, hogy a "-kor" még változatlan legyen
-    text = replace_times(text)
-    text = apply_force_changes(text, force_changes)
+    text = replace_roman_numerals(text)  # Római számok arabra (pl. IV. -> 4.)
+    text = replace_times(text)  # Időpontok kezelése előbb, hogy a "-kor" még változatlan legyen
+
+    new_changes = collect_new_changes(text, changes)
+    if new_changes:
+        append_changes_to_file(new_changes)
+        changes.update({key: value for key, (value, _) in new_changes.items()})
+
     text = apply_changes(text, changes)
-    text = replace_acronyms(text)
+    text = apply_force_changes(text, force_changes)
+    #text = replace_acronyms(text)
     text = replace_alphanumeric(text)
     text = replace_dates(text) # Dátumok átalakítása
     text = replace_ordinals(text) # Sorszámok (pl. 4. -> negyedik)
@@ -459,6 +875,8 @@ def normalize(text):
     text = remove_duplicate_spaces(text)
     text = add_prefix(text)
     text = convert_to_lowercase(text)
+    # A végső, TTS-specifikus felülírásoknak minden más módosítás után kell lefutnia.
+    text = apply_force_changes_end(text, force_changes_end)
 
     return text
 

@@ -39,7 +39,9 @@ python $BASEPATH/neural_diarizer/e2e_diarize_speech.py \
 import json
 import logging
 import os
+import sys
 import tempfile
+from pathlib import Path
 from dataclasses import dataclass, is_dataclass
 from tempfile import NamedTemporaryFile
 from typing import Dict, List, Optional, Union
@@ -65,6 +67,14 @@ from nemo.collections.asr.parts.utils.vad_utils import (
 )
 from nemo.collections.common.parts.preprocessing.manifest import get_full_path
 from nemo.core.config import hydra_runner
+
+for candidate in Path(__file__).resolve().parents:
+    if (candidate / "tools").is_dir():
+        if str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+        break
+
+from tools.debug_utils import configure_debug_mode, DEBUG_FLAG_NAME
 
 seed_everything(42)
 torch.backends.cudnn.deterministic = True
@@ -448,4 +458,16 @@ def main(cfg: DiarizationConfig) -> Union[DiarizationConfig]:
 
 
 if __name__ == '__main__':
+    debug_enabled = False
+    if DEBUG_FLAG_NAME in sys.argv:
+        debug_enabled = True
+        sys.argv.remove(DEBUG_FLAG_NAME)
+
+    log_level = configure_debug_mode(debug_enabled)
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        force=True,
+    )
+    logging.getLogger().setLevel(log_level)
     main()

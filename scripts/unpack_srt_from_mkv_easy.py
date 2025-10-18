@@ -7,6 +7,14 @@ import os
 import argparse
 from pathlib import Path
 
+for candidate in Path(__file__).resolve().parents:
+    if (candidate / "tools").is_dir():
+        if str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+        break
+
+from tools.debug_utils import add_debug_argument, configure_debug_mode
+
 # Lehetséges felirat kiterjesztések a codec ID alapján
 CODEC_EXTENSION_MAP = {
     "S_TEXT/UTF8": ".srt",
@@ -175,10 +183,12 @@ def main():
     """A szkript fő belépési pontja."""
     parser = argparse.ArgumentParser(
         description="Python script MKV konténerben lévő feliratfájlok kicsomagolásához egy projekt mappán belül.",
-        formatter_class=argparse.RawTextHelpFormatter
+        formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("project_name", help="A projekt neve (a 'workdir' alatti mappa neve).")
+    add_debug_argument(parser)
     args = parser.parse_args()
+    configure_debug_mode(args.debug)
 
     print("Függőségek ellenőrzése (MKVToolNix)...")
     check_dependencies()

@@ -7,16 +7,11 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script>
-        // Theme initialization
         document.addEventListener('DOMContentLoaded', function() {
             const savedTheme = localStorage.getItem('theme') || 'auto';
-            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            
-            if (savedTheme === 'dark' || (savedTheme === 'auto' && systemDark)) {
-                document.documentElement.setAttribute('data-bs-theme', 'dark');
-            } else {
-                document.documentElement.setAttribute('data-bs-theme', 'light');
-            }
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const shouldUseDark = savedTheme === 'dark' || (savedTheme === 'auto' && systemPrefersDark);
+            document.documentElement.setAttribute('data-bs-theme', shouldUseDark ? 'dark' : 'light');
         });
     </script>
 </head>
@@ -29,7 +24,7 @@
 
     <div class="container mt-4">
         <h1 class="mb-4">AI Dubbing Szerkesztő</h1>
-        
+
         <div class="row">
             <div class="col-md-6">
                 <div class="card mb-4">
@@ -53,13 +48,13 @@
                                     {% endfor %}
                                 </div>
                             {% else %}
-                                <p>Nincsenek projektek</p>
+                                <p class="text-muted mb-3">Nincsenek projektek</p>
                             {% endif %}
                         </div>
 
                         <div id="newProjectForm">
                             <h5>Új projekt létrehozása</h5>
-                            <form id="uploadForm" enctype="multipart/form-data">
+                            <form id="uploadForm" enctype="multipart/form-data" novalidate>
                                 <div class="mb-3">
                                     <label for="projectName" class="form-label">Projektnév</label>
                                     <input type="text" class="form-control" id="projectName" name="projectName" required>
@@ -68,15 +63,15 @@
                                     <label for="videoFile" class="form-label">Videó fájl</label>
                                     <input type="file" class="form-control" id="videoFile" name="file" accept="video/*" required>
                                 </div>
-<<<<<<< ours
                                 <div class="mb-3">
                                     <label for="subtitleFile" class="form-label">Felirat fájl (opcionális)</label>
                                     <input type="file" class="form-control" id="subtitleFile" name="subtitleFile" accept=".srt">
+                                    <small class="text-muted">Csak .srt felirat fájl tölthető fel.</small>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="subtitleSuffix" class="form-label">Felirat kiegészítés (pl. _hu, _eng)</label>
+                                    <label for="subtitleSuffix" class="form-label">Felirat kiegészítés (pl. _hu, _en)</label>
                                     <input type="text" class="form-control" id="subtitleSuffix" name="subtitleSuffix" placeholder="_hu">
-                                    <small class="text-muted">A felirat neve a videó nevéhez igazodik, a megadott kiegészítéssel.</small>
+                                    <small class="text-muted">Formátum: egy aláhúzás és két betűs nyelvi kód (pl. _hu). A mentett felirat neve a videó bázisnév + kiegészítés lesz.</small>
                                 </div>
                                 <div class="mb-3 d-none" id="uploadProgressContainer">
                                     <label class="form-label">Feltöltés állapota</label>
@@ -85,59 +80,73 @@
                                     </div>
                                     <div class="small text-muted mt-1" id="uploadProgressText"></div>
                                 </div>
-=======
->>>>>>> theirs
+                                <button type="submit" class="btn btn-primary w-100">Projekt létrehozása</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Tippek</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2">1. Használj egyedi projektnév formátumot, hogy könnyen megtaláld a munkáidat.</p>
+                        <p class="mb-2">2. A feltöltés után az oldal automatikusan frissül, és a projekt megjelenik a listában.</p>
+                        <p class="mb-0">3. Opcionálisan tölts fel feliratot, így a workflow később könnyebben hozzárendelheti a szöveget.</p>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Theme toggle function
         function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            
-            let newTheme = 'light';
-            if (currentTheme === 'light' || (currentTheme === 'auto' && !systemDark)) {
-                newTheme = 'dark';
-            } else {
-                newTheme = 'auto';
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme') || 'auto';
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            let nextTheme = 'light';
+
+            if (currentTheme === 'light' || (currentTheme === 'auto' && !systemPrefersDark)) {
+                nextTheme = 'dark';
+            } else if (currentTheme === 'dark') {
+                nextTheme = 'auto';
             }
-            
-            document.documentElement.setAttribute('data-bs-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
+
+            document.documentElement.setAttribute('data-bs-theme', nextTheme);
+            localStorage.setItem('theme', nextTheme);
         }
 
         function deleteProject(projectName) {
-            if (confirm(`Biztosan törölni szeretnéd a ${projectName} projektet?`)) {
-                fetch(`/api/delete-project/${projectName}`, {
-                    method: 'DELETE'
-                })
+            if (!confirm(`Biztosan törölni szeretnéd a(z) ${projectName} projektet?`)) {
+                return;
+            }
+
+            fetch(`/api/delete-project/${projectName}`, { method: 'DELETE' })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        alert('Projekt törölve: ' + projectName);
+                        alert(`Projekt törölve: ${projectName}`);
                         location.reload();
                     } else {
-                        alert('Hiba: ' + data.error);
+                        alert(`Hiba: ${data.error || 'Ismeretlen hiba történt.'}`);
                     }
                 })
                 .catch(error => {
                     console.error('Hiba:', error);
-                    alert('Hiba történt a törlés során');
+                    alert('Hiba történt a törlés során.');
                 });
-            }
         }
 
-        // Új projekt létrehozása
-<<<<<<< ours
         const uploadForm = document.getElementById('uploadForm');
         const uploadProgressContainer = document.getElementById('uploadProgressContainer');
         const uploadProgressBar = document.getElementById('uploadProgressBar');
         const uploadProgressText = document.getElementById('uploadProgressText');
 
-        uploadForm.addEventListener('submit', function(e) {
-            e.preventDefault();
+        uploadForm.addEventListener('submit', function(event) {
+            event.preventDefault();
 
             const projectName = document.getElementById('projectName').value.trim();
             if (!projectName) {
@@ -152,8 +161,18 @@
             }
 
             const subtitleInput = document.getElementById('subtitleFile');
-            if (subtitleInput.files.length && !subtitleInput.files[0].name.toLowerCase().endswith('.srt')) {
+            if (subtitleInput.files.length && !subtitleInput.files[0].name.toLowerCase().endsWith('.srt')) {
                 alert('Csak .srt felirat fájl tölthető fel.');
+                return;
+            }
+
+            const subtitleSuffix = document.getElementById('subtitleSuffix').value.trim();
+            if (subtitleInput.files.length && !subtitleSuffix) {
+                alert('Adj meg felirat kiegészítést (pl. _hu) a feltöltött felirathoz.');
+                return;
+            }
+            if (subtitleSuffix && !/^_[A-Za-z]{2}$/.test(subtitleSuffix)) {
+                alert('A felirat kiegészítés formátuma: aláhúzás + két betűs nyelvi kód (pl. _hu).');
                 return;
             }
 
@@ -161,48 +180,53 @@
             formData.append('projectName', projectName);
             formData.append('file', videoInput.files[0]);
 
-            const subtitleSuffix = document.getElementById('subtitleSuffix').value.trim();
             if (subtitleSuffix) {
                 formData.append('subtitleSuffix', subtitleSuffix);
             }
+
             if (subtitleInput.files.length) {
                 formData.append('subtitleFile', subtitleInput.files[0]);
             }
 
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/upload-video', true);
-
-        uploadProgressContainer.classList.remove('d-none');
+            uploadProgressContainer.classList.remove('d-none');
+            uploadProgressBar.classList.remove('bg-success', 'bg-danger');
             uploadProgressBar.style.width = '0%';
             uploadProgressBar.textContent = '0%';
             uploadProgressText.textContent = 'Feltöltés előkészítése...';
 
-            xhr.upload.addEventListener('progress', (event) => {
-                if (event.lengthComputable) {
-                    const percent = Math.round((event.loaded / event.total) * 100);
-                    uploadProgressBar.style.width = percent + '%';
-                    uploadProgressBar.textContent = percent + '%';
-                    uploadProgressText.textContent = `Feltöltve: ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`;
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload-video', true);
+
+            xhr.upload.addEventListener('progress', event => {
+                if (!event.lengthComputable) {
+                    return;
                 }
+
+                const percent = Math.round((event.loaded / event.total) * 100);
+                uploadProgressBar.style.width = `${percent}%`;
+                uploadProgressBar.textContent = `${percent}%`;
+                uploadProgressText.textContent = `Feltöltve: ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`;
             });
 
             xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE) {
-                    try {
-                        const result = JSON.parse(xhr.responseText || '{}');
-                        if (xhr.status >= 200 && xhr.status < 300 && result.success !== false) {
-                            uploadProgressBar.classList.add('bg-success');
-                            uploadProgressText.textContent = 'Feltöltés befejezve. oldal frissítése...';
-                            setTimeout(() => location.reload(), 800);
-                        } else {
-                            throw new Error(result.error || 'Ismeretlen hiba történt a feltöltés közben.');
-                        }
-                    } catch (error) {
-                        console.error('Hiba:', error);
-                        uploadProgressBar.classList.add('bg-danger');
-                        uploadProgressText.textContent = error.message;
-                        alert('Hiba történt a feltöltés során: ' + error.message);
+                if (xhr.readyState !== XMLHttpRequest.DONE) {
+                    return;
+                }
+
+                try {
+                    const result = JSON.parse(xhr.responseText || '{}');
+                    if (xhr.status >= 200 && xhr.status < 300 && result.success !== false) {
+                        uploadProgressBar.classList.add('bg-success');
+                        uploadProgressText.textContent = result.message || 'Feltöltés befejezve. Az oldal frissítése folyamatban...';
+                        setTimeout(() => location.reload(), 800);
+                    } else {
+                        throw new Error(result.error || 'Ismeretlen hiba történt a feltöltés közben.');
                     }
+                } catch (error) {
+                    console.error('Hiba:', error);
+                    uploadProgressBar.classList.add('bg-danger');
+                    uploadProgressText.textContent = error.message;
+                    alert(`Hiba történt a feltöltés során: ${error.message}`);
                 }
             };
 
@@ -216,37 +240,15 @@
         });
 
         function formatBytes(bytes) {
-            if (bytes === 0) return '0 B';
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(1024));
-            return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-=======
-        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            const projectName = document.getElementById('projectName').value;
-            formData.append('projectName', projectName);
-            
-            try {
-                const response = await fetch('/api/upload-video', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                if (response.ok) {
-                    alert('Sikeres feltöltés: ' + result.message);
-                    location.reload();
-                } else {
-                    alert('Hiba: ' + result.error);
-                }
-            } catch (error) {
-                console.error('Hiba:', error);
-                alert('Hiba történt a feltöltés során');
+            if (!bytes) {
+                return '0 B';
             }
-        });
->>>>>>> theirs
+
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const unitIndex = Math.floor(Math.log(bytes) / Math.log(1024));
+            const value = bytes / Math.pow(1024, unitIndex);
+            return `${value.toFixed(2)} ${units[unitIndex]}`;
+        }
     </script>
 </body>
 </html>

@@ -3,10 +3,12 @@ import os
 import json
 import subprocess
 import base64
+import binascii
 import logging
 import threading
 import uuid
 import copy
+import re
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import main_bash
@@ -20,6 +22,9 @@ workflow_lock = threading.Lock()
 workflow_jobs = {}
 workflow_threads = {}
 workflow_events = {}
+
+KEYHOLDER_PATH = os.path.join(app.root_path, 'keyholder.json')
+CONDA_PYTHON_CACHE = {}
 
 AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac'}
 VIDEO_EXTENSIONS = {
@@ -61,6 +66,116 @@ def is_subpath(child_path, parent_path):
         return os.path.commonpath([child_path, parent_path]) == os.path.commonpath([parent_path])
     except ValueError:
         return False
+
+
+def load_keyholder_data():
+    if not os.path.exists(KEYHOLDER_PATH):
+        return {}
+    try:
+        with open(KEYHOLDER_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except json.JSONDecodeError:
+        logging.warning("Nem sikerült beolvasni a keyholder.json fájlt, feltételezzük, hogy üres.")
+    except OSError as exc:
+        logging.error(f"Nem olvasható a keyholder.json fájl: {exc}")
+    return {}
+
+
+def save_keyholder_data(data):
+    try:
+        with open(KEYHOLDER_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except OSError as exc:
+        logging.error(f"Nem sikerült menteni a keyholder.json fájlt: {exc}")
+        return False
+
+
+def decode_keyholder_value(value):
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        decoded = base64.b64decode(value.encode('utf-8')).decode('utf-8')
+        return decoded.strip() or None
+    except (binascii.Error, UnicodeDecodeError, AttributeError):
+        return value
+
+
+def encode_keyholder_value(value):
+    if value is None:
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    return base64.b64encode(cleaned.encode('utf-8')).decode('utf-8')
+
+
+def get_conda_python(env_name: str):
+    cached = CONDA_PYTHON_CACHE.get(env_name)
+    if cached:
+        return cached
+    python_exec = main_bash.get_conda_python_executable(env_name)
+    if python_exec:
+        CONDA_PYTHON_CACHE[env_name] = python_exec
+    return python_exec
+
+
+def determine_workflow_key_status(project_dir, current_config, lang_code=None):
+    lang_code = (lang_code or '').strip().lower()
+    config_defaults = current_config.get('CONFIG', {}) or {}
+    default_target_lang = str(config_defaults.get('default_target_lang', '') or '').strip().lower()
+    candidate_lang_codes = []
+    for code in (default_target_lang, lang_code):
+        if code and code not in candidate_lang_codes:
+            candidate_lang_codes.append(code)
+
+    subdirs = current_config['PROJECT_SUBDIRS']
+    upload_dir = os.path.join(project_dir, subdirs['upload'])
+    has_target_srt = False
+    if os.path.isdir(upload_dir):
+        try:
+            upload_files = [entry.name.lower() for entry in os.scandir(upload_dir) if entry.is_file()]
+        except OSError:
+            upload_files = []
+        for code in candidate_lang_codes:
+            suffix = f"{code}.srt"
+            if any(filename.endswith(suffix) for filename in upload_files):
+                has_target_srt = True
+                break
+
+    keyholder_data = load_keyholder_data()
+
+    def has_any(fields):
+        for field in fields:
+            value = decode_keyholder_value(keyholder_data.get(field))
+            if value:
+                return True
+        return False
+
+    keys_status = {
+        'chatgpt': {
+            'label': 'OpenAI / ChatGPT API kulcs',
+            'present': has_any(('chatgpt_api_key', 'api_key')),
+            'required': True
+        },
+        'deepl': {
+            'label': 'DeepL API kulcs',
+            'present': has_any(('deepL_api_key', 'deepl_api_key')),
+            'required': True
+        },
+        'huggingface': {
+            'label': 'Hugging Face token',
+            'present': has_any(('hf_token',)),
+            'required': True
+        }
+    }
+    return {
+        'keys': keys_status,
+        'uses_chatgpt_translation': has_target_srt
+    }
 
 # Statikus fájlok kiszolgálása a workdir mappából
 @app.route('/workdir/<path:filename>')
@@ -464,73 +579,123 @@ def review_project(project_name):
 def upload_video():
     if 'file' not in request.files or 'projectName' not in request.form:
         return jsonify({'error': 'Missing file or project name'}), 400
-        
-    file = request.files['file']
-    project_name = request.form['projectName']
-    
-    if file.filename == '' or not project_name:
-        return jsonify({'error': 'No selected file or empty project name'}), 400
-        
-    if file and project_name:
-        # Projekt mappa létrehozása
-        project_dir = os.path.join('workdir', secure_filename(project_name))
+
+    video_file = request.files['file']
+    project_name = request.form['projectName'].strip()
+
+    if not project_name:
+        return jsonify({'error': 'Üres projektnév nem engedélyezett.'}), 400
+
+    if not video_file or not video_file.filename:
+        return jsonify({'error': 'Nem érkezett videó fájl.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    # Almappák létrehozása a projektben
+    project_dir = os.path.join('workdir', sanitized_project)
+    try:
         os.makedirs(project_dir, exist_ok=True)
-        
-        # Almappák létrehozása a projektben
         for subdir in config['PROJECT_SUBDIRS'].values():
             os.makedirs(os.path.join(project_dir, subdir), exist_ok=True)
-        
-        filename = secure_filename(file.filename)
-        upload_path = os.path.join(project_dir, config['PROJECT_SUBDIRS']['upload'], filename)
-        try:
-            file.save(upload_path)
-            
-            return jsonify({
-                'message': 'File uploaded successfully', 
-                'path': upload_path,
-                'project': project_name
-            })
-        except Exception as e:
-            return jsonify({
-            'error': f'Upload failed: {str(e)}',
-            'project': project_name
+    except OSError as exc:
+        logging.exception("Nem sikerült létrehozni a projekt mappáit: %s", exc)
+        return jsonify({'error': 'Nem sikerült létrehozni a projekt könyvtárát.'}), 500
+
+    upload_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['upload'])
+    video_filename = secure_filename(video_file.filename)
+    if not video_filename:
+        return jsonify({'error': 'Érvénytelen videó fájlnév.'}), 400
+
+    subtitle_file = request.files.get('subtitleFile')
+    subtitle_suffix_raw = request.form.get('subtitleSuffix', '').strip()
+    subtitle_filename = None
+
+    if subtitle_file and subtitle_file.filename:
+        original_subtitle_filename = secure_filename(subtitle_file.filename)
+        if not original_subtitle_filename.lower().endswith('.srt'):
+            return jsonify({'error': 'Csak .srt felirat fájl tölthető fel.'}), 400
+
+        if not subtitle_suffix_raw:
+            return jsonify({'error': 'A felirat feltöltéséhez kötelező kiegészítést megadni (pl. _hu).'}), 400
+
+        if not re.fullmatch(r'_[A-Za-z]{2}', subtitle_suffix_raw):
+            return jsonify({'error': 'A felirat kiegészítés formátuma: aláhúzás + kétbetűs nyelvi kód (pl. _hu).'}), 400
+
+        subtitle_suffix_normalized = subtitle_suffix_raw.lower()
+        base_video_name = os.path.splitext(video_filename)[0]
+        subtitle_filename = secure_filename(f"{base_video_name}{subtitle_suffix_normalized}.srt")
+
+    video_path = os.path.join(upload_dir, video_filename)
+    subtitle_path = os.path.join(upload_dir, subtitle_filename) if subtitle_filename else None
+
+    try:
+        video_file.save(video_path)
+
+        if subtitle_filename:
+            subtitle_file.save(subtitle_path)
+
+        return jsonify({
+            'success': True,
+            'message': 'Projekt sikeresen létrehozva.',
+            'project': sanitized_project,
+            'video': video_filename,
+            'subtitle': subtitle_filename
+        })
+    except Exception as exc:
+        logging.exception("Upload failed for project %s: %s", sanitized_project, exc)
+        return jsonify({
+            'error': f'Upload failed: {exc}',
+            'project': sanitized_project
         }), 500
 
 @app.route('/api/extract-audio/<project_name>', methods=['POST'])
 def extract_audio(project_name):
     try:
-        project_dir = os.path.join('workdir', secure_filename(project_name))
+        sanitized_project = secure_filename(project_name)
+        project_dir = os.path.join('workdir', sanitized_project)
         if not os.path.exists(project_dir):
-            return jsonify({'error': 'Project not found'}), 404
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
 
-        # Get the first video file
         upload_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['upload'])
-        video_files = os.listdir(upload_dir)
+        if not os.path.isdir(upload_dir):
+            return jsonify({'success': False, 'error': 'Upload directory not found'}), 400
+
+        try:
+            upload_entries = [
+                entry for entry in os.listdir(upload_dir)
+                if os.path.isfile(os.path.join(upload_dir, entry))
+            ]
+        except OSError as exc:
+            return jsonify({'success': False, 'error': f'Upload directory not accessible: {exc}'}), 500
+
+        video_files = [
+            filename for filename in upload_entries
+            if os.path.splitext(filename)[1].lower() in VIDEO_EXTENSIONS
+        ]
+
         if not video_files:
-            return jsonify({'error': 'No video files found'}), 400
-            
-        video_file = video_files[0]
-        video_path = os.path.join(upload_dir, video_file)
-        
-        # Create output path
-        extracted_audio_path = os.path.join(
-            project_dir, 
-            config['PROJECT_SUBDIRS']['extracted_audio'],
-            os.path.splitext(video_file)[0] + '.wav'
-        )
-        
-        # Run audio extraction
-        cmd = ['python', 'scripts/extract_audio.py', video_path, extracted_audio_path]
+            return jsonify({'success': False, 'error': 'No video files found'}), 400
+
+        request_payload = request.get_json(silent=True) or {}
+        keep_channels = bool(request_payload.get('keep_channels'))
+
+        cmd = ['python', 'scripts/extract_audio_easy_channels.py', sanitized_project]
+        if keep_channels:
+            cmd.append('--keep_channels')
+
         process = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if process.returncode != 0:
-            error_message = process.stderr if process.stderr else "Unknown error during audio extraction"
-            raise Exception(f"Audio extraction failed with exit code {process.returncode}: {error_message}")
-            
+            error_output = process.stderr.strip() or process.stdout.strip() or "Unknown error during audio extraction"
+            raise Exception(f"Audio extraction failed with exit code {process.returncode}: {error_output}")
+
         return jsonify({
             'success': True,
             'message': 'Audio extracted successfully',
-            'project': project_name
+            'project': project_name,
+            'log': process.stdout.strip()
         })
     except Exception as e:
         return jsonify({
@@ -542,55 +707,90 @@ def extract_audio(project_name):
 @app.route('/api/separate-audio/<project_name>', methods=['POST'])
 def separate_audio(project_name):
     try:
-        project_dir = os.path.join('workdir', secure_filename(project_name))
+        sanitized_project = secure_filename(project_name)
+        project_dir = os.path.join('workdir', sanitized_project)
         if not os.path.exists(project_dir):
-            return jsonify({'error': 'Project not found'}), 404
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
 
-        # Get the first extracted audio file
         extracted_audio_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['extracted_audio'])
-        audio_files = os.listdir(extracted_audio_dir)
-        if not audio_files:
-            return jsonify({'error': 'No audio files found'}), 400
-            
-        audio_file = audio_files[0]
-        audio_path = os.path.join(extracted_audio_dir, audio_file)
-        
-        # Run audio separation
+        if not os.path.isdir(extracted_audio_dir):
+            return jsonify({'success': False, 'error': 'Extracted audio directory not found'}), 400
+
+        try:
+            extracted_files = [
+                entry for entry in os.listdir(extracted_audio_dir)
+                if os.path.isfile(os.path.join(extracted_audio_dir, entry))
+            ]
+        except OSError as exc:
+            return jsonify({'success': False, 'error': f'Extracted audio directory not accessible: {exc}'}), 500
+
+        audio_sources = [
+            filename for filename in extracted_files
+            if os.path.splitext(filename)[1].lower() in AUDIO_EXTENSIONS
+        ]
+        if not audio_sources:
+            return jsonify({'success': False, 'error': 'No audio files found'}), 400
+
         speech_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['separated_audio_speech'])
         background_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['separated_audio_background'])
         os.makedirs(speech_dir, exist_ok=True)
         os.makedirs(background_dir, exist_ok=True)
-        
-        data = request.get_json()
-        model = data.get('model', 'htdemucs_ft')
-        keep_full_audio = data.get('keep_full_audio', False)
-        non_speech_silence = data.get('non_speech_silence', False)
-        chunk_size = data.get('chunk_size', 5)
-        
+
+        payload = request.get_json(silent=True) or {}
+        device = payload.get('device', 'cuda')
+        models_value = payload.get('model') or payload.get('models')
+        keep_full_audio = bool(payload.get('keep_full_audio'))
+        non_speech_silence = bool(payload.get('non_speech_silence'))
+        chunk_size_value = payload.get('chunk_size', 5)
+        chunk_overlap_value = payload.get('chunk_overlap')
+        background_blend_value = payload.get('background_blend')
+
+        try:
+            chunk_size = float(chunk_size_value)
+        except (TypeError, ValueError):
+            chunk_size = 5.0
+
         cmd = [
-            'python', 'scripts/separate_audio.py',
-            '-i', extracted_audio_dir,
-            '-o', speech_dir,
-            '--model', model,
-            '--chunk_size', str(chunk_size)
+            'python',
+            'scripts/separate_audio_easy_codex.py',
+            '-p',
+            sanitized_project,
+            '--device',
+            str(device),
+            '--chunk_size',
+            str(chunk_size),
         ]
-        
+
+        if models_value:
+            cmd.extend(['--models', str(models_value)])
+        if chunk_overlap_value is not None:
+            try:
+                chunk_overlap = float(chunk_overlap_value)
+                cmd.extend(['--chunk_overlap', str(chunk_overlap)])
+            except (TypeError, ValueError):
+                pass
+        if background_blend_value is not None:
+            try:
+                background_blend = float(background_blend_value)
+                cmd.extend(['--background_blend', str(background_blend)])
+            except (TypeError, ValueError):
+                pass
         if keep_full_audio:
             cmd.append('--keep_full_audio')
         if non_speech_silence:
             cmd.append('--non_speech_silence')
-        
-        print(f"Running command: {' '.join(cmd)}") # A printeléshez maradhat az összefűzés
+
         process = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if process.returncode != 0:
-            error_message = process.stderr if process.stderr else "Unknown error during audio separation"
-            raise Exception(f"Audio separation failed with exit code {process.returncode}: {error_message}")
-            
+            error_output = process.stderr.strip() or process.stdout.strip() or "Unknown error during audio separation"
+            raise Exception(f"Audio separation failed with exit code {process.returncode}: {error_output}")
+
         return jsonify({
             'success': True,
             'message': 'Audio separated successfully',
-            'project': project_name
+            'project': project_name,
+            'log': process.stdout.strip()
         })
     except Exception as e:
         return jsonify({
@@ -602,39 +802,100 @@ def separate_audio(project_name):
 @app.route('/api/transcribe/<project_name>', methods=['POST'])
 def transcribe_audio(project_name):
     try:
-        data = request.get_json()
-        language = data.get('language', 'en')
-        hf_token = data.get('hf_token', '')
-        gpus = data.get('gpus', '')
+        sanitized_project = secure_filename(project_name)
+        project_dir = os.path.join('workdir', sanitized_project)
+        if not os.path.exists(project_dir):
+            return jsonify({'success': False, 'error': 'Project not found'}), 404
 
-        # Build the command to run whisx.py
-        input_dir = os.path.join(
-            'workdir',
-            project_name,
-            config['PROJECT_SUBDIRS']['separated_audio_speech']
-        )
-        
-        cmd = [
-            'python', 'scripts/whisx.py',
-            input_dir,
-            '--language', language
+        speech_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['separated_audio_speech'])
+        if not os.path.isdir(speech_dir):
+            return jsonify({'success': False, 'error': 'Speech audio directory not found'}), 400
+
+        try:
+            speech_entries = [
+                entry for entry in os.listdir(speech_dir)
+                if os.path.isfile(os.path.join(speech_dir, entry))
+            ]
+        except OSError as exc:
+            return jsonify({'success': False, 'error': f'Speech audio directory not accessible: {exc}'}), 500
+
+        speech_files = [
+            filename for filename in speech_entries
+            if os.path.splitext(filename)[1].lower() in AUDIO_EXTENSIONS
         ]
-        
-        if hf_token:
-            cmd.extend(['--hf_token', hf_token])
-        if gpus:
-            cmd.extend(['--gpus', gpus])
 
-        # Run the command
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            raise Exception(f"Transcription failed: {result.stderr}")
+        if not speech_files:
+            return jsonify({'success': False, 'error': 'No speech audio files found'}), 400
+
+        payload = request.get_json(silent=True) or {}
+        auto_chunk = payload.get('auto_chunk', True)
+        chunk_value = payload.get('chunk')
+        max_pause_value = payload.get('max_pause')
+        timestamp_padding_value = payload.get('timestamp_padding')
+        max_segment_value = payload.get('max_segment_duration')
+
+        parakeet_python = get_conda_python("parakeet-fix")
+        if not parakeet_python:
+            return jsonify({
+                'success': False,
+                'error': "A 'parakeet-fix' Conda környezet Python végrehajtható fájlja nem található."
+            }), 500
+
+        script_path = os.path.join(app.root_path, 'scripts', 'Nvidia_asr_eng', 'parakeet_transcribe_wordts_4.0_easy.py')
+
+        cmd = [
+            parakeet_python,
+            script_path,
+            '--project-name',
+            sanitized_project
+        ]
+
+        if not auto_chunk:
+            cmd.append('--no-auto-chunk')
+
+        if chunk_value is not None and chunk_value != '':
+            try:
+                chunk_int = int(chunk_value)
+                if chunk_int > 0:
+                    cmd.extend(['--chunk', str(chunk_int)])
+            except (TypeError, ValueError):
+                pass
+
+        if max_pause_value is not None and max_pause_value != '':
+            try:
+                max_pause = float(max_pause_value)
+                if max_pause > 0:
+                    cmd.extend(['--max-pause', str(max_pause)])
+            except (TypeError, ValueError):
+                pass
+
+        if timestamp_padding_value is not None and timestamp_padding_value != '':
+            try:
+                padding = float(timestamp_padding_value)
+                if padding >= 0:
+                    cmd.extend(['--timestamp-padding', str(padding)])
+            except (TypeError, ValueError):
+                pass
+
+        if max_segment_value is not None and max_segment_value != '':
+            try:
+                max_segment = float(max_segment_value)
+                if max_segment >= 0:
+                    cmd.extend(['--max-segment-duration', str(max_segment)])
+            except (TypeError, ValueError):
+                pass
+
+        process = subprocess.run(cmd, capture_output=True, text=True)
+
+        if process.returncode != 0:
+            error_output = process.stderr.strip() or process.stdout.strip() or "Unknown error during transcription"
+            raise Exception(f"Transcription failed with exit code {process.returncode}: {error_output}")
 
         return jsonify({
             'success': True,
             'message': 'Audio transcription completed',
-            'project': project_name
+            'project': project_name,
+            'log': process.stdout.strip()
         })
     except Exception as e:
         return jsonify({
@@ -936,40 +1197,87 @@ def save_api_key():
     if not api_key:
         return jsonify({'success': False, 'error': 'Missing api_key'}), 400
 
-    # A keyholder.json a projekt gyökerében lesz
-    keyholder_path = 'keyholder.json'
+    keyholder_data = load_keyholder_data()
+    encoded_key = encode_keyholder_value(api_key)
+    if not encoded_key:
+        return jsonify({'success': False, 'error': 'Üres API kulcs'}), 400
+
+    keyholder_data['api_key'] = encoded_key
+    keyholder_data['chatgpt_api_key'] = encoded_key
+    success = save_keyholder_data(keyholder_data)
+    if not success:
+        return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a keyholder.json fájlt'}), 500
+    return jsonify({'success': True})
+
+
+@app.route('/save-workflow-keys', methods=['POST'])
+def save_workflow_keys():
+    data = request.get_json() or {}
+    if not data:
+        return jsonify({'success': False, 'error': 'Hiányzó kulcs adatok'}), 400
+
+    keyholder_data = load_keyholder_data()
+    updated = False
+
+    field_mapping = {
+        'chatgpt_api_key': 'chatgpt_api_key',
+        'deepl_api_key': 'deepL_api_key',
+        'huggingface_token': 'hf_token',
+        'hf_token': 'hf_token',
+    }
+
+    for incoming_field, storage_field in field_mapping.items():
+        raw_value = data.get(incoming_field)
+        if not raw_value:
+            continue
+        encoded = encode_keyholder_value(raw_value)
+        if not encoded:
+            continue
+        keyholder_data[storage_field] = encoded
+        if storage_field == 'chatgpt_api_key':
+            keyholder_data['api_key'] = encoded
+        if storage_field == 'deepL_api_key':
+            keyholder_data['deepl_api_key'] = encoded
+        updated = True
+
+    if not updated:
+        return jsonify({'success': False, 'error': 'Nem került megadásra új kulcs'}), 400
+
+    if not save_keyholder_data(keyholder_data):
+        return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a keyholder.json fájlt'}), 500
     try:
-        # Ha már létezik a fájl, beolvassuk és frissítjük, különben létrehozzuk
-        if os.path.exists(keyholder_path):
-            with open(keyholder_path, 'r') as f:
-                key_data = json.load(f)
-        else:
-            key_data = {}
-
-        # Base64 kódolás
-        encoded_key = base64.b64encode(api_key.encode('utf-8')).decode('utf-8')
-        key_data['api_key'] = encoded_key
-
-        with open(keyholder_path, 'w') as f:
-            json.dump(key_data, f, indent=2)
-
         return jsonify({'success': True})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
 
 @app.route('/get-api-key', methods=['GET'])
 def get_api_key():
-    keyholder_path = 'keyholder.json'
-    if not os.path.exists(keyholder_path):
+    keyholder_data = load_keyholder_data()
+    if not keyholder_data:
         return jsonify({'api_key': None})
 
-    try:
-        with open(keyholder_path, 'r') as f:
-            key_data = json.load(f)
-        api_key = key_data.get('api_key')
-        return jsonify({'api_key': api_key})
-    except Exception as e:
-        return jsonify({'api_key': None, 'error': str(e)})
+    for field in ('api_key', 'chatgpt_api_key'):
+        value = keyholder_data.get(field)
+        if value:
+            return jsonify({'api_key': value})
+    return jsonify({'api_key': None})
+
+
+@app.route('/api/workflow-key-status/<project_name>', methods=['POST'])
+def workflow_key_status(project_name):
+    sanitized_project = secure_filename(project_name)
+    current_config = get_config_copy()
+    workdir_path = current_config['DIRECTORIES']['workdir']
+    project_dir = os.path.join(workdir_path, sanitized_project)
+
+    if not os.path.isdir(project_dir):
+        return jsonify({'success': False, 'error': 'Projekt nem található.'}), 404
+
+    data = request.get_json() or {}
+    lang_code = data.get('lang_code')
+    status = determine_workflow_key_status(project_dir, current_config, lang_code)
+    status['success'] = True
+    return jsonify(status)
 
 @app.route('/run-translation', methods=['POST'])
 def run_translation():
@@ -1022,7 +1330,7 @@ def run_translation():
             mode = 'srt_align'
         else:
             cmd = [
-                'python', 'scripts/old3/translate.py',
+                'python', 'scripts/translate.py',
                 '-input_dir', input_dir_abs,
                 '-output_dir', output_dir_abs,
                 '-input_language', input_language,
@@ -1129,6 +1437,19 @@ def run_workflow_api(project_name):
     if not os.path.isdir(model_path_run4):
         return jsonify({'success': False, 'error': f'A 4. futtatás modellje nem létezik: {model_path_run4}'}), 400
 
+    key_status = determine_workflow_key_status(project_dir, current_config, lang_code)
+    missing_keys = [
+        info['label']
+        for key, info in key_status['keys'].items()
+        if info.get('required') and not info.get('present')
+    ]
+    if missing_keys:
+        return jsonify({
+            'success': False,
+            'error': 'Hiányzó API kulcsok: ' + ', '.join(missing_keys),
+            'missing_keys': missing_keys
+        }), 400
+
     params = {
         'translation_context': translation_context,
         'tts_model_path': model_path,
@@ -1229,4 +1550,13 @@ def get_workflow_status(job_id):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    import logging
+    import os
+
+    debug_flag = os.environ.get('FLASK_DEBUG', '')
+    debug_enabled = debug_flag.lower() in {'1', 'true', 'yes', 'on'}
+
+    if not debug_enabled:
+        logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
+    app.run(debug=debug_enabled, host='0.0.0.0')

@@ -21,8 +21,17 @@ from pathlib import Path
 import numpy as np
 import tempfile
 import os
+import sys
 import warnings
 import datetime as _dt
+
+for candidate in Path(__file__).resolve().parents:
+    if (candidate / "tools").is_dir():
+        if str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+        break
+
+from tools.debug_utils import add_debug_argument, configure_debug_mode
 
 try:
     import nemo.collections.asr as nemo_asr
@@ -340,7 +349,9 @@ def main():
     p.add_argument("--max-pause", type=float, default=DEFAULT_MAX_PAUSE_S, help=f"Mondatok közti maximális szünet másodpercben (alapért.: {DEFAULT_MAX_PAUSE_S}s).")
     p.add_argument("--timestamp-padding", type=float, default=DEFAULT_PADDING_S, help=f"Időbélyegek kiterjesztése a szünetek rovására (mp). 0 a kikapcsoláshoz (alapért.: {DEFAULT_PADDING_S}s).")
     p.add_argument("--max-segment-duration", type=float, default=DEFAULT_MAX_SEGMENT_S, help=f"Mondatszegmensek maximális hossza másodpercben (alapért.: {DEFAULT_MAX_SEGMENT_S}s). 0 a kikapcsoláshoz.")
+    add_debug_argument(p)
     args = p.parse_args()
+    configure_debug_mode(args.debug)
 
     processing_dir = load_config_and_get_paths(args.project_name)
 
