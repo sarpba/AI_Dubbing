@@ -7,16 +7,1482 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script>
-        // Theme initialization
-        document.addEventListener('DOMContentLoaded', function() {
-            const savedTheme = localStorage.getItem('theme') || 'auto';
+        const PROJECT_NAME = "{{ project.name }}";
+        let workflowPollInterval = null;
+        let workflowLogInterval = null;
+        let currentWorkflowJobId = null;
+        let currentLogJobId = null;
+        let workflowInfoDismissed = false;
+        let workflowKeysModal = null;
+        let workflowStepModal = null;
+        let workflowParamsModal = null;
+        let pendingWorkflowPayload = null;
+        let availableScripts = [];
+        let defaultWorkflow = [];
+        let workflowSteps = [];
+        let selectedStepIndex = null;
+
+        const workflowKeyFieldMap = {
+            chatgpt: { wrapperId: 'workflowKeyFieldChatgpt', inputId: 'workflowKeyChatgpt', payloadKey: 'chatgpt_api_key' },
+            deepl: { wrapperId: 'workflowKeyFieldDeepl', inputId: 'workflowKeyDeepl', payloadKey: 'deepl_api_key' },
+            huggingface: { wrapperId: 'workflowKeyFieldHuggingface', inputId: 'workflowKeyHuggingface', payloadKey: 'huggingface_token' }
+        };
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
             const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            
-            if (savedTheme === 'dark' || (savedTheme === 'auto' && systemDark)) {
-                document.documentElement.setAttribute('data-bs-theme', 'dark');
+
+            let newTheme = 'light';
+            if (currentTheme === 'light' || (currentTheme === 'auto' && !systemDark)) {
+                newTheme = 'dark';
             } else {
-                document.documentElement.setAttribute('data-bs-theme', 'light');
+                newTheme = 'auto';
             }
+
+            document.documentElement.setAttribute('data-bs-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        function cloneSteps(steps) {
+            return JSON.parse(JSON.stringify(steps || []));
+        }
+
+        function cloneObject(obj) {
+            return JSON.parse(JSON.stringify(obj || {}));
+        }
+
+        function findScriptById(scriptId) {
+            if (!scriptId) return null;
+            return availableScripts.find(entry => entry.id === scriptId) || null;
+        }
+
+        function getMissingParams(step, script) {
+            if (!script || !script.parameters) {
+                return [];
+            }
+            return script.parameters
+                .filter(param => param.required && param.type !== 'flag' && !param.autofill)
+                .map(param => param.name)
+                .filter(name => {
+                    const value = step.params ? step.params[name] : undefined;
+                    if (value === undefined || value === null) {
+                        return true;
+                    }
+                    if (typeof value === 'string' && value.trim() === '') {
+                        return true;
+                    }
+                    return false;
+                });
+        }
+
+        function describeStepParameters(step, script, missing) {
+            if (missing && missing.length) {
+                return `Hiányzó kötelező paraméterek: ${missing.join(', ')}`;
+            }
+            const summary = [];
+            if (script && script.parameters) {
+                script.parameters.forEach(param => {
+                    const value = step.params ? step.params[param.name] : undefined;
+                    if (param.type === 'flag') {
+                        if (value === true) {
+                            summary.push(`${param.name}=on`);
+                        } else if (value === false) {
+                            summary.push(`${param.name}=off`);
+                        }
+                    } else if (value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '')) {
+                        summary.push(`${param.name}=${value}`);
+                    }
+                });
+            }
+            Object.entries(step.params || {}).forEach(([key, value]) => {
+                if (!script || !(script.parameters || []).some(param => param.name === key)) {
+                    summary.push(`${key}=${value}`);
+                }
+            });
+            return summary.length ? summary.join(', ') : 'Nincs megadott paraméter';
+        }
+
+        function updateMissingBadge() {
+            const badge = document.getElementById('workflowMissingBadge');
+            if (!badge) return;
+            const hasMissing = workflowSteps.some(step => step.enabled !== false && getMissingParams(step, findScriptById(step.script)).length);
+            badge.classList.toggle('d-none', !hasMissing);
+        }
+
+        function initWorkflowButtons() {
+            const addBtn = document.getElementById('addWorkflowStepBtn');
+            if (addBtn) {
+                addBtn.addEventListener('click', () => {
+                    if (!availableScripts.length) {
+                        alert('A scripts lista még nem töltődött be. Próbáld újra néhány másodperc múlva.');
+                        return;
+                    }
+                    openWorkflowStepPicker();
+                });
+            }
+
+            const resetBtn = document.getElementById('resetWorkflowBtn');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    if (!defaultWorkflow.length) {
+                        alert('Nincs elérhető alapértelmezett workflow.');
+                        return;
+                    }
+                    if (!confirm('Biztosan visszaállítod az alapértelmezett lépéssort?')) {
+                        return;
+                    }
+                    workflowSteps = cloneSteps(defaultWorkflow);
+                    renderWorkflowSteps();
+                    updateInfoBox('info', 'Az alapértelmezett lépéssor betöltve.');
+                });
+            }
+
+            const startBtn = document.getElementById('startWorkflowBtn');
+            if (startBtn) {
+                startBtn.addEventListener('click', handleStartWorkflow);
+            }
+
+            const stopBtn = document.getElementById('stopWorkflowBtn');
+            if (stopBtn) {
+                stopBtn.addEventListener('click', stopWorkflow);
+            }
+
+            const searchInput = document.getElementById('workflowStepSearch');
+            if (searchInput) {
+                searchInput.addEventListener('input', event => populateWorkflowStepList(event.target.value || ''));
+            }
+        }
+
+        function initWorkflowModals() {
+            const stepModalElement = document.getElementById('workflowStepModal');
+            if (stepModalElement) {
+                workflowStepModal = new bootstrap.Modal(stepModalElement);
+                stepModalElement.addEventListener('shown.bs.modal', () => {
+                    const searchInput = document.getElementById('workflowStepSearch');
+                    if (searchInput) {
+                        searchInput.value = '';
+                        searchInput.focus();
+                        populateWorkflowStepList('');
+                    }
+                });
+            }
+
+            const paramsModalElement = document.getElementById('workflowParamsModal');
+            if (paramsModalElement) {
+                workflowParamsModal = new bootstrap.Modal(paramsModalElement);
+                paramsModalElement.addEventListener('hidden.bs.modal', () => {
+                    selectedStepIndex = null;
+                    const alertBox = document.getElementById('workflowParamsAlert');
+                    if (alertBox) {
+                        alertBox.classList.add('d-none');
+                        alertBox.textContent = '';
+                    }
+                });
+                const saveBtn = document.getElementById('workflowParamsSaveBtn');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', saveWorkflowParams);
+                }
+            }
+        }
+
+        function initWorkflowKeyModal() {
+            const modalElement = document.getElementById('workflowKeysModal');
+            if (modalElement) {
+                workflowKeysModal = new bootstrap.Modal(modalElement);
+                modalElement.addEventListener('hidden.bs.modal', () => {
+                    resetWorkflowKeyModal();
+                    pendingWorkflowPayload = null;
+                });
+                const submitBtn = document.getElementById('workflowKeysSubmitBtn');
+                if (submitBtn) {
+                    submitBtn.addEventListener('click', saveWorkflowKeys);
+                }
+            }
+        }
+
+        async function loadWorkflowOptions(projectName) {
+            const statusText = document.getElementById('workflowStatusText');
+            const startButton = document.getElementById('startWorkflowBtn');
+            try {
+                const response = await fetch(`/api/workflow-options/${encodeURIComponent(projectName)}`);
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba');
+                }
+
+                availableScripts = result.scripts || [];
+                defaultWorkflow = cloneSteps(result.defaults?.workflow || []);
+                if (!workflowSteps.length) {
+                    workflowSteps = cloneSteps(defaultWorkflow);
+                }
+                renderWorkflowSteps();
+                renderWorkflowStatus(result.latest_job);
+
+                if (result.latest_job && ['queued', 'running', 'cancelling'].includes(result.latest_job.status)) {
+                    currentWorkflowJobId = result.latest_job.job_id;
+                    startWorkflowPolling(result.latest_job.job_id, true);
+                }
+
+                if (statusText) {
+                    if (!workflowSteps.length) {
+                        statusText.textContent = 'Adj hozzá lépéseket az indításhoz.';
+                    } else {
+                        statusText.textContent = 'Workflow készen áll az indításra.';
+                    }
+                }
+
+                if (startButton) {
+                    startButton.disabled = workflowSteps.length === 0;
+                }
+            } catch (error) {
+                console.error('Hiba a workflow opciók betöltésekor:', error);
+                if (statusText) {
+                    statusText.textContent = `Hiba: ${error.message}`;
+                }
+                if (startButton) {
+                    startButton.disabled = true;
+                }
+                updateInfoBox('danger', `Nem sikerült betölteni a workflow opciókat: ${error.message}`);
+            }
+        }
+
+        function renderWorkflowSteps() {
+            const tbody = document.getElementById('workflowStepsBody');
+            if (!tbody) {
+                return;
+            }
+            tbody.innerHTML = '';
+            if (!workflowSteps.length) {
+                const row = document.createElement('tr');
+                row.className = 'text-muted';
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.textContent = 'Még nem adtál hozzá lépéseket.';
+                row.append(cell);
+                tbody.append(row);
+                updateMissingBadge();
+                const startButton = document.getElementById('startWorkflowBtn');
+                if (startButton) {
+                    startButton.disabled = true;
+                }
+                return;
+            }
+
+            workflowSteps.forEach((step, index) => {
+                const script = findScriptById(step.script);
+                const row = document.createElement('tr');
+                const missing = step.enabled !== false ? getMissingParams(step, script) : [];
+
+                if (missing.length) {
+                    row.classList.add('table-warning');
+                }
+
+                const enabledCell = document.createElement('td');
+                const enabledWrapper = document.createElement('div');
+                enabledWrapper.className = 'form-check form-switch';
+                const enabledCheckbox = document.createElement('input');
+                enabledCheckbox.type = 'checkbox';
+                enabledCheckbox.className = 'form-check-input';
+                enabledCheckbox.checked = step.enabled !== false;
+                enabledCheckbox.addEventListener('change', () => {
+                    step.enabled = enabledCheckbox.checked;
+                    renderWorkflowSteps();
+                });
+                enabledWrapper.append(enabledCheckbox);
+                enabledCell.append(enabledWrapper);
+                row.append(enabledCell);
+
+                const infoCell = document.createElement('td');
+                const title = document.createElement('div');
+                title.className = 'fw-semibold';
+                title.textContent = (script && script.display_name) || step.script;
+                infoCell.append(title);
+
+                if (script) {
+                    const scriptPath = document.createElement('div');
+                    scriptPath.className = 'small text-muted';
+                    scriptPath.textContent = script.script;
+                    infoCell.append(scriptPath);
+                }
+
+                const summary = document.createElement('div');
+                summary.className = 'small mt-1';
+                summary.textContent = describeStepParameters(step, script, missing);
+                infoCell.append(summary);
+
+                if (script && script.required_keys && script.required_keys.length) {
+                    const keyLine = document.createElement('div');
+                    keyLine.className = 'small mt-1';
+                    script.required_keys.forEach(key => {
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-secondary me-1';
+                        badge.textContent = key;
+                        keyLine.append(badge);
+                    });
+                    infoCell.append(keyLine);
+                }
+
+                row.append(infoCell);
+
+                const envCell = document.createElement('td');
+                if (script && script.environment) {
+                    const envBadge = document.createElement('span');
+                    envBadge.className = 'badge bg-light text-dark border';
+                    envBadge.textContent = script.environment;
+                    envCell.append(envBadge);
+                } else {
+                    envCell.innerHTML = '&mdash;';
+                }
+                row.append(envCell);
+
+                const haltCell = document.createElement('td');
+                const haltWrapper = document.createElement('div');
+                haltWrapper.className = 'form-check form-switch';
+                const haltCheckbox = document.createElement('input');
+                haltCheckbox.type = 'checkbox';
+                haltCheckbox.className = 'form-check-input';
+                haltCheckbox.checked = step.halt_on_fail !== false;
+                const haltLabel = document.createElement('label');
+                haltLabel.className = 'form-check-label small';
+                haltLabel.textContent = haltCheckbox.checked ? 'Megáll hibánál' : 'Tovább hiba után';
+                haltCheckbox.addEventListener('change', () => {
+                    step.halt_on_fail = haltCheckbox.checked;
+                    haltLabel.textContent = haltCheckbox.checked ? 'Megáll hibánál' : 'Tovább hiba után';
+                });
+                haltWrapper.append(haltCheckbox, haltLabel);
+                haltCell.append(haltWrapper);
+                row.append(haltCell);
+
+                const actionsCell = document.createElement('td');
+                actionsCell.className = 'text-end';
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.className = 'btn btn-sm btn-outline-primary me-2';
+                editBtn.textContent = 'Paraméterek';
+                editBtn.addEventListener('click', () => openWorkflowParams(index));
+
+                const upBtn = document.createElement('button');
+                upBtn.type = 'button';
+                upBtn.className = 'btn btn-sm btn-outline-secondary me-1';
+                upBtn.innerHTML = '&uarr;';
+                upBtn.disabled = index === 0;
+                upBtn.addEventListener('click', () => moveWorkflowStep(index, -1));
+
+                const downBtn = document.createElement('button');
+                downBtn.type = 'button';
+                downBtn.className = 'btn btn-sm btn-outline-secondary me-1';
+                downBtn.innerHTML = '&darr;';
+                downBtn.disabled = index === workflowSteps.length - 1;
+                downBtn.addEventListener('click', () => moveWorkflowStep(index, 1));
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn btn-sm btn-outline-danger';
+                removeBtn.innerHTML = '&times;';
+                removeBtn.addEventListener('click', () => removeWorkflowStep(index));
+
+                actionsCell.append(editBtn, upBtn, downBtn, removeBtn);
+                row.append(actionsCell);
+
+                tbody.append(row);
+            });
+
+            updateMissingBadge();
+
+            const startButton = document.getElementById('startWorkflowBtn');
+            if (startButton) {
+                startButton.disabled = workflowSteps.length === 0;
+            }
+        }
+
+        function openWorkflowStepPicker() {
+            populateWorkflowStepList('');
+            if (workflowStepModal) {
+                workflowStepModal.show();
+            }
+        }
+
+        function populateWorkflowStepList(filterText) {
+            const list = document.getElementById('workflowStepList');
+            if (!list) {
+                return;
+            }
+            list.innerHTML = '';
+            const term = (filterText || '').toLowerCase();
+            const scripts = availableScripts
+                .slice()
+                .sort((a, b) => (a.display_name || a.script).localeCompare(b.display_name || b.script));
+            const filtered = term
+                ? scripts.filter(script =>
+                    (script.display_name && script.display_name.toLowerCase().includes(term)) ||
+                    (script.script && script.script.toLowerCase().includes(term)))
+                : scripts;
+
+            if (!filtered.length) {
+                const empty = document.createElement('div');
+                empty.className = 'list-group-item text-muted';
+                empty.textContent = 'Nincs a keresésnek megfelelő szkript.';
+                list.append(empty);
+                return;
+            }
+
+            filtered.forEach(script => {
+                const item = document.createElement('div');
+                item.className = 'list-group-item';
+                const header = document.createElement('div');
+                header.className = 'd-flex justify-content-between align-items-start gap-3';
+
+                const titleWrap = document.createElement('div');
+                const title = document.createElement('div');
+                title.className = 'fw-semibold';
+                title.textContent = script.display_name || script.script;
+                const subtitle = document.createElement('div');
+                subtitle.className = 'small text-muted';
+                subtitle.textContent = script.script;
+                titleWrap.append(title, subtitle);
+
+                const addBtn = document.createElement('button');
+                addBtn.type = 'button';
+                addBtn.className = 'btn btn-sm btn-primary';
+                addBtn.textContent = 'Hozzáadás';
+                addBtn.addEventListener('click', () => {
+                    addWorkflowStep(script.id);
+                    if (workflowStepModal) {
+                        workflowStepModal.hide();
+                    }
+                });
+
+                header.append(titleWrap, addBtn);
+                item.append(header);
+
+                if (script.environment) {
+                    const envInfo = document.createElement('div');
+                    envInfo.className = 'small mt-1';
+                    envInfo.innerHTML = `<strong>Környezet:</strong> ${script.environment}`;
+                    item.append(envInfo);
+                }
+
+                const requiredParams = (script.parameters || []).filter(param => param.required && !param.autofill);
+                if (requiredParams.length) {
+                    const reqInfo = document.createElement('div');
+                    reqInfo.className = 'small mt-1';
+                    reqInfo.innerHTML = `<strong>Kötelező paraméterek:</strong> ${requiredParams.map(param => param.name).join(', ')}`;
+                    item.append(reqInfo);
+                }
+
+                if (script.required_keys && script.required_keys.length) {
+                    const keyInfo = document.createElement('div');
+                    keyInfo.className = 'small mt-1';
+                    keyInfo.innerHTML = `<strong>Szükséges kulcsok:</strong> ${script.required_keys.join(', ')}`;
+                    item.append(keyInfo);
+                }
+
+                if (script.notes) {
+                    const notes = document.createElement('div');
+                    notes.className = 'small mt-2 text-muted';
+                    notes.textContent = script.notes;
+                    item.append(notes);
+                }
+
+                list.append(item);
+            });
+        }
+
+        function addWorkflowStep(scriptId) {
+            const script = findScriptById(scriptId);
+            if (!script) {
+                alert(`Ismeretlen szkript: ${scriptId}`);
+                return;
+            }
+            const template = (defaultWorkflow || []).find(step => step.script === script.id);
+            const newStep = {
+                script: script.id,
+                enabled: true,
+                halt_on_fail: template ? (template.halt_on_fail !== undefined ? template.halt_on_fail : true) : true,
+                params: template ? cloneObject(template.params) : {}
+            };
+            workflowSteps.push(newStep);
+            renderWorkflowSteps();
+            updateInfoBox('secondary', `${script.display_name || script.script} hozzáadva a workflow-hoz.`);
+        }
+
+        function moveWorkflowStep(index, delta) {
+            const newIndex = index + delta;
+            if (newIndex < 0 || newIndex >= workflowSteps.length) {
+                return;
+            }
+            const [step] = workflowSteps.splice(index, 1);
+            workflowSteps.splice(newIndex, 0, step);
+            renderWorkflowSteps();
+        }
+
+        function removeWorkflowStep(index) {
+            const [removed] = workflowSteps.splice(index, 1);
+            renderWorkflowSteps();
+            if (removed) {
+                updateInfoBox('secondary', `${removed.script} eltávolítva a workflow-ból.`);
+            }
+        }
+
+        function openWorkflowParams(index) {
+            const step = workflowSteps[index];
+            if (!step) {
+                return;
+            }
+            const script = findScriptById(step.script);
+            if (!script) {
+                alert(`Ismeretlen szkript: ${step.script}`);
+                return;
+            }
+            selectedStepIndex = index;
+            const titleEl = document.getElementById('workflowParamsTitle');
+            if (titleEl) {
+                titleEl.textContent = `${script.display_name || script.script} – paraméterek`;
+            }
+            renderWorkflowParamsForm(script, step);
+            if (workflowParamsModal) {
+                workflowParamsModal.show();
+            }
+        }
+
+        function renderWorkflowParamsForm(script, step) {
+            const container = document.getElementById('workflowParamsContainer');
+            const alertBox = document.getElementById('workflowParamsAlert');
+            if (alertBox) {
+                alertBox.classList.add('d-none');
+                alertBox.textContent = '';
+            }
+            if (!container) {
+                return;
+            }
+            container.innerHTML = '';
+            const params = script.parameters || [];
+            if (!params.length) {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'text-muted';
+                placeholder.textContent = 'Ehhez a lépéshez nem szükséges beállítás.';
+                container.append(placeholder);
+                return;
+            }
+            params.forEach(param => {
+                const group = document.createElement('div');
+                if (param.autofill) {
+                    group.className = 'border rounded p-2 bg-body-tertiary';
+                    const label = document.createElement('div');
+                    label.className = 'fw-semibold';
+                    label.textContent = param.name;
+                    const help = document.createElement('div');
+                    help.className = 'small text-muted';
+                    help.textContent = param.autofill === 'project_name'
+                        ? 'Automatikus érték: projektnév'
+                        : 'Automatikus érték: projekt könyvtár teljes elérési útja';
+                    group.append(label, help);
+                    container.append(group);
+                    return;
+                }
+
+                if (param.type === 'flag') {
+                    group.className = 'form-check form-switch';
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.className = 'form-check-input';
+                    input.id = `workflow-param-${param.name}`;
+                    input.dataset.param = param.name;
+                    input.dataset.type = param.type;
+                    input.checked = Boolean(step.params && step.params[param.name]);
+                    const label = document.createElement('label');
+                    label.className = 'form-check-label';
+                    label.setAttribute('for', input.id);
+                    label.textContent = param.name;
+                    group.append(input, label);
+                } else {
+                    group.className = 'form-group';
+                    const label = document.createElement('label');
+                    label.className = 'form-label fw-semibold';
+                    label.setAttribute('for', `workflow-param-${param.name}`);
+                    label.textContent = param.name + (param.required ? ' *' : '');
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'form-control';
+                    input.id = `workflow-param-${param.name}`;
+                    input.dataset.param = param.name;
+                    input.dataset.type = param.type;
+                    const value = step.params ? step.params[param.name] : '';
+                    input.value = value !== undefined && value !== null ? value : '';
+                    group.append(label, input);
+                }
+
+                if (param.flags && param.flags.length) {
+                    const flagInfo = document.createElement('div');
+                    flagInfo.className = 'form-text';
+                    flagInfo.textContent = `Kapcsolók: ${param.flags.join(', ')}`;
+                    group.append(flagInfo);
+                }
+
+                container.append(group);
+            });
+        }
+
+        function saveWorkflowParams() {
+            if (selectedStepIndex === null) {
+                return;
+            }
+            const step = workflowSteps[selectedStepIndex];
+            const script = findScriptById(step.script);
+            if (!script) {
+                return;
+            }
+            const container = document.getElementById('workflowParamsContainer');
+            const alertBox = document.getElementById('workflowParamsAlert');
+            if (!container) {
+                return;
+            }
+            const inputs = container.querySelectorAll('[data-param]');
+            const newParams = cloneObject(step.params);
+            inputs.forEach(input => {
+                const name = input.dataset.param;
+                const type = input.dataset.type;
+                if (type === 'flag') {
+                    newParams[name] = input.checked;
+                } else {
+                    const value = input.value.trim();
+                    if (value === '') {
+                        delete newParams[name];
+                    } else {
+                        newParams[name] = value;
+                    }
+                }
+            });
+
+            const missing = getMissingParams({ ...step, params: newParams }, script);
+            if (missing.length && alertBox) {
+                alertBox.textContent = `Hiányzó kötelező mezők: ${missing.join(', ')}`;
+                alertBox.classList.remove('d-none');
+                return;
+            }
+
+            step.params = newParams;
+            if (workflowParamsModal) {
+                workflowParamsModal.hide();
+            }
+            renderWorkflowSteps();
+        }
+
+        function validateWorkflow() {
+            const errors = [];
+            const missingSummary = [];
+            const enabledSteps = workflowSteps.filter(step => step.enabled !== false);
+            if (!enabledSteps.length) {
+                errors.push('Legalább egy engedélyezett lépés szükséges a futtatáshoz.');
+            }
+            enabledSteps.forEach((step, index) => {
+                const script = findScriptById(step.script);
+                if (!script) {
+                    errors.push(`Ismeretlen szkript: ${step.script}`);
+                    return;
+                }
+                const missing = getMissingParams(step, script);
+                if (missing.length) {
+                    missingSummary.push({ index, script, missing });
+                }
+            });
+            return {
+                valid: errors.length === 0 && missingSummary.length === 0,
+                errors,
+                missingSummary
+            };
+        }
+
+        function collectWorkflowPayload() {
+            return {
+                steps: workflowSteps.map(step => ({
+                    script: step.script,
+                    enabled: step.enabled !== false,
+                    halt_on_fail: step.halt_on_fail !== false,
+                    params: cloneObject(step.params)
+                }))
+            };
+        }
+
+        async function handleStartWorkflow() {
+            const validation = validateWorkflow();
+            if (!validation.valid) {
+                const messages = [...validation.errors];
+                if (validation.missingSummary.length) {
+                    validation.missingSummary.forEach(item => {
+                        const script = item.script;
+                        messages.push(`${script.display_name || script.script}: hiányzó paraméterek – ${item.missing.join(', ')}`);
+                    });
+                }
+                updateInfoBox('warning', messages.join(' | '));
+                updateMissingBadge();
+                return;
+            }
+
+            const payload = collectWorkflowPayload();
+            try {
+                const ready = await ensureWorkflowKeys(payload);
+                if (!ready) {
+                    return;
+                }
+                await executeWorkflow(payload);
+            } catch (error) {
+                console.error('Workflow indítási hiba:', error);
+                alert('Workflow indítása sikertelen: ' + error.message);
+            }
+        }
+
+        async function ensureWorkflowKeys(payload) {
+            const response = await fetch(`/api/workflow-key-status/${encodeURIComponent(PROJECT_NAME)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ steps: payload.steps })
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Nem sikerült ellenőrizni az API kulcsokat.');
+            }
+            const missing = Object.entries(result.keys || {}).filter(([, info]) => info.required && !info.present);
+            if (!missing.length) {
+                pendingWorkflowPayload = null;
+                return true;
+            }
+            const missingList = missing.map(([key, info]) => ({ key, label: info.label || key }));
+            prepareWorkflowKeyModal(missingList);
+            pendingWorkflowPayload = payload;
+            if (workflowKeysModal) {
+                workflowKeysModal.show();
+            } else {
+                alert('Hiányzó API kulcsok: ' + missingList.map(item => item.label).join(', '));
+            }
+            return false;
+        }
+
+        function prepareWorkflowKeyModal(missingList) {
+            Object.entries(workflowKeyFieldMap).forEach(([key, cfg]) => {
+                const wrapper = document.getElementById(cfg.wrapperId);
+                const input = document.getElementById(cfg.inputId);
+                if (wrapper) {
+                    const isRequired = missingList.some(item => item.key === key);
+                    wrapper.classList.toggle('d-none', !isRequired);
+                }
+                if (input) {
+                    input.value = '';
+                }
+            });
+            const info = document.getElementById('workflowKeysInfo');
+            if (info) {
+                const labels = missingList.map(item => item.label);
+                info.textContent = 'A workflow indításához add meg a következő kulcsokat: ' + labels.join(', ');
+            }
+        }
+
+        function resetWorkflowKeyModal() {
+            Object.values(workflowKeyFieldMap).forEach(cfg => {
+                const wrapper = document.getElementById(cfg.wrapperId);
+                if (wrapper) {
+                    wrapper.classList.add('d-none');
+                }
+                const input = document.getElementById(cfg.inputId);
+                if (input) {
+                    input.value = '';
+                }
+            });
+            const info = document.getElementById('workflowKeysInfo');
+            if (info) {
+                info.textContent = 'A workflow indításához add meg a hiányzó API kulcsokat.';
+            }
+        }
+
+        async function saveWorkflowKeys() {
+            if (!pendingWorkflowPayload) {
+                if (workflowKeysModal) {
+                    workflowKeysModal.hide();
+                }
+                return;
+            }
+            const submitBtn = document.getElementById('workflowKeysSubmitBtn');
+            const spinner = document.getElementById('workflowKeysSpinner');
+            const payload = {};
+            let firstEmpty = null;
+
+            Object.values(workflowKeyFieldMap).forEach(cfg => {
+                const wrapper = document.getElementById(cfg.wrapperId);
+                if (wrapper && !wrapper.classList.contains('d-none')) {
+                    const input = document.getElementById(cfg.inputId);
+                    const value = (input ? input.value : '').trim();
+                    if (!value) {
+                        if (!firstEmpty && input) {
+                            firstEmpty = input;
+                        }
+                    } else {
+                        payload[cfg.payloadKey] = value;
+                    }
+                }
+            });
+
+            if (firstEmpty) {
+                firstEmpty.focus();
+                alert('Kérjük add meg az összes hiányzó kulcsot.');
+                return;
+            }
+            if (!Object.keys(payload).length) {
+                if (workflowKeysModal) {
+                    workflowKeysModal.hide();
+                }
+                return;
+            }
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+            }
+            if (spinner) {
+                spinner.classList.remove('d-none');
+            }
+
+            try {
+                const response = await fetch('/save-workflow-keys', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Nem sikerült menteni az API kulcsokat.');
+                }
+                const payloadToRun = pendingWorkflowPayload;
+                pendingWorkflowPayload = null;
+                if (workflowKeysModal) {
+                    workflowKeysModal.hide();
+                }
+                await executeWorkflow(payloadToRun);
+            } catch (error) {
+                alert('API kulcs mentése sikertelen: ' + error.message);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                }
+                if (spinner) {
+                    spinner.classList.add('d-none');
+                }
+            }
+        }
+
+        async function executeWorkflow(payload) {
+            const statusText = document.getElementById('workflowStatusText');
+            const startButton = document.getElementById('startWorkflowBtn');
+            const spinner = document.getElementById('workflowSpinner');
+            const stopButton = document.getElementById('stopWorkflowBtn');
+            const stopSpinner = document.getElementById('stopWorkflowSpinner');
+            const stopLabel = document.getElementById('stopWorkflowLabel');
+            const logContent = document.getElementById('workflowLogContent');
+            const logLink = document.getElementById('workflowLogLink');
+
+            currentWorkflowJobId = null;
+            stopLogPolling(true);
+
+            if (startButton) {
+                startButton.disabled = true;
+                startButton.classList.add('btn-processing');
+            }
+            if (spinner) {
+                spinner.classList.remove('d-none');
+            }
+            if (statusText) {
+                statusText.textContent = 'Workflow indítása...';
+            }
+            updateInfoBox('secondary', 'Workflow indítása folyamatban. Az első lépés néhány másodpercig eltarthat.');
+
+            if (stopButton) {
+                stopButton.classList.remove('d-none');
+                stopButton.disabled = true;
+            }
+            if (stopSpinner) {
+                stopSpinner.classList.add('d-none');
+            }
+            if (stopLabel) {
+                stopLabel.textContent = 'Workflow megszakítása';
+            }
+            if (logLink) {
+                logLink.innerHTML = '';
+            }
+            if (logContent) {
+                logContent.textContent = 'Log inicializálása...';
+            }
+            updateLogStatus('Workflow indítása... várakozás a logra.', 'muted');
+
+            try {
+                const response = await fetch(`/api/run-workflow/${encodeURIComponent(PROJECT_NAME)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba a workflow indításakor.');
+                }
+                if (statusText) {
+                    statusText.textContent = 'Workflow elindult, állapot frissítése folyamatban...';
+                }
+                startWorkflowPolling(result.job_id);
+            } catch (error) {
+                console.error('Workflow indítási hiba:', error);
+                if (statusText) {
+                    statusText.textContent = `Hiba: ${error.message}`;
+                }
+                if (startButton) {
+                    startButton.disabled = false;
+                    startButton.classList.remove('btn-processing');
+                }
+                if (spinner) {
+                    spinner.classList.add('d-none');
+                }
+                if (stopButton) {
+                    stopButton.classList.add('d-none');
+                    stopButton.disabled = false;
+                }
+                updateInfoBox('danger', `Workflow indítása sikertelen: ${error.message}`);
+                updateLogStatus('A log a workflow indítása után jelenik meg.', 'muted');
+            }
+        }
+
+        function startWorkflowPolling(jobId, triggerImmediate = true) {
+            stopWorkflowPolling();
+            currentWorkflowJobId = jobId;
+            if (triggerImmediate) {
+                pollWorkflowStatus();
+            }
+            workflowPollInterval = setInterval(pollWorkflowStatus, 5000);
+        }
+
+        function stopWorkflowPolling() {
+            if (workflowPollInterval) {
+                clearInterval(workflowPollInterval);
+                workflowPollInterval = null;
+            }
+        }
+
+        async function pollWorkflowStatus() {
+            if (!currentWorkflowJobId) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/workflow-status/${currentWorkflowJobId}`);
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Nem sikerült lekérdezni az állapotot.');
+                }
+                const job = result.job;
+                renderWorkflowStatus(job);
+                if (['completed', 'failed', 'cancelled'].includes(job.status)) {
+                    stopWorkflowPolling();
+                }
+            } catch (error) {
+                console.error('Állapot lekérdezési hiba:', error);
+                stopWorkflowPolling();
+                stopLogPolling();
+                currentWorkflowJobId = null;
+            }
+        }
+
+        function renderWorkflowStatus(job) {
+            const badge = document.getElementById('workflowStatusBadge');
+            const statusText = document.getElementById('workflowStatusText');
+            const logLink = document.getElementById('workflowLogLink');
+            const startButton = document.getElementById('startWorkflowBtn');
+            const startSpinner = document.getElementById('workflowSpinner');
+            const stopButton = document.getElementById('stopWorkflowBtn');
+            const stopSpinner = document.getElementById('stopWorkflowSpinner');
+            const stopLabel = document.getElementById('stopWorkflowLabel');
+            const hint = document.getElementById('workflowStatusHint');
+
+            const statusLabels = {
+                queued: 'Sorban áll',
+                running: 'Folyamatban',
+                completed: 'Kész',
+                failed: 'Hiba',
+                cancelling: 'Megszakítás folyamatban',
+                cancelled: 'Megszakítva'
+            };
+
+            if (!job) {
+                if (badge) {
+                    badge.textContent = 'Nincs aktív feladat';
+                    setWorkflowBadge(null);
+                }
+                if (statusText) {
+                    statusText.textContent = workflowSteps.length ? 'Workflow még nem futott ezen a projekten.' : 'Adj hozzá lépéseket az indításhoz.';
+                }
+                if (logLink) {
+                    logLink.innerHTML = '';
+                }
+                if (startButton) {
+                    startButton.disabled = workflowSteps.length === 0;
+                    startButton.classList.remove('btn-processing');
+                }
+                if (startSpinner) {
+                    startSpinner.classList.add('d-none');
+                }
+                if (stopButton) {
+                    stopButton.classList.add('d-none');
+                    stopButton.disabled = false;
+                }
+                if (hint) {
+                    hint.textContent = 'Állítsd össze a futtatandó lépéseket, konfiguráld a paramétereket, majd indítsd a workflow-t.';
+                }
+                updateLogStatus('A log a workflow indítása után jelenik meg.');
+                return;
+            }
+
+            if (badge) {
+                badge.textContent = statusLabels[job.status] || job.status || 'Ismeretlen';
+                setWorkflowBadge(job.status);
+            }
+
+            const activeStatuses = ['queued', 'running', 'cancelling'];
+            const isActive = activeStatuses.includes(job.status);
+
+            if (isActive) {
+                if (startButton) {
+                    startButton.disabled = true;
+                    startButton.classList.add('btn-processing');
+                }
+                if (startSpinner) {
+                    startSpinner.classList.remove('d-none');
+                }
+                if (stopButton) {
+                    stopButton.classList.remove('d-none');
+                    stopButton.disabled = Boolean(job.cancel_requested);
+                }
+                if (stopSpinner) {
+                    stopSpinner.classList.toggle('d-none', Boolean(job.cancel_requested));
+                }
+                if (stopLabel) {
+                    stopLabel.textContent = job.cancel_requested ? 'Megszakítás kérése folyamatban...' : 'Workflow megszakítása';
+                }
+                const activeJobId = currentWorkflowJobId || job.job_id;
+                if (activeJobId) {
+                    startLogPolling(activeJobId);
+                }
+            } else {
+                if (startButton) {
+                    startButton.disabled = workflowSteps.length === 0;
+                    startButton.classList.remove('btn-processing');
+                }
+                if (startSpinner) {
+                    startSpinner.classList.add('d-none');
+                }
+                if (stopButton) {
+                    stopButton.classList.add('d-none');
+                    stopButton.disabled = false;
+                }
+                if (stopSpinner) {
+                    stopSpinner.classList.add('d-none');
+                }
+                if (stopLabel) {
+                    stopLabel.textContent = 'Workflow megszakítása';
+                }
+                stopLogPolling();
+            }
+
+            if (statusText) {
+                const stepInfo = job.current_step && job.current_step.display_name
+                    ? `${job.current_step.index}/${job.current_step.total} – ${job.current_step.display_name}`
+                    : '';
+                statusText.textContent = [job.message || '', stepInfo].filter(Boolean).join(' ');
+            }
+
+            if (hint) {
+                if (job.status === 'queued') {
+                    hint.textContent = 'Feladat sorban áll – néhány másodpercen belül indul.';
+                } else if (job.status === 'running') {
+                    hint.textContent = 'Folyamatban lévő workflow – a logban követheted a lépéseket.';
+                } else if (job.status === 'cancelling') {
+                    hint.textContent = 'Megszakítás folyamatban – várakozás a folyamat leállítására.';
+                } else if (job.status === 'failed') {
+                    hint.textContent = 'Hiba történt – nyisd meg a logot és ellenőrizd, melyik lépés állt le.';
+                } else if (job.status === 'cancelled') {
+                    hint.textContent = 'Workflow megszakítva – szükség esetén indíts új feldolgozást.';
+                } else if (job.status === 'completed') {
+                    hint.textContent = 'Workflow sikeresen lefutott – a fájlok a projekt könyvtárban találhatók.';
+                }
+            }
+
+            if (logLink) {
+                if (job.log && job.log.url) {
+                    logLink.innerHTML = `<a href="${job.log.url}" target="_blank" rel="noopener">Log megnyitása</a>`;
+                } else {
+                    logLink.innerHTML = '';
+                }
+            }
+
+            if (job.status === 'failed') {
+                updateLogStatus('A workflow hibával leállt. Ellenőrizd a logot.', 'danger');
+            } else if (job.status === 'cancelled') {
+                updateLogStatus('A workflow megszakítva.', 'danger');
+            } else if (job.status === 'completed') {
+                updateLogStatus('A workflow befejeződött.', 'success');
+            } else if (isActive) {
+                updateLogStatus('A workflow fut – a log folyamatosan frissül.', 'info');
+            }
+        }
+
+        function setWorkflowBadge(status) {
+            const badge = document.getElementById('workflowStatusBadge');
+            if (!badge) return;
+            badge.classList.remove('bg-secondary', 'bg-primary', 'bg-success', 'bg-danger', 'bg-warning', 'bg-info');
+            switch (status) {
+                case 'queued':
+                    badge.classList.add('bg-info');
+                    break;
+                case 'running':
+                    badge.classList.add('bg-primary');
+                    break;
+                case 'completed':
+                    badge.classList.add('bg-success');
+                    break;
+                case 'failed':
+                    badge.classList.add('bg-danger');
+                    break;
+                case 'cancelling':
+                case 'cancelled':
+                    badge.classList.add('bg-warning');
+                    break;
+                default:
+                    badge.classList.add('bg-secondary');
+                    break;
+            }
+        }
+
+        function updateInfoBox(level, message) {
+            const infoBox = document.getElementById('workflowInfo');
+            if (!infoBox) {
+                return;
+            }
+            infoBox.classList.remove('alert-info', 'alert-secondary', 'alert-warning', 'alert-danger', 'alert-success');
+            const classMap = {
+                info: 'alert-info',
+                success: 'alert-success',
+                warning: 'alert-warning',
+                danger: 'alert-danger',
+                secondary: 'alert-secondary'
+            };
+            infoBox.classList.add(classMap[level] || 'alert-secondary');
+            if (message !== undefined) {
+                infoBox.textContent = message;
+            }
+            infoBox.classList.remove('d-none');
+        }
+
+        function updateLogStatus(text, tone = 'muted') {
+            const statusEl = document.getElementById('workflowLogStatus');
+            if (!statusEl) return;
+            statusEl.textContent = text;
+            statusEl.classList.remove('text-muted', 'text-danger', 'text-success', 'text-info');
+            const toneClass = {
+                muted: 'text-muted',
+                danger: 'text-danger',
+                success: 'text-success',
+                info: 'text-info'
+            }[tone] || 'text-muted';
+            statusEl.classList.add(toneClass);
+        }
+
+        function startLogPolling(jobId, immediate = false) {
+            stopLogPolling();
+            currentLogJobId = jobId;
+            if (immediate) {
+                fetchWorkflowLog();
+            }
+            workflowLogInterval = setInterval(fetchWorkflowLog, 4000);
+        }
+
+        function stopLogPolling(silent = false) {
+            if (workflowLogInterval) {
+                clearInterval(workflowLogInterval);
+                workflowLogInterval = null;
+            }
+            if (!silent) {
+                currentLogJobId = null;
+            }
+        }
+
+        async function fetchWorkflowLog() {
+            if (!currentWorkflowJobId && !currentLogJobId) {
+                return;
+            }
+            const jobId = currentWorkflowJobId || currentLogJobId;
+            try {
+                const response = await fetch(`/api/workflow-log/${jobId}`);
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Nem sikerült beolvasni a logot.');
+                }
+                const logContent = document.getElementById('workflowLogContent');
+                if (logContent) {
+                    logContent.textContent = result.log || '—';
+                }
+                updateLogStatus(result.completed ? 'A workflow befejeződött.' : 'A log folyamatosan frissül.', result.completed ? 'success' : 'info');
+            } catch (error) {
+                console.error('Log olvasási hiba:', error);
+                updateLogStatus('Nem sikerült frissíteni a logot.', 'danger');
+            }
+        }
+
+        async function stopWorkflow() {
+            if (!currentWorkflowJobId) {
+                return;
+            }
+            const stopButton = document.getElementById('stopWorkflowBtn');
+            const stopSpinner = document.getElementById('stopWorkflowSpinner');
+            const stopLabel = document.getElementById('stopWorkflowLabel');
+            const statusText = document.getElementById('workflowStatusText');
+
+            if (stopButton) {
+                stopButton.disabled = true;
+            }
+            if (stopSpinner) {
+                stopSpinner.classList.remove('d-none');
+            }
+            if (stopLabel) {
+                stopLabel.textContent = 'Megszakítás kérve...';
+            }
+
+            try {
+                const response = await fetch(`/api/stop-workflow/${currentWorkflowJobId}`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba a megszakítás során.');
+                }
+                if (statusText) {
+                    statusText.textContent = result.message || 'Megszakítás kérve. Várakozás a leállásra...';
+                }
+                updateLogStatus('Megszakítás kérve. Várakozás a folyamat leállítására.', 'info');
+            } catch (error) {
+                console.error('Workflow megszakítási hiba:', error);
+                alert('Nem sikerült megszakítani a workflow-t: ' + error.message);
+                if (stopButton) {
+                    stopButton.disabled = false;
+                }
+                if (stopSpinner) {
+                    stopSpinner.classList.add('d-none');
+                }
+                if (stopLabel) {
+                    stopLabel.textContent = 'Workflow megszakítása';
+                }
+            }
+        }
+
+        function initFileGroupToggles() {
+            const toggles = document.querySelectorAll('.group-toggle');
+            toggles.forEach(button => {
+                if (button.dataset.initialized === 'true') {
+                    return;
+                }
+                button.dataset.initialized = 'true';
+                button.addEventListener('click', () => toggleFileGroup(button.dataset.target));
+            });
+        }
+
+        function toggleFileGroup(groupId) {
+            const list = document.getElementById(groupId);
+            if (!list) return;
+            const extras = list.querySelectorAll('.group-extra');
+            if (!extras.length) return;
+            const shouldExpand = Array.from(extras).some(item => item.classList.contains('d-none'));
+            extras.forEach(item => item.classList.toggle('d-none', !shouldExpand));
+            document.querySelectorAll(`.group-toggle[data-target="${groupId}"]`).forEach(button => {
+                button.dataset.collapsed = shouldExpand ? 'false' : 'true';
+                button.textContent = shouldExpand ? 'Kevesebb fájl megjelenítése' : 'További fájlok megjelenítése';
+            });
+        }
+
+
+        function showTranscribeModal(projectName, fileName) {
+            document.getElementById('transcribeProjectName').value = projectName;
+            document.getElementById('transcribeFileName').value = fileName;
+            const modal = new bootstrap.Modal(document.getElementById('transcribeModal'));
+            modal.show();
+        }
+
+        function runTranscription() {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('transcribeModal'));
+            modal.hide();
+
+            const payload = {
+                auto_chunk: document.getElementById('autoChunk').checked,
+                chunk_seconds: document.getElementById('chunkSeconds').value,
+                max_pause: document.getElementById('maxPause').value,
+                timestamp_padding: document.getElementById('timestampPadding').value,
+                max_segment_duration: document.getElementById('maxSegmentDuration').value,
+                diarization: document.getElementById('enableDiarization').checked,
+                language: document.getElementById('transcribeLanguage').value,
+                temperature: document.getElementById('temperature').value,
+                beam_size: document.getElementById('beamSize').value,
+                device: document.getElementById('transcribeDevice').value
+            };
+
+            const projectName = document.getElementById('transcribeProjectName').value;
+            const buttonId = 'transcribeBtn';
+            setButtonLoading(buttonId, true);
+
+            fetch(`/api/transcribe/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Sikeres beolvasás!');
+                    location.reload();
+                } else {
+                    alert('Hiba: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Hiba:', error);
+                alert('Hiba történt a beolvasás során');
+            })
+            .finally(() => {
+                setButtonLoading(buttonId, false);
+            });
+        }
+
+        function setButtonLoading(buttonId, isLoading) {
+            const btn = document.getElementById(buttonId);
+            if (btn) {
+                if (isLoading) {
+                    btn.classList.add('btn-loading');
+                    btn.disabled = true;
+                } else {
+                    btn.classList.remove('btn-loading');
+                    btn.disabled = false;
+                    btn.classList.remove('btn-processing');
+                }
+            }
+        }
+
+        function runAudioExtraction(projectName, button) {
+            if (!button.classList.contains('btn-processing')) {
+                button.classList.add('btn-processing');
+            }
+
+            const keepChannelsToggle = document.getElementById('extractKeepChannels');
+            const keepChannels = keepChannelsToggle ? keepChannelsToggle.checked : false;
+
+            fetch(`/api/extract-audio/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    keep_channels: keepChannels
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                button.classList.remove('btn-processing');
+                if (data.success) {
+                    alert('Sikeres audio kivonás!');
+                    location.reload();
+                } else {
+                    alert('Hiba: ' + data.error);
+                }
+            })
+            .catch(error => {
+                button.classList.remove('btn-processing');
+                console.error('Hiba:', error);
+                alert('Hiba történt az audio kivonás során');
+            });
+        }
+
+        function handleTranscribeClick(projectName, button) {
+            if (!button.classList.contains('btn-processing')) {
+                button.classList.add('btn-processing');
+            }
+
+            const audioElements = document.querySelectorAll('#speechAudioList audio source');
+            if (audioElements.length > 0) {
+                const fileName = audioElements[0].src.split('/').pop();
+                showTranscribeModal(projectName, fileName);
+            } else {
+                button.classList.remove('btn-processing');
+                alert('Nincs audió fájl a listában!');
+            }
+        }
+
+        function showSeparateModal(projectName, fileName, button) {
+            document.getElementById('separateProjectName').value = projectName;
+            const modalElement = document.getElementById('separateModal');
+            const modal = new bootstrap.Modal(modalElement);
+
+            modal.show();
+
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                if (button) {
+                    button.classList.remove('btn-processing');
+                }
+            }, { once: true });
+        }
+
+        function runSeparation() {
+            const projectName = document.getElementById('separateProjectName').value;
+            const device = document.getElementById('separateDevice').value;
+            const keepFullAudio = document.getElementById('keepFullAudio').checked;
+            const nonSpeechSilence = document.getElementById('nonSpeechSilence').checked;
+            const chunkSize = document.getElementById('chunkSize').value;
+            const model = document.getElementById('separateModel').value;
+
+            const modal = bootstrap.Modal.getInstance(document.getElementById('separateModal'));
+            modal.hide();
+
+            fetch(`/api/separate-audio/${projectName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    device: device,
+                    keep_full_audio: keepFullAudio,
+                    non_speech_silence: nonSpeechSilence,
+                    chunk_size: chunkSize,
+                    model: model
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Sikeres szétválasztás!');
+                    location.reload();
+                } else {
+                    alert('Hiba: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Hiba:', error);
+                alert('Hiba történt a szétválasztás során');
+            });
+        }
+
+        function runAudioSeparation(projectName, fileName, button) {
+            showSeparateModal(projectName, fileName, button || document.getElementById('separateBtn'));
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initWorkflowModals();
+            initWorkflowButtons();
+            initWorkflowKeyModal();
+            initFileGroupToggles();
+            const refreshLogBtn = document.getElementById('refreshWorkflowLogBtn');
+            if (refreshLogBtn) {
+                refreshLogBtn.addEventListener('click', () => fetchWorkflowLog());
+            }
+            loadWorkflowOptions(PROJECT_NAME);
         });
     </script>
 </head>
@@ -32,69 +1498,110 @@
 
         <div class="card mb-4">
             <div class="card-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
-                <div class="d-flex align-items-center gap-2">
-                    <h5 class="mb-0">Automatikus AI workflow</h5>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h5 class="mb-0">Moduláris AI workflow</h5>
                     <span id="workflowStatusBadge" class="badge bg-secondary">Nincs aktív feladat</span>
                 </div>
-                <small id="workflowStatusHint" class="text-muted">Válassz kontextust és modelleket, majd indítsd a teljes feldolgozást.</small>
+                <small id="workflowStatusHint" class="text-muted">Állítsd össze a futtatandó lépéseket, konfiguráld a paramétereket, majd indítsd a workflow-t.</small>
             </div>
             <div class="card-body">
-                <div class="row g-3 align-items-stretch">
-                    <div class="col-lg-7">
-                        <form id="workflowForm">
-                            <div class="alert alert-info small mb-3" role="alert" id="workflowInfo">
-                                A folyamat magában foglalja az audio kivonást, szétválasztást, beolvasást, fordítást és a szinkron hang generálását. A státuszt folyamatosan frissítjük, a részletes napló a log fájlban érhető el.
-                            </div>
-                            <div class="mb-3">
-                                <label for="workflowTranslationContext" class="form-label">Fordítási kontextus</label>
-                                <textarea class="form-control" id="workflowTranslationContext" rows="2" placeholder="Pl.: sorozat/film címe, szereplők, hangulat" required></textarea>
-                            </div>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="workflowTtsModel" class="form-label">TTS modell (futtatás 1-3)</label>
-                                    <select class="form-select" id="workflowTtsModel" required></select>
-                                    <small class="text-muted">Általános modell a fő futásokhoz.</small>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="workflowTtsModelRun4" class="form-label">TTS modell (4. futtatás)</label>
-                                    <select class="form-select" id="workflowTtsModelRun4" required></select>
-                                    <small class="text-muted">Finomhangolt modell a legjobb eredmény kiválasztásához.</small>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="workflowLangCode" class="form-label">Nyelvi kód</label>
-                                <select class="form-select" id="workflowLangCode" required></select>
-                                <small class="text-muted">A kész anyag cél nyelve.</small>
-                            </div>
-                            <div class="d-flex flex-wrap align-items-center gap-2">
-                                <button type="button" class="btn btn-success d-flex align-items-center gap-2" id="startWorkflowBtn" onclick="startWorkflow()">
-                                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="workflowSpinner"></span>
-                                    <span>Workflow indítása</span>
-                                </button>
-                                <button type="button" class="btn btn-outline-danger d-flex align-items-center gap-2 d-none" id="stopWorkflowBtn" onclick="stopWorkflow()">
-                                    <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="stopWorkflowSpinner"></span>
-                                    <span id="stopWorkflowLabel">Workflow megszakítása</span>
-                                </button>
-                                <span id="workflowStatusText" class="text-muted small">Állapot frissítése folyamatban...</span>
-                            </div>
-                        </form>
+                <div class="alert alert-info small mb-3" role="alert" id="workflowInfo">
+                    Válaszd ki a scripts mappában elérhető lépéseket, állítsd be a paramétereket egyenként, majd indítsd el a kívánt munkafolyamatot. A projektnév automatikusan kitöltésre kerül minden lépésnél.
+                </div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-primary" id="addWorkflowStepBtn">Lépés hozzáadása</button>
+                        <button type="button" class="btn btn-outline-secondary" id="resetWorkflowBtn">Alapértelmezett lépések</button>
                     </div>
-                    <div class="col-lg-5">
-                        <div class="log-panel h-100">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="mb-0">Workflow log</h6>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshWorkflowLogBtn">Frissítés</button>
-                            </div>
-                            <div id="workflowLogStatus" class="small text-muted mb-2">
-                                A log a workflow indítása után jelenik meg.
-                            </div>
-                            <div id="workflowLogLink" class="small mb-2"></div>
-                            <pre id="workflowLogContent" class="log-viewer">—</pre>
-                        </div>
+                    <span class="badge bg-warning text-dark d-none" id="workflowMissingBadge">Hiányzó paraméterek</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" id="workflowStepsTable">
+                        <thead>
+                            <tr>
+                                <th scope="col" style="width: 70px;">Aktív</th>
+                                <th scope="col">Lépés</th>
+                                <th scope="col" style="width: 140px;">Környezet</th>
+                                <th scope="col" style="width: 150px;">Hiba esetén</th>
+                                <th scope="col" style="width: 220px;">Műveletek</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workflowStepsBody">
+                            <tr class="text-muted">
+                                <td colspan="5">Még nem adtál hozzá lépéseket.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                    <button type="button" class="btn btn-success d-flex align-items-center gap-2" id="startWorkflowBtn">
+                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="workflowSpinner"></span>
+                        <span>Workflow indítása</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-danger d-flex align-items-center gap-2 d-none" id="stopWorkflowBtn">
+                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="stopWorkflowSpinner"></span>
+                        <span id="stopWorkflowLabel">Workflow megszakítása</span>
+                    </button>
+                    <span id="workflowStatusText" class="text-muted small flex-grow-1">Állapot frissítése folyamatban...</span>
+                </div>
+                <div class="log-panel mt-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Workflow log</h6>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshWorkflowLogBtn">Frissítés</button>
                     </div>
+                    <div id="workflowLogStatus" class="small text-muted mb-2">
+                        A log a workflow indítása után jelenik meg.
+                    </div>
+                    <div id="workflowLogLink" class="small mb-2"></div>
+                    <pre id="workflowLogContent" class="log-viewer">—</pre>
                 </div>
                 <div id="workflowTips" class="small text-muted mt-3">
-                    Tipp: a log fájlban azonnal láthatók a parancsok kimenetei. Ha hibát észlelsz, a log segít beazonosítani a lépést.
+                    Tipp: a lépések paraméterei egyenként módosíthatók. A logban minden végrehajtott parancs kimenete megjelenik.
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Step Picker Modal -->
+        <div class="modal fade" id="workflowStepModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Új workflow lépés hozzáadása</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <input type="search" class="form-control" id="workflowStepSearch" placeholder="Szűrés név alapján...">
+                        </div>
+                        <div class="list-group" id="workflowStepList">
+                            <div class="list-group-item text-muted">Betöltés folyamatban...</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Parameters Modal -->
+        <div class="modal fade" id="workflowParamsModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="workflowParamsTitle">Paraméterek szerkesztése</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="workflowParamsAlert" class="alert alert-warning small d-none"></div>
+                        <form id="workflowParamsForm">
+                            <div id="workflowParamsContainer" class="vstack gap-3"></div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                        <button type="button" class="btn btn-primary" id="workflowParamsSaveBtn">Mentés</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -463,891 +1970,5 @@
             huggingface: { wrapperId: 'workflowKeyFieldHuggingface', inputId: 'workflowKeyHuggingface', payloadKey: 'huggingface_token' }
         };
 
-        document.addEventListener('DOMContentLoaded', function () {
-            attachFocusHighlights();
-            initFileGroupToggles();
-            const refreshLogBtn = document.getElementById('refreshWorkflowLogBtn');
-            if (refreshLogBtn) {
-                refreshLogBtn.addEventListener('click', () => fetchWorkflowLog());
-            }
-            loadWorkflowOptions(PROJECT_NAME);
-
-            const workflowKeysModalElement = document.getElementById('workflowKeysModal');
-            if (workflowKeysModalElement) {
-                workflowKeysModal = new bootstrap.Modal(workflowKeysModalElement);
-                workflowKeysModalElement.addEventListener('hidden.bs.modal', () => {
-                    resetWorkflowKeyModal();
-                    pendingWorkflowPayload = null;
-                });
-                const submitBtn = document.getElementById('workflowKeysSubmitBtn');
-                if (submitBtn) {
-                    submitBtn.addEventListener('click', saveWorkflowKeys);
-                }
-            }
-        });
-
-        // Theme toggle function
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            
-            let newTheme = 'light';
-            if (currentTheme === 'light' || (currentTheme === 'auto' && !systemDark)) {
-                newTheme = 'dark';
-            } else {
-                newTheme = 'auto';
-            }
-            
-            document.documentElement.setAttribute('data-bs-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-        }
-
-        function attachFocusHighlights() {
-            document.querySelectorAll('#workflowForm select, #workflowForm textarea').forEach(element => {
-                element.addEventListener('focus', () => element.classList.add('focus-ring'));
-                element.addEventListener('blur', () => element.classList.remove('focus-ring'));
-            });
-        }
-
-        function initFileGroupToggles() {
-            const toggles = document.querySelectorAll('.group-toggle');
-            toggles.forEach(button => {
-                if (button.dataset.initialized === 'true') {
-                    return;
-                }
-                button.dataset.initialized = 'true';
-                button.addEventListener('click', () => toggleFileGroup(button.dataset.target));
-            });
-        }
-
-        function toggleFileGroup(groupId) {
-            const list = document.getElementById(groupId);
-            if (!list) return;
-            const extras = list.querySelectorAll('.group-extra');
-            if (!extras.length) return;
-            const shouldExpand = Array.from(extras).some(item => item.classList.contains('d-none'));
-            extras.forEach(item => item.classList.toggle('d-none', !shouldExpand));
-            document.querySelectorAll(`.group-toggle[data-target="${groupId}"]`).forEach(button => {
-                button.dataset.collapsed = shouldExpand ? 'false' : 'true';
-                button.textContent = shouldExpand ? 'Kevesebb fájl megjelenítése' : 'További fájlok megjelenítése';
-            });
-        }
-
-        function startLogPolling(jobId, immediate = true) {
-            if (!jobId) {
-                return;
-            }
-            if (currentLogJobId === jobId && workflowLogInterval) {
-                return;
-            }
-            stopLogPolling();
-            currentLogJobId = jobId;
-            if (immediate) {
-                fetchWorkflowLog();
-            }
-            workflowLogInterval = setInterval(fetchWorkflowLog, 4000);
-        }
-
-        function stopLogPolling(resetId = false) {
-            if (workflowLogInterval) {
-                clearInterval(workflowLogInterval);
-                workflowLogInterval = null;
-            }
-            if (resetId) {
-                currentLogJobId = null;
-            }
-        }
-
-        async function fetchWorkflowLog() {
-            const jobId = currentLogJobId || currentWorkflowJobId;
-            if (!jobId) {
-                return;
-            }
-            try {
-                const response = await fetch(`/api/workflow-log/${jobId}`);
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    updateLogStatus(result.error || 'Log nem érhető el.', 'danger');
-                    return;
-                }
-
-                const logContent = document.getElementById('workflowLogContent');
-                if (logContent) {
-                    logContent.textContent = result.log || (result.log_available ? '' : 'Log még nem érhető el.');
-                    logContent.scrollTop = logContent.scrollHeight;
-                }
-
-                if (result.log_available) {
-                    updateLogStatus(
-                        result.completed ? 'A workflow befejeződött.' : 'A log folyamatosan frissül.',
-                        result.completed ? 'success' : 'muted'
-                    );
-                } else {
-                    updateLogStatus('A log fájl előkészítése folyamatban...', 'muted');
-                }
-
-                if (result.completed) {
-                    stopLogPolling();
-                }
-            } catch (error) {
-                updateLogStatus(`Log lekérése sikertelen: ${error.message}`, 'danger');
-            }
-        }
-
-        function updateLogStatus(message, tone = 'muted') {
-            const statusEl = document.getElementById('workflowLogStatus');
-            if (!statusEl) return;
-            statusEl.textContent = message;
-            statusEl.classList.remove('text-muted', 'text-danger', 'text-success');
-            if (tone === 'danger') {
-                statusEl.classList.add('text-danger');
-            } else if (tone === 'success') {
-                statusEl.classList.add('text-success');
-            } else {
-                statusEl.classList.add('text-muted');
-            }
-        }
-
-        function setWorkflowBadge(status) {
-            const badge = document.getElementById('workflowStatusBadge');
-            badge.classList.remove('bg-secondary', 'bg-success', 'bg-danger', 'bg-warning', 'bg-info', 'text-dark');
-            const mapping = {
-                queued: 'bg-warning text-dark',
-                running: 'bg-info text-dark',
-                completed: 'bg-success',
-                failed: 'bg-danger',
-                cancelling: 'bg-warning text-dark',
-                cancelled: 'bg-secondary'
-            };
-            const classes = mapping[status];
-            if (classes) {
-                classes.split(' ').forEach(cls => badge.classList.add(cls));
-            } else {
-                badge.classList.add('bg-secondary');
-            }
-        }
-
-        function updateInfoBox(type, message) {
-            const infoBox = document.getElementById('workflowInfo');
-            if (!infoBox) return;
-            infoBox.classList.remove('alert-info', 'alert-warning', 'alert-danger', 'alert-secondary');
-            infoBox.classList.add(`alert-${type}`);
-            infoBox.textContent = message;
-            infoBox.classList.remove('d-none');
-        }
-
-        function renderWorkflowStatus(job) {
-            const badge = document.getElementById('workflowStatusBadge');
-            const statusText = document.getElementById('workflowStatusText');
-            const logLink = document.getElementById('workflowLogLink');
-            const startButton = document.getElementById('startWorkflowBtn');
-            const startButtonSpinner = document.getElementById('workflowSpinner');
-            const stopButton = document.getElementById('stopWorkflowBtn');
-            const stopSpinner = document.getElementById('stopWorkflowSpinner');
-            const stopLabel = document.getElementById('stopWorkflowLabel');
-            const hint = document.getElementById('workflowStatusHint');
-            const infoBox = document.getElementById('workflowInfo');
-            const tipsBox = document.getElementById('workflowTips');
-
-            const statusLabels = {
-                queued: 'Sorban áll',
-                running: 'Folyamatban',
-                completed: 'Kész',
-                failed: 'Hiba',
-                cancelling: 'Megszakítás folyamatban',
-                cancelled: 'Megszakítva'
-            };
-
-            const activeStatuses = ['queued', 'running', 'cancelling'];
-            if (!job) {
-                badge.textContent = 'Nincs aktív feladat';
-                setWorkflowBadge(null);
-                statusText.textContent = 'Workflow még nem futott ezen a projekten.';
-                if (logLink) logLink.innerHTML = '';
-                if (stopButton) {
-                    stopButton.classList.add('d-none');
-                    stopButton.disabled = false;
-                    if (stopSpinner) stopSpinner.classList.add('d-none');
-                    if (stopLabel) stopLabel.textContent = 'Workflow megszakítása';
-                }
-                startButton.disabled = false;
-                startButton.classList.remove('btn-processing');
-                startButtonSpinner.classList.add('d-none');
-                if (!workflowInfoDismissed && infoBox) {
-                    infoBox.classList.remove('d-none');
-                }
-                tipsBox.classList.remove('text-danger');
-                if (hint) {
-                    hint.textContent = 'Válassz kontextust és modelleket, majd indítsd a teljes feldolgozást.';
-                }
-                updateLogStatus('A log a workflow indítása után jelenik meg.');
-                stopLogPolling(true);
-                return;
-            }
-
-            if (job.job_id) {
-                currentWorkflowJobId = job.job_id;
-            }
-
-            badge.textContent = statusLabels[job.status] || job.status || 'ismeretlen';
-            setWorkflowBadge(job.status);
-            statusText.textContent = job.message || '';
-
-            if (logLink) {
-                if (job.log && job.log.url) {
-                    logLink.innerHTML = `<a href="${job.log.url}" target="_blank" rel="noopener">Log megnyitása</a>`;
-                } else {
-                    logLink.innerHTML = '';
-                }
-            }
-
-            if (activeStatuses.includes(job.status)) {
-                const activeJobId = currentWorkflowJobId || job.job_id;
-                if (activeJobId) {
-                    startLogPolling(activeJobId);
-                }
-                startButton.disabled = true;
-                startButton.classList.add('btn-processing');
-                startButtonSpinner.classList.remove('d-none');
-                if (infoBox) {
-                    infoBox.classList.remove('alert-info', 'alert-warning', 'alert-danger', 'alert-secondary');
-                    infoBox.classList.add(job.status === 'cancelling' ? 'alert-warning' : 'alert-secondary');
-                    infoBox.classList.remove('d-none');
-                }
-                if (hint) {
-                    if (job.status === 'queued') {
-                        hint.textContent = 'Feladat sorban áll – néhány másodpercen belül indul.';
-                    } else if (job.status === 'cancelling') {
-                        hint.textContent = 'Megszakítás folyamatban – várakozás a folyamat leállítására.';
-                    } else {
-                        hint.textContent = 'Folyamatban lévő workflow – a logban követheted a lépéseket.';
-                    }
-                }
-                if (stopButton) {
-                    stopButton.classList.remove('d-none');
-                    const cancelRequested = Boolean(job.cancel_requested);
-                    stopButton.disabled = cancelRequested;
-                    if (stopSpinner && !cancelRequested) {
-                        stopSpinner.classList.add('d-none');
-                    }
-                    if (stopLabel) {
-                        stopLabel.textContent = cancelRequested ? 'Megszakítás kérése folyamatban...' : 'Workflow megszakítása';
-                    }
-                }
-            } else {
-                stopLogPolling();
-                startButton.disabled = false;
-                startButton.classList.remove('btn-processing');
-                startButtonSpinner.classList.add('d-none');
-                workflowInfoDismissed = true;
-                if (infoBox) {
-                    infoBox.classList.add('d-none');
-                }
-                const isFailed = job.status === 'failed';
-                const isCancelled = job.status === 'cancelled';
-                tipsBox.classList.toggle('text-danger', isFailed);
-                if (hint) {
-                    if (isFailed) {
-                        hint.textContent = 'Hiba történt – nyisd meg a logot és ellenőrizd, melyik lépés állt le.';
-                    } else if (isCancelled) {
-                        hint.textContent = 'Workflow megszakítva – szükség esetén indíts új feldolgozást.';
-                    } else {
-                        hint.textContent = 'Workflow sikeresen lefutott – a fájlok a projekt könyvtárban találhatók.';
-                    }
-                }
-                if (stopButton) {
-                    stopButton.classList.add('d-none');
-                    stopButton.disabled = false;
-                    if (stopSpinner) stopSpinner.classList.add('d-none');
-                    if (stopLabel) stopLabel.textContent = 'Workflow megszakítása';
-                }
-                if (isFailed) {
-                    updateLogStatus('A workflow hibával leállt. Ellenőrizd a logot.', 'danger');
-                } else if (isCancelled) {
-                    updateLogStatus('A workflow megszakítva.', 'danger');
-                } else if (job.status === 'completed') {
-                    updateLogStatus('A workflow befejeződött.', 'success');
-                }
-            }
-        }
-
-        async function loadWorkflowOptions(projectName) {
-            const statusText = document.getElementById('workflowStatusText');
-            const startButton = document.getElementById('startWorkflowBtn');
-
-            try {
-                const response = await fetch(`/api/workflow-options/${encodeURIComponent(projectName)}`);
-                const result = await response.json();
-
-                if (!result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba');
-                }
-
-                const modelSelect = document.getElementById('workflowTtsModel');
-                const modelRun4Select = document.getElementById('workflowTtsModelRun4');
-                const langSelect = document.getElementById('workflowLangCode');
-                const contextField = document.getElementById('workflowTranslationContext');
-
-                modelSelect.innerHTML = '';
-                modelRun4Select.innerHTML = '';
-                langSelect.innerHTML = '';
-
-                (result.models || []).forEach(model => {
-                    const opt = document.createElement('option');
-                    opt.value = model;
-                    opt.textContent = model;
-                    modelSelect.appendChild(opt.cloneNode(true));
-                    modelRun4Select.appendChild(opt);
-                });
-
-                (result.languages || []).forEach(lang => {
-                    const opt = document.createElement('option');
-                    opt.value = lang;
-                    opt.textContent = lang;
-                    langSelect.appendChild(opt);
-                });
-
-                if (result.defaults) {
-                    contextField.value = result.defaults.translation_context || '';
-                    if (result.defaults.tts_model) {
-                        modelSelect.value = result.defaults.tts_model;
-                    }
-                    if (result.defaults.tts_model_run4) {
-                        modelRun4Select.value = result.defaults.tts_model_run4;
-                    }
-                    if (result.defaults.lang_code) {
-                        langSelect.value = result.defaults.lang_code;
-                    }
-                }
-
-                if (!modelSelect.value || !modelRun4Select.value) {
-                    startButton.disabled = true;
-                    statusText.textContent = 'Nem találhatók TTS modellek. Ellenőrizd a TTS mappát.';
-                    updateInfoBox('warning', 'Nem találtunk TTS modelleket. Ellenőrizd, hogy a TTS könyvtárban elérhetőek-e a modellek, majd frissítsd az oldalt.');
-                } else {
-                    statusText.textContent = 'Workflow készen áll az indításra.';
-                    if (!workflowInfoDismissed) {
-                        updateInfoBox('info', 'A folyamat magában foglalja az audio kivonást, szétválasztást, beolvasást, fordítást és a szinkron hang generálását. A státuszt folyamatosan frissítjük, a részletes napló a log fájlban érhető el.');
-                    }
-                }
-
-                renderWorkflowStatus(result.latest_job);
-
-                if (result.latest_job && ['queued', 'running', 'cancelling'].includes(result.latest_job.status)) {
-                    currentWorkflowJobId = result.latest_job.job_id;
-                    startWorkflowPolling(result.latest_job.job_id, true);
-                }
-            } catch (error) {
-                console.error('Hiba a workflow opciók betöltésekor:', error);
-                statusText.textContent = `Hiba: ${error.message}`;
-                startButton.disabled = true;
-            }
-        }
-
-        function stopWorkflowPolling() {
-            if (workflowPollInterval) {
-                clearInterval(workflowPollInterval);
-                workflowPollInterval = null;
-            }
-        }
-
-        async function pollWorkflowStatus() {
-            try {
-                if (!currentWorkflowJobId) {
-                    return;
-                }
-                const response = await fetch(`/api/workflow-status/${currentWorkflowJobId}`);
-                if (!response.ok) {
-                    throw new Error('Nem sikerült lekérdezni a feladat állapotát.');
-                }
-                const result = await response.json();
-                if (!result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba');
-                }
-                const job = result.job;
-                renderWorkflowStatus(job);
-                if (['completed', 'failed', 'cancelled'].includes(job.status)) {
-                    stopWorkflowPolling();
-                }
-            } catch (error) {
-                console.error('Állapot lekérdezési hiba:', error);
-                stopWorkflowPolling();
-                stopLogPolling();
-                currentWorkflowJobId = null;
-            }
-        }
-
-        function startWorkflowPolling(jobId, triggerImmediate = true) {
-            stopWorkflowPolling();
-            currentWorkflowJobId = jobId;
-            if (triggerImmediate) {
-                pollWorkflowStatus();
-            }
-            workflowPollInterval = setInterval(pollWorkflowStatus, 5000);
-        }
-
-        function resetWorkflowKeyModal() {
-            Object.values(workflowKeyFieldMap).forEach(cfg => {
-                const wrapper = document.getElementById(cfg.wrapperId);
-                if (wrapper) {
-                    wrapper.classList.add('d-none');
-                }
-                const input = document.getElementById(cfg.inputId);
-                if (input) {
-                    input.value = '';
-                }
-            });
-            const info = document.getElementById('workflowKeysInfo');
-            if (info) {
-                info.textContent = 'A workflow indításához add meg a hiányzó API kulcsokat.';
-            }
-        }
-
-        function prepareWorkflowKeyModal(missingKeys) {
-            const labels = missingKeys.map(item => item.label);
-            const info = document.getElementById('workflowKeysInfo');
-            if (info) {
-                info.textContent = 'A workflow indításához add meg a következő kulcsokat: ' + labels.join(', ');
-            }
-            Object.entries(workflowKeyFieldMap).forEach(([key, cfg]) => {
-                const wrapper = document.getElementById(cfg.wrapperId);
-                const input = document.getElementById(cfg.inputId);
-                const shouldShow = missingKeys.some(item => item.key === key);
-                if (wrapper) {
-                    wrapper.classList.toggle('d-none', !shouldShow);
-                }
-                if (input) {
-                    input.value = '';
-                }
-            });
-        }
-
-        async function ensureWorkflowKeys(payload) {
-            const response = await fetch(`/api/workflow-key-status/${encodeURIComponent(PROJECT_NAME)}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ lang_code: payload.lang_code })
-            });
-            const result = await response.json();
-            if (!response.ok || !result.success) {
-                throw new Error(result.error || 'Nem sikerült ellenőrizni az API kulcsokat.');
-            }
-            const missingPairs = Object.entries(result.keys).filter(([, info]) => info.required && !info.present);
-            if (missingPairs.length === 0) {
-                pendingWorkflowPayload = null;
-                return true;
-            }
-            const missingList = missingPairs.map(([key, info]) => ({ key, label: info.label || key }));
-            prepareWorkflowKeyModal(missingList);
-            pendingWorkflowPayload = payload;
-            if (!workflowKeysModal) {
-                const modalElement = document.getElementById('workflowKeysModal');
-                workflowKeysModal = modalElement ? new bootstrap.Modal(modalElement) : null;
-            }
-            if (workflowKeysModal) {
-                workflowKeysModal.show();
-            } else {
-                alert('Hiányzó API kulcsok: ' + missingList.map(item => item.label).join(', '));
-            }
-            return false;
-        }
-
-        async function saveWorkflowKeys() {
-            if (!pendingWorkflowPayload) {
-                if (workflowKeysModal) {
-                    workflowKeysModal.hide();
-                }
-                return;
-            }
-            const submitBtn = document.getElementById('workflowKeysSubmitBtn');
-            const spinner = document.getElementById('workflowKeysSpinner');
-            const bodyPayload = {};
-            let firstEmptyField = null;
-            Object.values(workflowKeyFieldMap).forEach(cfg => {
-                const wrapper = document.getElementById(cfg.wrapperId);
-                if (wrapper && !wrapper.classList.contains('d-none')) {
-                    const input = document.getElementById(cfg.inputId);
-                    const value = (input ? input.value : '').trim();
-                    if (!value) {
-                        if (!firstEmptyField && input) {
-                            firstEmptyField = input;
-                        }
-                    } else {
-                        bodyPayload[cfg.payloadKey] = value;
-                    }
-                }
-            });
-            if (firstEmptyField) {
-                firstEmptyField.focus();
-                alert('Kérjük add meg az összes hiányzó kulcsot.');
-                return;
-            }
-            if (!Object.keys(bodyPayload).length) {
-                if (workflowKeysModal) {
-                    workflowKeysModal.hide();
-                }
-                return;
-            }
-            if (submitBtn) {
-                submitBtn.disabled = true;
-            }
-            if (spinner) {
-                spinner.classList.remove('d-none');
-            }
-            try {
-                const response = await fetch('/save-workflow-keys', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(bodyPayload)
-                });
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Nem sikerült menteni az API kulcsokat.');
-                }
-                const payloadToRun = pendingWorkflowPayload;
-                pendingWorkflowPayload = null;
-                if (workflowKeysModal) {
-                    workflowKeysModal.hide();
-                }
-                await executeWorkflow(payloadToRun);
-            } catch (error) {
-                alert('API kulcs mentése sikertelen: ' + error.message);
-            } finally {
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                }
-                if (spinner) {
-                    spinner.classList.add('d-none');
-                }
-            }
-        }
-
-        async function executeWorkflow(payload) {
-            const statusText = document.getElementById('workflowStatusText');
-            const startButton = document.getElementById('startWorkflowBtn');
-            const spinner = document.getElementById('workflowSpinner');
-            const stopButton = document.getElementById('stopWorkflowBtn');
-            const stopSpinner = document.getElementById('stopWorkflowSpinner');
-            const stopLabel = document.getElementById('stopWorkflowLabel');
-            const logContent = document.getElementById('workflowLogContent');
-            const logLink = document.getElementById('workflowLogLink');
-
-            currentWorkflowJobId = null;
-            stopLogPolling(true);
-            if (startButton) {
-                startButton.disabled = true;
-                startButton.classList.add('btn-processing');
-            }
-            if (statusText) {
-                statusText.textContent = 'Workflow indítása...';
-            }
-            if (spinner) {
-                spinner.classList.remove('d-none');
-            }
-            updateInfoBox('secondary', 'Workflow indítása... Az első lépés néhány másodpercig eltarthat.');
-            if (stopButton) {
-                stopButton.classList.remove('d-none');
-                stopButton.disabled = true;
-            }
-            if (stopSpinner) {
-                stopSpinner.classList.add('d-none');
-            }
-            if (stopLabel) {
-                stopLabel.textContent = 'Workflow megszakítása';
-            }
-            if (logLink) {
-                logLink.innerHTML = '';
-            }
-            if (logContent) {
-                logContent.textContent = 'Log inicializálása...';
-            }
-            updateLogStatus('Workflow indítása... várakozás a logra.', 'muted');
-
-            try {
-                const response = await fetch(`/api/run-workflow/${encodeURIComponent(PROJECT_NAME)}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba a workflow indításakor.');
-                }
-
-                if (statusText) {
-                    statusText.textContent = 'Workflow elindult, állapot frissítése folyamatban...';
-                }
-                startWorkflowPolling(result.job_id);
-            } catch (error) {
-                console.error('Workflow indítási hiba:', error);
-                if (statusText) {
-                    statusText.textContent = `Hiba: ${error.message}`;
-                }
-                if (startButton) {
-                    startButton.disabled = false;
-                    startButton.classList.remove('btn-processing');
-                }
-                if (spinner) {
-                    spinner.classList.add('d-none');
-                }
-                updateInfoBox('danger', `Workflow indítása sikertelen: ${error.message}`);
-                updateLogStatus('A log a workflow indítása után jelenik meg.', 'muted');
-                if (stopButton) {
-                    stopButton.classList.add('d-none');
-                    stopButton.disabled = false;
-                }
-            }
-        }
-
-        async function startWorkflow() {
-            const contextField = document.getElementById('workflowTranslationContext');
-            const modelSelect = document.getElementById('workflowTtsModel');
-            const modelRun4Select = document.getElementById('workflowTtsModelRun4');
-            const langSelect = document.getElementById('workflowLangCode');
-            const payload = {
-                translation_context: contextField ? contextField.value.trim() : '',
-                tts_model: modelSelect ? modelSelect.value : '',
-                tts_model_run4: modelRun4Select ? modelRun4Select.value : '',
-                lang_code: langSelect ? langSelect.value : ''
-            };
-            try {
-                const ready = await ensureWorkflowKeys(payload);
-                if (!ready) {
-                    return;
-                }
-                await executeWorkflow(payload);
-            } catch (error) {
-                console.error('Kulcs ellenőrzési hiba:', error);
-                alert('API kulcs ellenőrzése sikertelen: ' + error.message);
-            }
-        }
-
-        async function stopWorkflow() {
-            if (!currentWorkflowJobId) {
-                return;
-            }
-            const stopButton = document.getElementById('stopWorkflowBtn');
-            const stopSpinner = document.getElementById('stopWorkflowSpinner');
-            const stopLabel = document.getElementById('stopWorkflowLabel');
-            const statusText = document.getElementById('workflowStatusText');
-
-            if (stopButton) {
-                stopButton.disabled = true;
-            }
-            if (stopSpinner) {
-                stopSpinner.classList.remove('d-none');
-            }
-            if (stopLabel) {
-                stopLabel.textContent = 'Megszakítás kérve...';
-            }
-
-            try {
-                const response = await fetch(`/api/stop-workflow/${currentWorkflowJobId}`, {
-                    method: 'POST'
-                });
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba a megszakítás során.');
-                }
-                if (statusText) {
-                    statusText.textContent = result.message || 'Megszakítás kérve. Várakozás a leállásra...';
-                }
-                updateLogStatus('Megszakítás kérve. Várakozás a folyamat befejezésére.', 'muted');
-            } catch (error) {
-                alert('Megszakítás sikertelen: ' + error.message);
-                if (stopButton) {
-                    stopButton.disabled = false;
-                }
-                if (stopLabel) {
-                    stopLabel.textContent = 'Workflow megszakítása';
-                }
-            } finally {
-                if (stopSpinner) {
-                    stopSpinner.classList.add('d-none');
-                }
-            }
-        }
-
-        function showTranscribeModal(projectName, fileName) {
-            document.getElementById('transcribeProjectName').value = projectName;
-            document.getElementById('transcribeFileName').value = fileName;
-            const modalElement = document.getElementById('transcribeModal');
-            const modal = new bootstrap.Modal(modalElement);
-            modalElement.addEventListener('hidden.bs.modal', function handleHide() {
-                const btn = document.getElementById('transcribeBtn');
-                if (btn) {
-                    btn.classList.remove('btn-processing');
-                }
-                modalElement.removeEventListener('hidden.bs.modal', handleHide);
-            });
-            modal.show();
-        }
-
-        function runTranscription() {
-            const projectName = document.getElementById('transcribeProjectName').value;
-            const fileName = document.getElementById('transcribeFileName').value;
-            const autoChunk = document.getElementById('autoChunk').checked;
-            const chunkSeconds = document.getElementById('chunkSeconds').value;
-            const maxPause = document.getElementById('maxPause').value;
-            const timestampPadding = document.getElementById('timestampPadding').value;
-            const maxSegmentDuration = document.getElementById('maxSegmentDuration').value;
-
-            const buttonId = 'transcribeBtn';
-            setButtonLoading(buttonId, true);
-            
-            const modal = bootstrap.Modal.getInstance(document.getElementById('transcribeModal'));
-            modal.hide();
-
-            fetch(`/api/transcribe/${projectName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    auto_chunk: autoChunk,
-                    chunk: chunkSeconds,
-                    max_pause: maxPause,
-                    timestamp_padding: timestampPadding,
-                    max_segment_duration: maxSegmentDuration
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Sikeres beolvasás!');
-                    location.reload();
-                } else {
-                    alert('Hiba: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Hiba:', error);
-                alert('Hiba történt a beolvasás során');
-            })
-            .finally(() => {
-                setButtonLoading(buttonId, false);
-            });
-        }
-        function setButtonLoading(buttonId, isLoading) {
-            const btn = document.getElementById(buttonId);
-            if (btn) {
-                if (isLoading) {
-                    btn.classList.add('btn-loading');
-                    btn.disabled = true;
-                } else {
-                    btn.classList.remove('btn-loading');
-                    btn.disabled = false;
-                    btn.classList.remove('btn-processing');
-                }
-            }
-        }
-
-        function runAudioExtraction(projectName, button) {
-            if (!button.classList.contains('btn-processing')) {
-                button.classList.add('btn-processing');
-            }
-
-            const keepChannelsToggle = document.getElementById('extractKeepChannels');
-            const keepChannels = keepChannelsToggle ? keepChannelsToggle.checked : false;
-
-            fetch(`/api/extract-audio/${projectName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    keep_channels: keepChannels
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                button.classList.remove('btn-processing');
-                if (data.success) {
-                    alert('Sikeres audio kivonás!');
-                    location.reload();
-                } else {
-                    alert('Hiba: ' + data.error);
-                }
-            })
-            .catch(error => {
-                button.classList.remove('btn-processing');
-                console.error('Hiba:', error);
-                alert('Hiba történt az audio kivonás során');
-            });
-        }
-
-        function handleTranscribeClick(projectName, button) {
-            if (!button.classList.contains('btn-processing')) {
-                button.classList.add('btn-processing');
-            }
-            
-            // Get first file
-            const audioElements = document.querySelectorAll('#speechAudioList audio source');
-            if (audioElements.length > 0) {
-                const fileName = audioElements[0].src.split('/').pop();
-                showTranscribeModal(projectName, fileName);
-            } else {
-                button.classList.remove('btn-processing');
-                alert('Nincs audió fájl a listában!');
-            }
-        }
-
-        function showSeparateModal(projectName, fileName, button) {
-            document.getElementById('separateProjectName').value = projectName;
-            const modal = new bootstrap.Modal(document.getElementById('separateModal'));
-            
-            modal.show();
-            
-            // Remove processing class when modal is closed
-            document.getElementById('separateModal').addEventListener('hidden.bs.modal', function () {
-                button.classList.remove('btn-processing');
-            });
-        }
-
-        function runSeparation() {
-            const projectName = document.getElementById('separateProjectName').value;
-            const device = document.getElementById('separateDevice').value;
-            const keepFullAudio = document.getElementById('keepFullAudio').checked;
-            const nonSpeechSilence = document.getElementById('nonSpeechSilence').checked;
-            const chunkSize = document.getElementById('chunkSize').value;
-            const model = document.getElementById('separateModel').value;
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('separateModal'));
-            modal.hide();
-
-            fetch(`/api/separate-audio/${projectName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    device: device,
-                    keep_full_audio: keepFullAudio,
-                    non_speech_silence: nonSpeechSilence,
-                    chunk_size: chunkSize,
-                    model: model
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Sikeres szétválasztás!');
-                    location.reload();
-                } else {
-                    alert('Hiba: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Hiba:', error);
-                alert('Hiba történt a szétválasztás során');
-            });
-        }
-
-        function runAudioSeparation(projectName, fileName) {
-            showSeparateModal(projectName, fileName);
-        }
-    </script>
 </body>
 </html>

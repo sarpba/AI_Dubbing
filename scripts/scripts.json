@@ -1,0 +1,984 @@
+[
+  {
+    "enviroment": "sync",
+    "script": "collect_normalized_translations.py",
+    "required": [
+      {
+        "name": "project_dir",
+        "flags": [
+          "-p",
+          "--project"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "extract_audio_easy_channels.py",
+    "required": [
+      {
+        "name": "project_dir_name",
+        "type": "positional"
+      }
+    ],
+    "optional": [
+      {
+        "name": "keep_channels",
+        "flags": [
+          "--keep_channels"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "f5-tts",
+    "script": "f5_tts_easy_codex_EQ.py",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional"
+      },
+      {
+        "name": "norm",
+        "flags": [
+          "--norm"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "model_dir",
+        "flags": [
+          "--model_dir"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "speed",
+        "flags": [
+          "--speed"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "nfe_step",
+        "flags": [
+          "--nfe_step"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "remove_silence",
+        "flags": [
+          "--remove_silence"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "phonetic_ref",
+        "flags": [
+          "--phonetic-ref"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "normalize_ref_audio",
+        "flags": [
+          "--normalize-ref-audio"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "eq_config",
+        "flags": [
+          "--eq-config"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "ref_audio_peak",
+        "flags": [
+          "--ref-audio-peak"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "max_workers",
+        "flags": [
+          "--max_workers"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "seed",
+        "flags": [
+          "--seed"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "max_retries",
+        "flags": [
+          "--max-retries"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "tolerance_factor",
+        "flags": [
+          "--tolerance-factor"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "min_tolerance",
+        "flags": [
+          "--min-tolerance"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "whisper_model",
+        "flags": [
+          "--whisper-model"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "beam_size",
+        "flags": [
+          "--beam-size"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "save_failures",
+        "flags": [
+          "--save-failures"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "keep_best_over_tolerance",
+        "flags": [
+          "--keep-best-over-tolerance"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "merge_chunks_with_background_easy.py",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional"
+      }
+    ],
+    "optional": [
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "merge_to_video_easy.py",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional"
+      },
+      {
+        "name": "language",
+        "flags": [
+          "-lang",
+          "--language"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "merge_to_video_easy_with_subs.py",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional"
+      },
+      {
+        "name": "language",
+        "flags": [
+          "-lang",
+          "--language"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "normalise_and_cut_json_easy_codex.py",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional"
+      }
+    ],
+    "optional": [
+      {
+        "name": "delete_empty",
+        "flags": [
+          "--delete_empty"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "sync_loudness",
+        "flags": [
+          "--no-sync-loudness"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "min_db",
+        "flags": [
+          "-db",
+          "--min_db"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "separate_audio_easy_codex.py",
+    "required": [
+      {
+        "name": "project",
+        "flags": [
+          "-p",
+          "--project"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "device",
+        "flags": [
+          "--device"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "models",
+        "flags": [
+          "--models"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "chunk_size",
+        "flags": [
+          "--chunk_size"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "chunk_overlap",
+        "flags": [
+          "--chunk_overlap"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "non_speech_silence",
+        "flags": [
+          "--non_speech_silence"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "background_blend",
+        "flags": [
+          "--background_blend"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "keep_full_audio",
+        "flags": [
+          "--keep_full_audio"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "split_segments_by_speaker_codex.py",
+    "required": [
+      {
+        "name": "project",
+        "flags": [
+          "-p",
+          "--project"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "hf_token",
+        "flags": [
+          "--hf-token"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "audio_exts",
+        "flags": [
+          "--audio-exts"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "min_chunk",
+        "flags": [
+          "--min-chunk"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "round",
+        "flags": [
+          "--round"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "add_speaker_field",
+        "flags": [
+          "--no-speaker-field"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "backup",
+        "flags": [
+          "--no-backup"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "dry_run",
+        "flags": [
+          "--dry-run"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "min_word_overlap",
+        "flags": [
+          "--min-word-overlap"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "inplace",
+        "flags": [
+          "--no-inplace"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "output_suffix",
+        "flags": [
+          "--output-suffix"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "translate_chatgpt_srt_easy_codex.py",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-project_name"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "input_language",
+        "flags": [
+          "-input_language"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "output_language",
+        "flags": [
+          "-output_language"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "auth_key",
+        "flags": [
+          "-auth_key"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "context",
+        "flags": [
+          "-context"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "model",
+        "flags": [
+          "-model"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "stream",
+        "flags": [
+          "-stream"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "allow_sensitive_content",
+        "flags": [
+          "--allow-sensitive-content",
+          "--no-allow-sensitive-content"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "translate.py",
+    "required": [
+      {
+        "name": "input_dir",
+        "flags": [
+          "-input_dir"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "output_dir",
+        "flags": [
+          "-output_dir"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "input_language",
+        "flags": [
+          "-input_language"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "output_language",
+        "flags": [
+          "-output_language"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "auth_key",
+        "flags": [
+          "-auth_key"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "unpack_srt_from_mkv_easy.py",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional"
+      }
+    ],
+    "optional": [
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "ASR/whisx.py",
+    "required": [
+      {
+        "name": "directory",
+        "type": "positional"
+      }
+    ],
+    "optional": [
+      {
+        "name": "gpus",
+        "flags": [
+          "--gpus"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "hf_token",
+        "flags": [
+          "--hf_token"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "language",
+        "flags": [
+          "--language"
+        ],
+        "type": "option"
+      }
+    ]
+  },
+  {
+    "enviroment": "parakeet-fix",
+    "script": "ASR/canary-easy.py",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "model_name",
+        "flags": [
+          "--model-name"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "batch_size",
+        "flags": [
+          "--batch-size"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "beam_size",
+        "flags": [
+          "--beam-size"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "len_pen",
+        "flags": [
+          "--len-pen"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "chunk",
+        "flags": [
+          "--chunk"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "source_lang",
+        "flags": [
+          "--source-lang"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "target_lang",
+        "flags": [
+          "--target-lang"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "keep_alternatives",
+        "flags": [
+          "--keep-alternatives"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "overwrite",
+        "flags": [
+          "--overwrite"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+      {
+    "enviroment": "parakeet-fix",
+    "script": "ASR/parakeet-tdt-0.6b-v3.py",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "no_auto_chunk",
+        "flags": [
+          "--no-auto-chunk"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "chunk",
+        "flags": [
+          "--chunk"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "max_pause",
+        "flags": [
+          "--max-pause"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "timestamp_padding",
+        "flags": [
+          "--timestamp-padding"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "max_segment_duration",
+        "flags": [
+          "--max-segment-duration"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+      {
+    "enviroment": "parakeet-fix",
+    "script": "ASR/parakeet-tdt-0.6b-v3.py",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "no_auto_chunk",
+        "flags": [
+          "--no-auto-chunk"
+        ],
+        "type": "flag"
+      },
+      {
+        "name": "chunk",
+        "flags": [
+          "--chunk"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "max_pause",
+        "flags": [
+          "--max-pause"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "timestamp_padding",
+        "flags": [
+          "--timestamp-padding"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "max_segment_duration",
+        "flags": [
+          "--max-segment-duration"
+        ],
+        "type": "option"
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag"
+      }
+    ]
+  },
+  {
+    "enviroment": "parakeet-fix",
+    "script": "DIARIZE/e2e_diarize_speech.py",   
+    "required": [
+      {
+        "name": "model_path",
+        "type": "config_option"
+      },
+      {
+        "name": "dataset_manifest",
+        "type": "config_option"
+      }
+    ],
+    "optional": [
+      {
+        "name": "presort_manifest",
+        "type": "config_option"
+      },
+      {
+        "name": "postprocessing_yaml",
+        "type": "config_option"
+      },
+      {
+        "name": "no_der",
+        "type": "config_option"
+      },
+      {
+        "name": "out_rttm_dir",
+        "type": "config_option"
+      },
+      {
+        "name": "save_preds_tensors",
+        "type": "config_option"
+      },
+      {
+        "name": "session_len_sec",
+        "type": "config_option"
+      },
+      {
+        "name": "batch_size",
+        "type": "config_option"
+      },
+      {
+        "name": "num_workers",
+        "type": "config_option"
+      },
+      {
+        "name": "random_seed",
+        "type": "config_option"
+      },
+      {
+        "name": "bypass_postprocessing",
+        "type": "config_option"
+      },
+      {
+        "name": "log",
+        "type": "config_option"
+      },
+      {
+        "name": "use_lhotse",
+        "type": "config_option"
+      },
+      {
+        "name": "batch_duration",
+        "type": "config_option"
+      },
+      {
+        "name": "collar",
+        "type": "config_option"
+      },
+      {
+        "name": "ignore_overlap",
+        "type": "config_option"
+      },
+      {
+        "name": "spkcache_len",
+        "type": "config_option"
+      },
+      {
+        "name": "spkcache_refresh_rate",
+        "type": "config_option"
+      },
+      {
+        "name": "fifo_len",
+        "type": "config_option"
+      },
+      {
+        "name": "chunk_len",
+        "type": "config_option"
+      },
+      {
+        "name": "chunk_left_context",
+        "type": "config_option"
+      },
+      {
+        "name": "chunk_right_context",
+        "type": "config_option"
+      },
+      {
+        "name": "cuda",
+        "type": "config_option"
+      },
+      {
+        "name": "matmul_precision",
+        "type": "config_option"
+      },
+      {
+        "name": "launch_pp_optim",
+        "type": "config_option"
+      },
+      {
+        "name": "optuna_study_name",
+        "type": "config_option"
+      },
+      {
+        "name": "optuna_temp_dir",
+        "type": "config_option"
+      },
+      {
+        "name": "optuna_storage",
+        "type": "config_option"
+      },
+      {
+        "name": "optuna_log_file",
+        "type": "config_option"
+      },
+      {
+        "name": "optuna_n_trials",
+        "type": "config_option"
+      }
+    ],
+    "notes": "This script uses Hydra/OmegaConf; parameters are provided via key=value CLI overrides."
+  }
+]

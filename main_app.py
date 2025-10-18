@@ -10,8 +10,9 @@ import uuid
 import copy
 import re
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from werkzeug.utils import secure_filename
-import main_bash
 
 app = Flask(__name__)
 
@@ -52,6 +53,100 @@ VIDEO_MIME_MAP = {
     '.mpeg': 'video/mpeg'
 }
 
+SCRIPTS_CONFIG_PATH = Path(app.root_path) / 'scripts' / 'scripts.json'
+SCRIPTS_CACHE: Dict[str, Any] = {'mtime': None, 'data': []}
+SCRIPTS_CACHE_LOCK = threading.Lock()
+CONDA_INFO_CACHE: Optional[dict] = None
+CONDA_INFO_LOCK = threading.Lock()
+
+SCRIPT_KEY_REQUIREMENTS = {
+    'translate_chatgpt_srt_easy_codex.py': {'chatgpt'},
+    'translate.py': {'deepl'},
+    'split_segments_by_speaker_codex.py': {'huggingface'},
+    'whisx.py': {'huggingface'},
+}
+
+SCRIPT_PARAM_KEYHOLDER = {
+    'translate_chatgpt_srt_easy_codex.py': {'auth_key': ('chatgpt_api_key', 'api_key')},
+    'translate.py': {'auth_key': ('deepL_api_key', 'deepl_api_key')},
+    'split_segments_by_speaker_codex.py': {'hf_token': ('hf_token',)},
+    'whisx.py': {'hf_token': ('hf_token',)},
+}
+
+PROJECT_AUTOFILL_OVERRIDES = {
+    'project_name': 'project_name',
+    'project': 'project_name',
+    'project_dir_name': 'project_name',
+    'project_dir': 'project_path',
+    'project_path': 'project_path',
+}
+SECRET_PARAM_NAMES = {'auth_key', 'hf_token'}
+
+DEFAULT_WORKFLOW_TEMPLATE = [
+    {
+        'script': 'extract_audio_easy_channels.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {}
+    },
+    {
+        'script': 'separate_audio_easy_codex.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {
+            'device': 'cuda',
+            'chunk_size': 5
+        }
+    },
+    {
+        'script': 'Nvidia_asr_eng/parakeet_transcribe_wordts_4.0_easy.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {}
+    },
+    {
+        'script': 'split_segments_by_speaker_codex.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {}
+    },
+    {
+        'script': 'translate_chatgpt_srt_easy_codex.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {
+            'output_language': 'HU'
+        }
+    },
+    {
+        'script': 'f5_tts_easy_codex_EQ.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {
+            'norm': 'hun',
+            'phonetic_ref': True
+        }
+    },
+    {
+        'script': 'merge_chunks_with_background_easy.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {}
+    },
+    {
+        'script': 'merge_to_video_easy.py',
+        'enabled': True,
+        'halt_on_fail': True,
+        'params': {
+            'language': 'hun'
+        }
+    }
+]
+
+
+class WorkflowValidationError(Exception):
+    """Egy workflow lépés konfigurációja érvénytelen."""
+
 
 def resolve_workspace_path(path_value):
     if path_value is None:
@@ -66,6 +161,161 @@ def is_subpath(child_path, parent_path):
         return os.path.commonpath([child_path, parent_path]) == os.path.commonpath([parent_path])
     except ValueError:
         return False
+
+
+def infer_autofill_kind(param_name: str) -> Optional[str]:
+    if not param_name:
+        return None
+    normalized = param_name.strip().lower()
+    if normalized in PROJECT_AUTOFILL_OVERRIDES:
+        return PROJECT_AUTOFILL_OVERRIDES[normalized]
+    if 'project' in normalized:
+        if 'dir' in normalized or 'path' in normalized:
+            return 'project_path'
+        return 'project_name'
+    return None
+
+
+def load_scripts_file() -> List[Dict[str, Any]]:
+    if not SCRIPTS_CONFIG_PATH.is_file():
+        logging.warning("scripts.json nem található: %s", SCRIPTS_CONFIG_PATH)
+        return []
+    try:
+        with SCRIPTS_CONFIG_PATH.open('r', encoding='utf-8') as fp:
+            payload = json.load(fp)
+    except json.JSONDecodeError as exc:
+        logging.error("Nem sikerült beolvasni a scripts.json fájlt: %s", exc)
+        return []
+    except OSError as exc:
+        logging.error("Nem olvasható a scripts.json fájl: %s", exc)
+        return []
+    if not isinstance(payload, list):
+        logging.error("A scripts.json tartalma nem lista.")
+        return []
+    return payload
+
+
+def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    script_name = raw_entry.get('script')
+    if not script_name:
+        return None
+    environment = raw_entry.get('enviroment') or raw_entry.get('environment') or ''
+    parameters: List[Dict[str, Any]] = []
+
+    def append_params(param_list, required: bool):
+        for param in param_list or []:
+            name = param.get('name')
+            if not name:
+                continue
+            param_type = param.get('type', 'option')
+            flags = param.get('flags') or []
+            parameters.append({
+                'name': name,
+                'type': param_type,
+                'flags': flags,
+                'required': required,
+                'autofill': infer_autofill_kind(name),
+                'secret': name in SECRET_PARAM_NAMES
+            })
+
+    append_params(raw_entry.get('required'), True)
+    append_params(raw_entry.get('optional'), False)
+
+    return {
+        'id': script_name,
+        'script': script_name,
+        'display_name': raw_entry.get('name') or script_name,
+        'environment': environment,
+        'parameters': parameters,
+        'notes': raw_entry.get('notes'),
+        'raw': raw_entry,
+        'required_keys': sorted(SCRIPT_KEY_REQUIREMENTS.get(script_name, set()))
+    }
+
+
+def get_scripts_catalog(force_reload: bool = False) -> List[Dict[str, Any]]:
+    try:
+        current_mtime = SCRIPTS_CONFIG_PATH.stat().st_mtime
+    except OSError:
+        current_mtime = None
+
+    with SCRIPTS_CACHE_LOCK:
+        cached_mtime = SCRIPTS_CACHE.get('mtime')
+        if not force_reload and cached_mtime == current_mtime and SCRIPTS_CACHE.get('data'):
+            return copy.deepcopy(SCRIPTS_CACHE['data'])
+
+        raw_entries = load_scripts_file()
+        catalog = []
+        for entry in raw_entries:
+            prepared = prepare_script_entry(entry)
+            if prepared:
+                catalog.append(prepared)
+
+        SCRIPTS_CACHE['mtime'] = current_mtime
+        SCRIPTS_CACHE['data'] = catalog
+        return copy.deepcopy(catalog)
+
+
+def get_script_definition(script_id: str) -> Optional[Dict[str, Any]]:
+    if not script_id:
+        return None
+    catalog = get_scripts_catalog()
+    for entry in catalog:
+        if entry['id'] == script_id:
+            return entry
+    return None
+
+
+def coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ('1', 'true', 'yes', 'on', 'igen'):
+            return True
+        if normalized in ('0', 'false', 'no', 'off', 'nem'):
+            return False
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
+
+def load_conda_info(force_refresh: bool = False) -> Optional[dict]:
+    global CONDA_INFO_CACHE
+    with CONDA_INFO_LOCK:
+        if CONDA_INFO_CACHE is not None and not force_refresh:
+            return CONDA_INFO_CACHE
+        try:
+            result = subprocess.run(
+                ['conda', 'info', '--json'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                check=True
+            )
+            info = json.loads(result.stdout)
+            CONDA_INFO_CACHE = info
+            return info
+        except (subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError) as exc:
+            logging.error("Nem sikerült lekérdezni a Conda információkat: %s", exc)
+            return None
+
+
+def map_env_name_to_path(info: dict) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    if not info:
+        return mapping
+    envs = info.get('envs') or []
+    root_prefix = info.get('root_prefix')
+    if root_prefix:
+        mapping['base'] = root_prefix
+        mapping[os.path.basename(root_prefix)] = root_prefix
+    for env_path in envs:
+        if not env_path:
+            continue
+        env_name = os.path.basename(str(env_path).rstrip(os.sep))
+        mapping[env_name] = env_path
+    return mapping
 
 
 def load_keyholder_data():
@@ -113,68 +363,285 @@ def encode_keyholder_value(value):
     return base64.b64encode(cleaned.encode('utf-8')).decode('utf-8')
 
 
+def get_keyholder_value(data: Dict[str, Any], field_names: Tuple[str, ...]) -> Optional[str]:
+    for field in field_names:
+        if not field:
+            continue
+        value = decode_keyholder_value(data.get(field))
+        if value:
+            return value
+    return None
+
+
 def get_conda_python(env_name: str):
     cached = CONDA_PYTHON_CACHE.get(env_name)
     if cached:
         return cached
-    python_exec = main_bash.get_conda_python_executable(env_name)
-    if python_exec:
-        CONDA_PYTHON_CACHE[env_name] = python_exec
-    return python_exec
-
-
-def determine_workflow_key_status(project_dir, current_config, lang_code=None):
-    lang_code = (lang_code or '').strip().lower()
-    config_defaults = current_config.get('CONFIG', {}) or {}
-    default_target_lang = str(config_defaults.get('default_target_lang', '') or '').strip().lower()
-    candidate_lang_codes = []
-    for code in (default_target_lang, lang_code):
-        if code and code not in candidate_lang_codes:
-            candidate_lang_codes.append(code)
-
-    subdirs = current_config['PROJECT_SUBDIRS']
-    upload_dir = os.path.join(project_dir, subdirs['upload'])
-    has_target_srt = False
-    if os.path.isdir(upload_dir):
-        try:
-            upload_files = [entry.name.lower() for entry in os.scandir(upload_dir) if entry.is_file()]
-        except OSError:
-            upload_files = []
-        for code in candidate_lang_codes:
-            suffix = f"{code}.srt"
-            if any(filename.endswith(suffix) for filename in upload_files):
-                has_target_srt = True
+    if not env_name:
+        return None
+    info = load_conda_info()
+    if not info:
+        return None
+    env_map = map_env_name_to_path(info)
+    env_path = env_map.get(env_name)
+    if not env_path:
+        for envs_dir in info.get('envs_dirs', []):
+            candidate = os.path.join(envs_dir, env_name)
+            if os.path.isdir(candidate):
+                env_path = candidate
                 break
+    if not env_path:
+        logging.error("A(z) '%s' nevű Conda környezet nem található.", env_name)
+        return None
+    python_exec = os.path.join(env_path, 'python.exe') if os.name == 'nt' else os.path.join(env_path, 'bin', 'python')
+    if os.path.exists(python_exec):
+        CONDA_PYTHON_CACHE[env_name] = python_exec
+        return python_exec
+    logging.error("Nem található Python végrehajtható itt: %s", python_exec)
+    return None
 
-    keyholder_data = load_keyholder_data()
 
-    def has_any(fields):
-        for field in fields:
-            value = decode_keyholder_value(keyholder_data.get(field))
-            if value:
-                return True
+def ensure_project_structure(project_path: str, subdirs_config: Dict[str, str]) -> None:
+    logging.info("Projekt könyvtár ellenőrzése: %s", project_path)
+    os.makedirs(project_path, exist_ok=True)
+    for subdir in subdirs_config.values():
+        os.makedirs(os.path.join(project_path, subdir), exist_ok=True)
+
+
+def setup_project_logging(project_path: str, logs_subdir: str, project_name: str) -> Tuple[logging.Handler, str]:
+    log_dir = os.path.join(project_path, logs_subdir)
+    os.makedirs(log_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_dir, f'{project_name}_run_{timestamp}.log')
+
+    handler = logging.FileHandler(log_file, encoding='utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(handler)
+    logging.info("Log fájl létrehozva: %s", log_file)
+    return handler, log_file
+
+
+def remove_logging_handler(handler: logging.Handler) -> None:
+    logger = logging.getLogger()
+    try:
+        logger.removeHandler(handler)
+    except Exception:
+        pass
+    try:
+        handler.close()
+    except Exception:
+        pass
+
+
+def determine_parameter_value(
+    param_meta: Dict[str, Any],
+    user_params: Dict[str, Any],
+    script_meta: Dict[str, Any],
+    context: Dict[str, Any]
+) -> Any:
+    name = param_meta['name']
+    value = user_params.get(name)
+
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            value = None
+
+    if value is None:
+        autofill_kind = param_meta.get('autofill')
+        if autofill_kind == 'project_name':
+            value = context['project_name']
+        elif autofill_kind == 'project_path':
+            value = context['project_path']
+
+    if value is None:
+        key_mapping = SCRIPT_PARAM_KEYHOLDER.get(script_meta['id'], {}).get(name)
+        if key_mapping:
+            value = get_keyholder_value(context['keyholder'], key_mapping)
+
+    if param_meta['type'] == 'flag':
+        return coerce_bool(value)
+
+    return value
+
+
+def build_argument_fragment(param_meta: Dict[str, Any], value: Any) -> List[str]:
+    param_type = param_meta['type']
+    name = param_meta['name']
+    flags = param_meta.get('flags') or []
+
+    if param_type == 'flag':
+        if value is True:
+            return [flags[0]] if flags else []
+        if value is False and len(flags) > 1 and flags[1].startswith('--no-'):
+            return [flags[1]]
+        return []
+
+    if value is None:
+        return []
+
+    if param_type == 'positional':
+        return [str(value)]
+
+    if param_type == 'option':
+        if flags:
+            return [flags[0], str(value)]
+        return [str(value)]
+
+    if param_type == 'config_option':
+        return [f"{name}={value}"]
+
+    logging.warning("Ismeretlen paraméter típus: %s", param_type)
+    return []
+
+
+def build_command_for_step(
+    step_config: Dict[str, Any],
+    script_meta: Dict[str, Any],
+    context: Dict[str, Any]
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    environment = script_meta.get('environment')
+    python_exec = get_conda_python(environment)
+    if not python_exec:
+        raise WorkflowValidationError(f"Nem található Python futtató a(z) '{environment}' környezethez.")
+
+    script_path = Path(app.root_path) / 'scripts' / script_meta['script']
+    if not script_path.is_file():
+        raise WorkflowValidationError(f"A szkript nem található: {script_path}")
+
+    user_params = step_config.get('params') or {}
+    applied_params: List[Dict[str, Any]] = []
+    command = [python_exec, str(script_path)]
+
+    for param_meta in script_meta['parameters']:
+        value = determine_parameter_value(param_meta, user_params, script_meta, context)
+        if value is None and param_meta['required'] and param_meta['type'] != 'flag':
+            raise WorkflowValidationError(f"Hiányzó kötelező paraméter: {param_meta['name']} ({script_meta['script']})")
+        fragment = build_argument_fragment(param_meta, value)
+        if fragment:
+            command.extend(fragment)
+            applied_params.append({
+                'name': param_meta['name'],
+                'value': value,
+                'type': param_meta['type']
+            })
+
+    return command, applied_params
+
+
+def normalize_workflow_steps(payload: Any) -> Tuple[List[Dict[str, Any]], Set[str], int]:
+    if not isinstance(payload, list):
+        raise WorkflowValidationError("A workflow lépéseit listában kell megadni.")
+
+    normalized_steps: List[Dict[str, Any]] = []
+    required_keys: Set[str] = set()
+    enabled_count = 0
+
+    for index, step in enumerate(payload, start=1):
+        if not isinstance(step, dict):
+            raise WorkflowValidationError(f"A(z) {index}. lépés formátuma hibás.")
+
+        script_id = step.get('script')
+        script_meta = get_script_definition(script_id)
+        if not script_meta:
+            raise WorkflowValidationError(f"Ismeretlen szkript: {script_id}")
+
+        enabled = coerce_bool(step.get('enabled', True))
+        halt_on_fail = coerce_bool(step.get('halt_on_fail', True))
+        params = step.get('params') or {}
+        if not isinstance(params, dict):
+            raise WorkflowValidationError(f"A(z) {script_meta['display_name']} paraméterei hibás formátumúak.")
+
+        normalized_step = {
+            'script': script_meta['id'],
+            'enabled': enabled,
+            'halt_on_fail': halt_on_fail,
+            'params': params
+        }
+        if enabled:
+            enabled_count += 1
+            required_keys.update(script_meta.get('required_keys', []))
+
+        normalized_steps.append(normalized_step)
+
+    if enabled_count == 0:
+        raise WorkflowValidationError("Legalább egy lépést engedélyezni kell a futtatáshoz.")
+
+    return normalized_steps, required_keys, enabled_count
+
+
+def run_script_command(
+    command_list: List[str],
+    log_prefix: str = "",
+    env: Optional[Dict[str, str]] = None,
+    should_stop: Optional[Callable[[], bool]] = None
+) -> Any:
+    command_str = ' '.join(f'"{c}"' if ' ' in c else c for c in command_list)
+    logging.info("%s Parancs futtatása: %s", log_prefix, command_str)
+    try:
+        proc = subprocess.Popen(
+            command_list,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            bufsize=1,
+            env=env or os.environ.copy(),
+        )
+        if proc.stdout:
+            for line in iter(proc.stdout.readline, ''):
+                logging.info("%s %s", log_prefix, line.rstrip())
+                if should_stop and should_stop():
+                    logging.warning("%s Megszakítás kérve, a parancs leállítása...", log_prefix)
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                    return "cancelled"
+        rc = proc.wait()
+        if rc != 0:
+            logging.error("%s A parancs hibával ért véget (%s)", log_prefix, rc)
+            return False
+        logging.info("%s Parancs sikeresen lefutott.", log_prefix)
+        return True
+    except Exception as exc:
+        logging.error("%s Váratlan hiba a parancs futtatása közben: %s", log_prefix, exc, exc_info=True)
         return False
 
-    keys_status = {
+
+def determine_workflow_key_status(required_keys: Optional[Set[str]] = None) -> Dict[str, Any]:
+    keyholder_data = load_keyholder_data()
+    required_keys = set(required_keys or [])
+
+    key_definitions = {
         'chatgpt': {
             'label': 'OpenAI / ChatGPT API kulcs',
-            'present': has_any(('chatgpt_api_key', 'api_key')),
-            'required': True
+            'fields': ('chatgpt_api_key', 'api_key'),
         },
         'deepl': {
             'label': 'DeepL API kulcs',
-            'present': has_any(('deepL_api_key', 'deepl_api_key')),
-            'required': True
+            'fields': ('deepL_api_key', 'deepl_api_key'),
         },
         'huggingface': {
             'label': 'Hugging Face token',
-            'present': has_any(('hf_token',)),
-            'required': True
+            'fields': ('hf_token',),
         }
     }
+
+    keys_status = {}
+    for key_name, definition in key_definitions.items():
+        present = bool(get_keyholder_value(keyholder_data, definition['fields']))
+        keys_status[key_name] = {
+            'label': definition['label'],
+            'present': present,
+            'required': key_name in required_keys
+        }
+
     return {
         'keys': keys_status,
-        'uses_chatgpt_translation': has_target_srt
+        'uses_chatgpt_translation': 'chatgpt' in required_keys
     }
 
 # Statikus fájlok kiszolgálása a workdir mappából
@@ -197,19 +664,6 @@ def persist_config(updated_config):
         config = updated_config
         with open('config.json', 'w', encoding='utf-8') as config_file:
             json.dump(config, config_file, indent=2, ensure_ascii=False)
-
-
-def list_tts_models(tts_root):
-    if not os.path.isdir(tts_root):
-        return []
-    return sorted(
-        [
-            entry
-            for entry in os.listdir(tts_root)
-            if os.path.isdir(os.path.join(tts_root, entry))
-        ]
-    )
-
 
 def update_workflow_job(job_id, **kwargs):
     with workflow_lock:
@@ -303,7 +757,7 @@ def read_log_tail(log_path, max_bytes=12000):
         return ""
 
 
-def run_workflow_job(job_id, project_name, params):
+def run_workflow_job(job_id, project_name, workflow_payload):
     sanitized_project = secure_filename(project_name)
     log_handler = None
     cancel_event = get_workflow_event(job_id)
@@ -313,7 +767,7 @@ def run_workflow_job(job_id, project_name, params):
 
     try:
         initial_status = 'cancelling' if should_stop() else 'running'
-        initial_message = 'Megszakítás kérve, előkészítés folyamatban...' if initial_status == 'cancelling' else 'Feldolgozás folyamatban...'
+        initial_message = 'Megszakítás kérve, előkészítés folyamatban...' if initial_status == 'cancelling' else 'Feldolgozás előkészítése...'
         update_workflow_job(
             job_id,
             status=initial_status,
@@ -326,8 +780,8 @@ def run_workflow_job(job_id, project_name, params):
         workdir_path = current_config['DIRECTORIES']['workdir']
         project_path = os.path.join(workdir_path, sanitized_project)
 
-        main_bash.create_project_structure(project_path, current_config['PROJECT_SUBDIRS'])
-        log_handler, log_file = main_bash.setup_logging(
+        ensure_project_structure(project_path, current_config['PROJECT_SUBDIRS'])
+        log_handler, log_file = setup_project_logging(
             project_path,
             current_config['PROJECT_SUBDIRS']['logs'],
             sanitized_project
@@ -336,41 +790,123 @@ def run_workflow_job(job_id, project_name, params):
         log_links = build_log_links(sanitized_project, current_config['PROJECT_SUBDIRS']['logs'], log_filename)
         update_workflow_job(job_id, log=log_links)
 
-        try:
-            success = main_bash.run_dubbing_workflow(
-                sanitized_project,
-                project_path,
-                current_config,
-                params,
-                should_stop=should_stop
-            )
-            if success == "cancelled":
+        steps = workflow_payload.get('steps') or []
+        active_steps = [step for step in steps if step.get('enabled', True)]
+        total_steps = len(active_steps)
+        update_workflow_job(job_id, total_steps=total_steps)
+
+        keyholder_snapshot = load_keyholder_data()
+        executed_steps: List[Dict[str, Any]] = []
+
+        context = {
+            'project_name': sanitized_project,
+            'project_path': project_path,
+            'keyholder': keyholder_snapshot,
+            'config': current_config,
+        }
+
+        for index, step in enumerate(active_steps, start=1):
+            if should_stop():
+                logging.info("Workflow megszakítás kérve, kilépünk.")
                 update_workflow_job(
                     job_id,
                     status='cancelled',
                     finished_at=datetime.utcnow().isoformat(),
                     message='Workflow megszakítva.',
-                    cancel_requested=False
+                    cancel_requested=False,
+                    current_step=None,
+                    results=executed_steps
                 )
-            elif success:
+                return
+
+            script_id = step.get('script')
+            script_meta = get_script_definition(script_id)
+            if not script_meta:
+                raise WorkflowValidationError(f"Ismeretlen szkript: {script_id}")
+
+            try:
+                command, applied_params = build_command_for_step(step, script_meta, context)
+            except WorkflowValidationError as exc:
+                raise
+
+            log_prefix = f"[{script_meta['id']}]"
+            update_workflow_job(
+                job_id,
+                status='running',
+                message=f"{index}/{total_steps} · {script_meta['display_name']}",
+                current_step={
+                    'index': index,
+                    'total': total_steps,
+                    'script': script_meta['id'],
+                    'display_name': script_meta['display_name'],
+                    'command': command,
+                },
+                cancel_requested=should_stop()
+            )
+
+            result = run_script_command(command, log_prefix=log_prefix, should_stop=should_stop)
+            step_record = {
+                'script': script_meta['id'],
+                'display_name': script_meta['display_name'],
+                'command': command,
+                'applied_params': applied_params,
+            }
+
+            if result == "cancelled":
+                step_record['status'] = 'cancelled'
+                executed_steps.append(step_record)
                 update_workflow_job(
                     job_id,
-                    status='completed',
+                    status='cancelled',
                     finished_at=datetime.utcnow().isoformat(),
-                    message='Workflow sikeresen lefutott.',
-                    cancel_requested=False
+                    message='Workflow megszakítva.',
+                    cancel_requested=False,
+                    current_step=None,
+                    results=executed_steps
                 )
-            else:
-                update_workflow_job(
-                    job_id,
-                    status='failed',
-                    finished_at=datetime.utcnow().isoformat(),
-                    message='A workflow hibával leállt, részletek a logban.',
-                    cancel_requested=False
-                )
-        finally:
-            if log_handler:
-                main_bash.remove_logging_handler(log_handler)
+                return
+
+            if result is False:
+                step_record['status'] = 'failed'
+                executed_steps.append(step_record)
+                if step.get('halt_on_fail', True):
+                    update_workflow_job(
+                        job_id,
+                        status='failed',
+                        finished_at=datetime.utcnow().isoformat(),
+                        message=f"Hiba a(z) {script_meta['display_name']} lépés futtatása közben.",
+                        cancel_requested=False,
+                        current_step=None,
+                        results=executed_steps
+                    )
+                    return
+                else:
+                    logging.warning("A(z) %s lépés hibával futott, de a workflow folytatódik.", script_meta['display_name'])
+                    continue
+
+            step_record['status'] = 'completed'
+            executed_steps.append(step_record)
+
+        update_workflow_job(
+            job_id,
+            status='completed',
+            finished_at=datetime.utcnow().isoformat(),
+            message='Workflow sikeresen lefutott.',
+            cancel_requested=False,
+            current_step=None,
+            results=executed_steps
+        )
+    except WorkflowValidationError as exc:
+        logging.error("Workflow konfigurációs hiba: %s", exc)
+        update_workflow_job(
+            job_id,
+            status='failed',
+            finished_at=datetime.utcnow().isoformat(),
+            message=str(exc),
+            cancel_requested=False,
+            current_step=None,
+            results=locals().get('executed_steps')
+        )
     except Exception as exc:
         logging.exception("Workflow futtatási hiba: %s", exc)
         if should_stop():
@@ -390,6 +926,8 @@ def run_workflow_job(job_id, project_name, params):
                 cancel_requested=False
             )
     finally:
+        if log_handler:
+            remove_logging_handler(log_handler)
         cleanup_workflow_resources(job_id)
 
 @app.route('/')
@@ -1274,8 +1812,16 @@ def workflow_key_status(project_name):
         return jsonify({'success': False, 'error': 'Projekt nem található.'}), 404
 
     data = request.get_json() or {}
-    lang_code = data.get('lang_code')
-    status = determine_workflow_key_status(project_dir, current_config, lang_code)
+    steps_payload = data.get('steps')
+    if steps_payload in (None, []):
+        required_keys = set()
+    else:
+        try:
+            _, required_keys, _ = normalize_workflow_steps(steps_payload)
+        except WorkflowValidationError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+
+    status = determine_workflow_key_status(required_keys)
     status['success'] = True
     return jsonify(status)
 
@@ -1356,30 +1902,15 @@ def get_workflow_options_api(project_name):
     current_config = get_config_copy()
     workdir_path = current_config['DIRECTORIES']['workdir']
     project_dir = os.path.join(workdir_path, sanitized_project)
-
     if not os.path.isdir(project_dir):
         return jsonify({'success': False, 'error': 'Projekt nem található'}), 404
 
-    tts_root = current_config['DIRECTORIES']['TTS']
-    models = list_tts_models(tts_root)
-    last_params = current_config.get('LAST_USED_PARAMS', {}) or {}
-
-    def extract_model_name(path_value):
-        if not path_value:
-            return None
-        return os.path.basename(os.path.normpath(path_value))
-
-    defaults = {
-        'translation_context': last_params.get('translation_context', ''),
-        'tts_model': extract_model_name(last_params.get('tts_model_path')),
-        'tts_model_run4': extract_model_name(last_params.get('tts_model_path_run4')),
-        'lang_code': last_params.get('lang_code', 'hun')
-    }
-
-    if not defaults['tts_model'] and models:
-        defaults['tts_model'] = models[0]
-    if not defaults['tts_model_run4'] and models:
-        defaults['tts_model_run4'] = models[0]
+    scripts = get_scripts_catalog()
+    last_workflow = current_config.get('LAST_WORKFLOW')
+    if not isinstance(last_workflow, list) or not last_workflow:
+        defaults = {'workflow': copy.deepcopy(DEFAULT_WORKFLOW_TEMPLATE)}
+    else:
+        defaults = {'workflow': copy.deepcopy(last_workflow)}
 
     recent_jobs = sorted(
         get_project_jobs(sanitized_project),
@@ -1390,10 +1921,10 @@ def get_workflow_options_api(project_name):
 
     return jsonify({
         'success': True,
-        'models': models,
+        'scripts': scripts,
         'defaults': defaults,
-        'languages': ['hun', 'eng', 'ger', 'fra'],
-        'latest_job': latest_job
+        'latest_job': latest_job,
+        'project': sanitized_project
     })
 
 
@@ -1402,17 +1933,11 @@ def run_workflow_api(project_name):
     sanitized_project = secure_filename(project_name)
     data = request.get_json() or {}
 
-    translation_context = (data.get('translation_context') or '').strip()
-    tts_model = data.get('tts_model')
-    tts_model_run4 = data.get('tts_model_run4')
-    lang_code = (data.get('lang_code') or '').strip()
-
-    if not translation_context:
-        return jsonify({'success': False, 'error': 'A fordítási kontextus megadása kötelező.'}), 400
-    if not tts_model or not tts_model_run4:
-        return jsonify({'success': False, 'error': 'Mindkét TTS modell kiválasztása kötelező.'}), 400
-    if not lang_code:
-        return jsonify({'success': False, 'error': 'A nyelvi kód megadása kötelező.'}), 400
+    steps_payload = data.get('steps')
+    try:
+        normalized_steps, required_keys, _ = normalize_workflow_steps(steps_payload)
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
 
     current_config = get_config_copy()
     workdir_path = current_config['DIRECTORIES']['workdir']
@@ -1428,16 +1953,7 @@ def run_workflow_api(project_name):
     if active_for_project:
         return jsonify({'success': False, 'error': 'Már fut egy workflow ehhez a projekthez.'}), 409
 
-    tts_root = current_config['DIRECTORIES']['TTS']
-    model_path = os.path.join(tts_root, tts_model)
-    model_path_run4 = os.path.join(tts_root, tts_model_run4)
-
-    if not os.path.isdir(model_path):
-        return jsonify({'success': False, 'error': f'A kiválasztott modell nem létezik: {model_path}'}), 400
-    if not os.path.isdir(model_path_run4):
-        return jsonify({'success': False, 'error': f'A 4. futtatás modellje nem létezik: {model_path_run4}'}), 400
-
-    key_status = determine_workflow_key_status(project_dir, current_config, lang_code)
+    key_status = determine_workflow_key_status(required_keys)
     missing_keys = [
         info['label']
         for key, info in key_status['keys'].items()
@@ -1450,15 +1966,8 @@ def run_workflow_api(project_name):
             'missing_keys': missing_keys
         }), 400
 
-    params = {
-        'translation_context': translation_context,
-        'tts_model_path': model_path,
-        'tts_model_path_run4': model_path_run4,
-        'lang_code': lang_code
-    }
-
     updated_config = copy.deepcopy(current_config)
-    updated_config['LAST_USED_PARAMS'] = params
+    updated_config['LAST_WORKFLOW'] = normalized_steps
     persist_config(updated_config)
 
     job_id = uuid.uuid4().hex
@@ -1470,16 +1979,16 @@ def run_workflow_api(project_name):
         'message': 'Feladat sorban áll.',
         'log': None,
         'cancel_requested': False,
-        'params': {
-            'translation_context': translation_context,
-            'tts_model': tts_model,
-            'tts_model_run4': tts_model_run4,
-            'lang_code': lang_code
-        }
+        'workflow': normalized_steps,
+        'required_keys': list(required_keys)
     }
     register_workflow_job(job_id, job_data)
 
-    thread = threading.Thread(target=run_workflow_job, args=(job_id, sanitized_project, params), daemon=True)
+    thread = threading.Thread(
+        target=run_workflow_job,
+        args=(job_id, sanitized_project, {'steps': normalized_steps}),
+        daemon=True
+    )
     set_workflow_thread(job_id, thread)
     thread.start()
 
