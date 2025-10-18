@@ -16,11 +16,15 @@
         let workflowKeysModal = null;
         let workflowStepModal = null;
         let workflowParamsModal = null;
+        let workflowSaveModal = null;
         let pendingWorkflowPayload = null;
         let availableScripts = [];
         let defaultWorkflow = [];
         let workflowSteps = [];
         let selectedStepIndex = null;
+        let workflowTemplates = [];
+        let currentTemplateId = null;
+        let workflowInitialized = false;
 
         const workflowKeyFieldMap = {
             chatgpt: { wrapperId: 'workflowKeyFieldChatgpt', inputId: 'workflowKeyChatgpt', payloadKey: 'chatgpt_api_key' },
@@ -109,7 +113,220 @@
             badge.classList.toggle('d-none', !hasMissing);
         }
 
+        function findTemplateById(templateId) {
+            if (!templateId) {
+                return null;
+            }
+            return workflowTemplates.find(item => item.id === templateId) || null;
+        }
+
+        function populateWorkflowTemplateSelect(selectedId) {
+            const select = document.getElementById('workflowTemplateSelect');
+            if (!select) {
+                return;
+            }
+            const previousValue = selectedId !== undefined ? selectedId : select.value;
+            select.innerHTML = '';
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Válassz sablont...';
+            select.append(placeholder);
+
+            workflowTemplates.forEach(template => {
+                const option = document.createElement('option');
+                option.value = template.id;
+                option.textContent = template.name || template.id;
+                select.append(option);
+            });
+
+            const targetValue = selectedId !== undefined ? selectedId : previousValue;
+            if (targetValue && Array.from(select.options).some(option => option.value === targetValue)) {
+                select.value = targetValue;
+                currentTemplateId = targetValue;
+            } else {
+                select.value = '';
+                if (selectedId !== undefined) {
+                    currentTemplateId = null;
+                }
+            }
+        }
+
+        async function refreshWorkflowTemplates(selectedId = currentTemplateId) {
+            try {
+                const response = await fetch('/api/workflow-templates');
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Nem sikerült lekérdezni a sablonokat.');
+                }
+                workflowTemplates = result.templates || [];
+                populateWorkflowTemplateSelect(selectedId);
+            } catch (error) {
+                console.error('Workflow sablon lista frissítési hiba:', error);
+            }
+        }
+
+        async function loadWorkflowTemplateById(templateId, showMessage = true) {
+            if (!templateId) {
+                alert('Előbb válassz egy workflow sablont.');
+                return;
+            }
+            try {
+                const response = await fetch(`/api/workflow-template/${encodeURIComponent(templateId)}`);
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Nem sikerült betölteni a sablont.');
+                }
+                const template = result.template || {};
+                currentTemplateId = template.id || templateId;
+                workflowSteps = cloneSteps(template.steps || []);
+                defaultWorkflow = cloneSteps(template.steps || []);
+                populateWorkflowTemplateSelect(currentTemplateId);
+                renderWorkflowSteps();
+                if (showMessage) {
+                    updateInfoBox('info', `${template.name || currentTemplateId} sablon betöltve.`);
+                }
+            } catch (error) {
+                console.error('Workflow sablon betöltési hiba:', error);
+                alert('Nem sikerült betölteni a kiválasztott workflow-t: ' + error.message);
+            }
+        }
+
+        function showSaveWorkflowModal() {
+            const modalElement = document.getElementById('workflowSaveModal');
+            if (!modalElement) {
+                return;
+            }
+            const nameInput = document.getElementById('workflowSaveName');
+            const descriptionInput = document.getElementById('workflowSaveDescription');
+            const overwriteCheckbox = document.getElementById('workflowSaveOverwrite');
+            const overwriteInfo = document.getElementById('workflowSaveOverwriteInfo');
+            const errorBox = document.getElementById('workflowSaveError');
+
+            const currentTemplate = findTemplateById(currentTemplateId);
+            if (nameInput) {
+                nameInput.value = currentTemplate ? (currentTemplate.name || '') : '';
+            }
+            if (descriptionInput) {
+                descriptionInput.value = currentTemplate ? (currentTemplate.description || '') : '';
+            }
+            if (overwriteCheckbox) {
+                overwriteCheckbox.checked = false;
+                overwriteCheckbox.disabled = !currentTemplateId;
+            }
+            if (overwriteInfo) {
+                if (currentTemplate) {
+                    overwriteInfo.textContent = `Aktuális sablon: ${currentTemplate.name} (${currentTemplate.id})`;
+                    overwriteInfo.classList.remove('d-none');
+                } else {
+                    overwriteInfo.classList.add('d-none');
+                }
+            }
+            if (errorBox) {
+                errorBox.classList.add('d-none');
+                errorBox.textContent = '';
+            }
+            if (!workflowSaveModal) {
+                workflowSaveModal = new bootstrap.Modal(modalElement);
+            }
+            workflowSaveModal.show();
+        }
+
+        async function saveWorkflowTemplateFromModal() {
+            const nameInput = document.getElementById('workflowSaveName');
+            const descriptionInput = document.getElementById('workflowSaveDescription');
+            const overwriteCheckbox = document.getElementById('workflowSaveOverwrite');
+            const errorBox = document.getElementById('workflowSaveError');
+
+            const name = nameInput ? nameInput.value.trim() : '';
+            const description = descriptionInput ? descriptionInput.value.trim() : '';
+            const overwrite = overwriteCheckbox ? overwriteCheckbox.checked : false;
+
+            if (errorBox) {
+                errorBox.classList.add('d-none');
+                errorBox.textContent = '';
+            }
+
+            if (overwrite && !currentTemplateId) {
+                if (errorBox) {
+                    errorBox.textContent = 'Nincs kiválasztott sablon, amit felül lehetne írni.';
+                    errorBox.classList.remove('d-none');
+                }
+                return;
+            }
+
+            if (!name && !overwrite) {
+                if (errorBox) {
+                    errorBox.textContent = 'Adj meg egy nevet a workflow sablonnak.';
+                    errorBox.classList.remove('d-none');
+                }
+                return;
+            }
+
+            const payload = collectWorkflowPayload();
+            const body = {
+                name,
+                description,
+                steps: payload.steps,
+                overwrite
+            };
+            if (overwrite && currentTemplateId) {
+                body.template_id = currentTemplateId;
+            }
+
+            try {
+                const response = await fetch('/api/save-workflow-template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Nem sikerült elmenteni a workflow sablont.');
+                }
+                if (workflowSaveModal) {
+                    workflowSaveModal.hide();
+                }
+                const savedTemplate = result.template || {};
+                currentTemplateId = savedTemplate.id || currentTemplateId;
+                defaultWorkflow = cloneSteps(payload.steps);
+                await refreshWorkflowTemplates(currentTemplateId);
+                populateWorkflowTemplateSelect(currentTemplateId);
+                updateInfoBox('success', `Workflow sablon elmentve: ${savedTemplate.name || currentTemplateId}.`);
+            } catch (error) {
+                console.error('Workflow sablon mentési hiba:', error);
+                if (errorBox) {
+                    errorBox.textContent = error.message;
+                    errorBox.classList.remove('d-none');
+                }
+            }
+        }
+
         function initWorkflowButtons() {
+            const templateSelect = document.getElementById('workflowTemplateSelect');
+            if (templateSelect) {
+                templateSelect.addEventListener('change', event => {
+                    const value = event.target.value || '';
+                    currentTemplateId = value || null;
+                });
+            }
+
+            const loadTemplateBtn = document.getElementById('loadWorkflowTemplateBtn');
+            if (loadTemplateBtn) {
+                loadTemplateBtn.addEventListener('click', () => {
+                    if (!currentTemplateId) {
+                        alert('Előbb válassz egy workflow sablont a listából.');
+                        return;
+                    }
+                    loadWorkflowTemplateById(currentTemplateId);
+                });
+            }
+
+            const saveTemplateBtn = document.getElementById('saveWorkflowBtn');
+            if (saveTemplateBtn) {
+                saveTemplateBtn.addEventListener('click', showSaveWorkflowModal);
+            }
+
             const addBtn = document.getElementById('addWorkflowStepBtn');
             if (addBtn) {
                 addBtn.addEventListener('click', () => {
@@ -183,6 +400,15 @@
                     saveBtn.addEventListener('click', saveWorkflowParams);
                 }
             }
+
+            const saveModalElement = document.getElementById('workflowSaveModal');
+            if (saveModalElement) {
+                workflowSaveModal = new bootstrap.Modal(saveModalElement);
+                const saveConfirmBtn = document.getElementById('workflowSaveConfirmBtn');
+                if (saveConfirmBtn) {
+                    saveConfirmBtn.addEventListener('click', saveWorkflowTemplateFromModal);
+                }
+            }
         }
 
         function initWorkflowKeyModal() {
@@ -211,10 +437,21 @@
                 }
 
                 availableScripts = result.scripts || [];
-                defaultWorkflow = cloneSteps(result.defaults?.workflow || []);
-                if (!workflowSteps.length) {
+                workflowTemplates = result.templates || [];
+                const defaults = result.defaults || {};
+
+                defaultWorkflow = cloneSteps(defaults.workflow || []);
+
+                if (!workflowInitialized) {
+                    workflowSteps = cloneSteps(defaultWorkflow);
+                    workflowInitialized = true;
+                } else if (!workflowSteps.length && defaultWorkflow.length) {
                     workflowSteps = cloneSteps(defaultWorkflow);
                 }
+
+                currentTemplateId = defaults.selected_template || currentTemplateId || (workflowTemplates.length ? workflowTemplates[0].id : null);
+                populateWorkflowTemplateSelect(currentTemplateId);
+
                 renderWorkflowSteps();
                 renderWorkflowStatus(result.latest_job);
 
@@ -700,7 +937,8 @@
                     enabled: step.enabled !== false,
                     halt_on_fail: step.halt_on_fail !== false,
                     params: cloneObject(step.params)
-                }))
+                })),
+                template_id: currentTemplateId
             };
         }
 
@@ -1508,12 +1746,20 @@
                 <div class="alert alert-info small mb-3" role="alert" id="workflowInfo">
                     Válaszd ki a scripts mappában elérhető lépéseket, állítsd be a paramétereket egyenként, majd indítsd el a kívánt munkafolyamatot. A projektnév automatikusan kitöltésre kerül minden lépésnél.
                 </div>
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                    <div class="d-flex flex-wrap gap-2">
-                        <button type="button" class="btn btn-primary" id="addWorkflowStepBtn">Lépés hozzáadása</button>
-                        <button type="button" class="btn btn-outline-secondary" id="resetWorkflowBtn">Alapértelmezett lépések</button>
+                <div class="d-flex flex-column gap-2 mb-3">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <label for="workflowTemplateSelect" class="form-label mb-0">Mentett workflow</label>
+                        <select class="form-select form-select-sm" id="workflowTemplateSelect" style="min-width: 220px;"></select>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="loadWorkflowTemplateBtn">Betöltés</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" id="saveWorkflowBtn">Mentés sablonként</button>
                     </div>
-                    <span class="badge bg-warning text-dark d-none" id="workflowMissingBadge">Hiányzó paraméterek</span>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="btn btn-primary" id="addWorkflowStepBtn">Lépés hozzáadása</button>
+                            <button type="button" class="btn btn-outline-secondary" id="resetWorkflowBtn">Alapértelmezett lépések</button>
+                        </div>
+                        <span class="badge bg-warning text-dark d-none" id="workflowMissingBadge">Hiányzó paraméterek</span>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle" id="workflowStepsTable">
@@ -1914,14 +2160,46 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-primary" onclick="runTranscription()">Futtatás</button>
                 </div>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Workflow API Keys Modal -->
-    <div class="modal fade" id="workflowKeysModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
+        <!-- Workflow Save Modal -->
+        <div class="modal fade" id="workflowSaveModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Workflow sablon mentése</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="workflowSaveError" class="alert alert-danger small d-none"></div>
+                        <div class="mb-3">
+                            <label for="workflowSaveName" class="form-label">Sablon neve</label>
+                            <input type="text" class="form-control" id="workflowSaveName" placeholder="Pl. Alap beállítások">
+                        </div>
+                        <div class="mb-3">
+                            <label for="workflowSaveDescription" class="form-label">Leírás (opcionális)</label>
+                            <textarea class="form-control" id="workflowSaveDescription" rows="2" placeholder="Rövid megjegyzés a sablonhoz"></textarea>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input type="checkbox" class="form-check-input" id="workflowSaveOverwrite">
+                            <label class="form-check-label" for="workflowSaveOverwrite">Aktuális sablon felülírása</label>
+                        </div>
+                        <div class="small text-muted d-none" id="workflowSaveOverwriteInfo"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                        <button type="button" class="btn btn-primary" id="workflowSaveConfirmBtn">Mentés</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow API Keys Modal -->
+        <div class="modal fade" id="workflowKeysModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">API kulcsok megadása</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
@@ -1955,20 +2233,5 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const PROJECT_NAME = "{{ project.name }}";
-        let workflowPollInterval = null;
-        let workflowLogInterval = null;
-        let currentWorkflowJobId = null;
-        let currentLogJobId = null;
-        let workflowInfoDismissed = false;
-        let workflowKeysModal = null;
-        let pendingWorkflowPayload = null;
-        const workflowKeyFieldMap = {
-            chatgpt: { wrapperId: 'workflowKeyFieldChatgpt', inputId: 'workflowKeyChatgpt', payloadKey: 'chatgpt_api_key' },
-            deepl: { wrapperId: 'workflowKeyFieldDeepl', inputId: 'workflowKeyDeepl', payloadKey: 'deepl_api_key' },
-            huggingface: { wrapperId: 'workflowKeyFieldHuggingface', inputId: 'workflowKeyHuggingface', payloadKey: 'huggingface_token' }
-        };
-
 </body>
 </html>

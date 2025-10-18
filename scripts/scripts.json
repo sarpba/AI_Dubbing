@@ -50,7 +50,7 @@
   },
   {
     "enviroment": "f5-tts",
-    "script": "f5_tts_easy_codex_EQ.py",
+    "script": "TTS/f5_tts_easy_codex_EQ.py",
     "required": [
       {
         "name": "project_name",
@@ -381,7 +381,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "split_segments_by_speaker_codex.py",
+    "script": "DIARIZE/split_segments_by_speaker_codex.py",
     "required": [
       {
         "name": "project",
@@ -734,7 +734,7 @@
   },
       {
     "enviroment": "parakeet-fix",
-    "script": "ASR/parakeet-tdt-0.6b-v3.py",
+    "script": "ASR/parakeet-tdt-0.6b-v2.py",
     "required": [
       {
         "name": "project_name",

@@ -1,0 +1,64 @@
+{
+  "name": "Alapértelmezett workflow",
+  "description": "Automatizált feldolgozási lánc az elérhető szkriptekkel.",
+  "steps": [
+    {
+      "script": "extract_audio_easy_channels.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "separate_audio_easy_codex.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "device": "cuda",
+        "chunk_size": 5
+      }
+    },
+    {
+      "script": "ASR/parakeet-tdt-0.6b-v2.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "split_segments_by_speaker_codex.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "translate_chatgpt_srt_easy_codex.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "output_language": "HU"
+      }
+    },
+    {
+      "script": "f5_tts_easy_codex_EQ.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "norm": "hun",
+        "phonetic_ref": true
+      }
+    },
+    {
+      "script": "merge_chunks_with_background_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "merge_to_video_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "language": "hun"
+      }
+    }
+  ]
+}

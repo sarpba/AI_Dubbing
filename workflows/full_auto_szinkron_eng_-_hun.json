@@ -1,0 +1,48 @@
+{
+  "name": "FULL AUTO SZINKRON ENG -> HUN",
+  "steps": [
+    {
+      "script": "extract_audio_easy_channels.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "separate_audio_easy_codex.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "ASR/parakeet-tdt-0.6b-v3.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "DIARIZE/split_segments_by_speaker_codex.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "add_speaker_field": false,
+        "backup": false,
+        "debug": false,
+        "dry_run": false,
+        "inplace": false
+      }
+    },
+    {
+      "script": "translate_chatgpt_srt_easy_codex.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "collect_normalized_translations.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    }
+  ],
+  "description": "Full automatikus szinron angolról magyarra."
+}

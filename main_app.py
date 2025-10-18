@@ -58,6 +58,7 @@ SCRIPTS_CACHE: Dict[str, Any] = {'mtime': None, 'data': []}
 SCRIPTS_CACHE_LOCK = threading.Lock()
 CONDA_INFO_CACHE: Optional[dict] = None
 CONDA_INFO_LOCK = threading.Lock()
+WORKFLOWS_DIR = Path(app.root_path) / 'workflows'
 
 SCRIPT_KEY_REQUIREMENTS = {
     'translate_chatgpt_srt_easy_codex.py': {'chatgpt'},
@@ -81,67 +82,6 @@ PROJECT_AUTOFILL_OVERRIDES = {
     'project_path': 'project_path',
 }
 SECRET_PARAM_NAMES = {'auth_key', 'hf_token'}
-
-DEFAULT_WORKFLOW_TEMPLATE = [
-    {
-        'script': 'extract_audio_easy_channels.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {}
-    },
-    {
-        'script': 'separate_audio_easy_codex.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {
-            'device': 'cuda',
-            'chunk_size': 5
-        }
-    },
-    {
-        'script': 'Nvidia_asr_eng/parakeet_transcribe_wordts_4.0_easy.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {}
-    },
-    {
-        'script': 'split_segments_by_speaker_codex.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {}
-    },
-    {
-        'script': 'translate_chatgpt_srt_easy_codex.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {
-            'output_language': 'HU'
-        }
-    },
-    {
-        'script': 'f5_tts_easy_codex_EQ.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {
-            'norm': 'hun',
-            'phonetic_ref': True
-        }
-    },
-    {
-        'script': 'merge_chunks_with_background_easy.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {}
-    },
-    {
-        'script': 'merge_to_video_easy.py',
-        'enabled': True,
-        'halt_on_fail': True,
-        'params': {
-            'language': 'hun'
-        }
-    }
-]
 
 
 class WorkflowValidationError(Exception):
@@ -264,6 +204,130 @@ def get_script_definition(script_id: str) -> Optional[Dict[str, Any]]:
         if entry['id'] == script_id:
             return entry
     return None
+
+
+def ensure_workflows_dir() -> Path:
+    try:
+        WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logging.error("Nem sikerült létrehozni a workflows könyvtárat: %s", exc)
+    return WORKFLOWS_DIR
+
+
+def sanitize_workflow_id(name: str) -> str:
+    candidate = secure_filename(name or '')
+    candidate = candidate.replace(' ', '_').strip('_')
+    if not candidate:
+        candidate = datetime.utcnow().strftime("workflow_%Y%m%d_%H%M%S")
+    return candidate.lower()
+
+
+def _load_workflow_file(path: Path) -> Optional[Dict[str, Any]]:
+    try:
+        with path.open('r', encoding='utf-8') as fp:
+            payload = json.load(fp)
+    except (json.JSONDecodeError, OSError) as exc:
+        logging.error("Nem sikerült betölteni a workflow fájlt (%s): %s", path, exc)
+        return None
+
+    if isinstance(payload, list):
+        steps = payload
+        name = path.stem
+        description = None
+    elif isinstance(payload, dict):
+        steps = payload.get('steps')
+        name = payload.get('name') or path.stem
+        description = payload.get('description')
+    else:
+        logging.warning("Ismeretlen workflow formátum: %s", path)
+        return None
+
+    if not isinstance(steps, list):
+        logging.warning("Workflow fájl nem tartalmaz érvényes 'steps' listát: %s", path)
+        return None
+
+    return {
+        'name': name,
+        'description': description,
+        'steps': steps
+    }
+
+
+def list_workflow_templates() -> List[Dict[str, Any]]:
+    directory = ensure_workflows_dir()
+    templates: List[Dict[str, Any]] = []
+    for file_path in sorted(directory.glob('*.json')):
+        template_data = _load_workflow_file(file_path)
+        if not template_data:
+            continue
+        templates.append({
+            'id': file_path.stem,
+            'name': template_data['name'],
+            'filename': file_path.name,
+            'description': template_data.get('description')
+        })
+    return templates
+
+
+def load_workflow_template(template_id: str) -> Optional[Dict[str, Any]]:
+    if not template_id:
+        return None
+    directory = ensure_workflows_dir()
+    candidate = directory / template_id
+    if candidate.suffix.lower() != '.json':
+        candidate = candidate.with_suffix('.json')
+    if not candidate.is_file():
+        logging.warning("A kért workflow sablon nem található: %s", candidate)
+        return None
+    template_data = _load_workflow_file(candidate)
+    if not template_data:
+        return None
+    template_data.update({
+        'id': candidate.stem,
+        'filename': candidate.name
+    })
+    return template_data
+
+
+def save_workflow_template_file(
+    name: str,
+    steps: List[Dict[str, Any]],
+    template_id: Optional[str] = None,
+    overwrite: bool = False,
+    description: Optional[str] = None
+) -> Dict[str, Any]:
+    directory = ensure_workflows_dir()
+    if template_id:
+        file_id = sanitize_workflow_id(Path(template_id).stem)
+    else:
+        file_id = sanitize_workflow_id(name)
+
+    if not file_id:
+        raise WorkflowValidationError("Érvénytelen workflow azonosító.")
+
+    target_path = directory / f"{file_id}.json"
+    if target_path.exists() and not overwrite:
+        raise WorkflowValidationError("Már létezik ugyanilyen nevű workflow. Engedélyezd a felülírást.")
+
+    payload: Dict[str, Any] = {
+        'name': name or file_id,
+        'steps': steps
+    }
+    if description:
+        payload['description'] = description
+
+    try:
+        with target_path.open('w', encoding='utf-8') as fp:
+            json.dump(payload, fp, ensure_ascii=False, indent=2)
+    except OSError as exc:
+        logging.error("Nem sikerült elmenteni a workflow sablont: %s", exc)
+        raise WorkflowValidationError(f"Workflow mentése sikertelen: {exc}")
+
+    return {
+        'id': file_id,
+        'name': payload['name'],
+        'filename': target_path.name
+    }
 
 
 def coerce_bool(value: Any) -> bool:
@@ -790,10 +854,11 @@ def run_workflow_job(job_id, project_name, workflow_payload):
         log_links = build_log_links(sanitized_project, current_config['PROJECT_SUBDIRS']['logs'], log_filename)
         update_workflow_job(job_id, log=log_links)
 
+        template_id = workflow_payload.get('template_id')
         steps = workflow_payload.get('steps') or []
         active_steps = [step for step in steps if step.get('enabled', True)]
         total_steps = len(active_steps)
-        update_workflow_job(job_id, total_steps=total_steps)
+        update_workflow_job(job_id, total_steps=total_steps, template_id=template_id)
 
         keyholder_snapshot = load_keyholder_data()
         executed_steps: List[Dict[str, Any]] = []
@@ -803,6 +868,7 @@ def run_workflow_job(job_id, project_name, workflow_payload):
             'project_path': project_path,
             'keyholder': keyholder_snapshot,
             'config': current_config,
+            'template_id': template_id
         }
 
         for index, step in enumerate(active_steps, start=1):
@@ -1825,6 +1891,62 @@ def workflow_key_status(project_name):
     status['success'] = True
     return jsonify(status)
 
+
+@app.route('/api/workflow-templates', methods=['GET'])
+def get_workflow_templates_api():
+    return jsonify({'success': True, 'templates': list_workflow_templates()})
+
+
+@app.route('/api/workflow-template/<template_id>', methods=['GET'])
+def get_workflow_template_api(template_id):
+    template = load_workflow_template(template_id)
+    if not template:
+        return jsonify({'success': False, 'error': 'Workflow sablon nem található.'}), 404
+    return jsonify({'success': True, 'template': template})
+
+
+@app.route('/api/save-workflow-template', methods=['POST'])
+def save_workflow_template_api():
+    data = request.get_json() or {}
+    steps_payload = data.get('steps')
+    if steps_payload is None:
+        return jsonify({'success': False, 'error': 'Hiányzó workflow lépések.'}), 400
+
+    try:
+        normalized_steps, _, _ = normalize_workflow_steps(steps_payload)
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    overwrite = coerce_bool(data.get('overwrite', False))
+    template_id_raw = (data.get('template_id') or '').strip() or None
+    name = (data.get('name') or '').strip()
+    description = (data.get('description') or '').strip() or None
+
+    if not name and template_id_raw:
+        existing = load_workflow_template(template_id_raw)
+        if existing:
+            name = existing.get('name') or template_id_raw
+            if description is None:
+                description = existing.get('description')
+        else:
+            name = template_id_raw
+
+    if not name:
+        return jsonify({'success': False, 'error': 'A workflow nevének megadása kötelező.'}), 400
+
+    try:
+        saved = save_workflow_template_file(
+            name=name,
+            steps=normalized_steps,
+            template_id=template_id_raw,
+            overwrite=overwrite,
+            description=description
+        )
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    return jsonify({'success': True, 'template': saved})
+
 @app.route('/run-translation', methods=['POST'])
 def run_translation():
     data = request.get_json() or {}
@@ -1906,11 +2028,33 @@ def get_workflow_options_api(project_name):
         return jsonify({'success': False, 'error': 'Projekt nem található'}), 404
 
     scripts = get_scripts_catalog()
+    templates = list_workflow_templates()
     last_workflow = current_config.get('LAST_WORKFLOW')
-    if not isinstance(last_workflow, list) or not last_workflow:
-        defaults = {'workflow': copy.deepcopy(DEFAULT_WORKFLOW_TEMPLATE)}
+    last_template = current_config.get('LAST_WORKFLOW_TEMPLATE')
+
+    defaults_workflow: List[Dict[str, Any]] = []
+    selected_template: Optional[str] = None
+
+    if isinstance(last_workflow, list) and last_workflow:
+        defaults_workflow = copy.deepcopy(last_workflow)
+        if last_template:
+            selected_template = last_template
     else:
-        defaults = {'workflow': copy.deepcopy(last_workflow)}
+        template_data = None
+        if last_template:
+            template_data = load_workflow_template(last_template)
+        elif templates:
+            selected_template = templates[0]['id']
+            template_data = load_workflow_template(selected_template)
+
+        if template_data and isinstance(template_data.get('steps'), list):
+            defaults_workflow = copy.deepcopy(template_data['steps'])
+            selected_template = template_data.get('id') or selected_template
+
+    defaults = {
+        'workflow': defaults_workflow,
+        'selected_template': selected_template
+    }
 
     recent_jobs = sorted(
         get_project_jobs(sanitized_project),
@@ -1923,6 +2067,7 @@ def get_workflow_options_api(project_name):
         'success': True,
         'scripts': scripts,
         'defaults': defaults,
+        'templates': templates,
         'latest_job': latest_job,
         'project': sanitized_project
     })
@@ -1938,6 +2083,8 @@ def run_workflow_api(project_name):
         normalized_steps, required_keys, _ = normalize_workflow_steps(steps_payload)
     except WorkflowValidationError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
+
+    template_id = (data.get('template_id') or '').strip() or None
 
     current_config = get_config_copy()
     workdir_path = current_config['DIRECTORIES']['workdir']
@@ -1968,6 +2115,10 @@ def run_workflow_api(project_name):
 
     updated_config = copy.deepcopy(current_config)
     updated_config['LAST_WORKFLOW'] = normalized_steps
+    if template_id:
+        updated_config['LAST_WORKFLOW_TEMPLATE'] = template_id
+    else:
+        updated_config.pop('LAST_WORKFLOW_TEMPLATE', None)
     persist_config(updated_config)
 
     job_id = uuid.uuid4().hex
@@ -1980,13 +2131,14 @@ def run_workflow_api(project_name):
         'log': None,
         'cancel_requested': False,
         'workflow': normalized_steps,
-        'required_keys': list(required_keys)
+        'required_keys': list(required_keys),
+        'template_id': template_id
     }
     register_workflow_job(job_id, job_data)
 
     thread = threading.Thread(
         target=run_workflow_job,
-        args=(job_id, sanitized_project, {'steps': normalized_steps}),
+        args=(job_id, sanitized_project, {'steps': normalized_steps, 'template_id': template_id}),
         daemon=True
     )
     set_workflow_thread(job_id, thread)
