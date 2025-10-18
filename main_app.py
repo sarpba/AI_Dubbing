@@ -3,9 +3,64 @@ import os
 import json
 import subprocess
 import base64
+import logging
+import threading
+import uuid
+import copy
+from datetime import datetime
 from werkzeug.utils import secure_filename
+import main_bash
 
 app = Flask(__name__)
+
+logging.basicConfig(level=logging.INFO)
+
+config_lock = threading.Lock()
+workflow_lock = threading.Lock()
+workflow_jobs = {}
+workflow_threads = {}
+workflow_events = {}
+
+AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac'}
+VIDEO_EXTENSIONS = {
+    '.mp4', '.mkv', '.avi', '.mov', '.webm', '.wmv', '.flv', '.mts', '.m2ts', '.mpg', '.mpeg'
+}
+AUDIO_MIME_MAP = {
+    '.wav': 'audio/wav',
+    '.mp3': 'audio/mpeg',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+    '.m4a': 'audio/mp4',
+    '.aac': 'audio/aac'
+}
+VIDEO_MIME_MAP = {
+    '.mp4': 'video/mp4',
+    '.mkv': 'video/x-matroska',
+    '.avi': 'video/x-msvideo',
+    '.mov': 'video/quicktime',
+    '.webm': 'video/webm',
+    '.wmv': 'video/x-ms-wmv',
+    '.flv': 'video/x-flv',
+    '.mts': 'video/mp2t',
+    '.m2ts': 'video/mp2t',
+    '.mpg': 'video/mpeg',
+    '.mpeg': 'video/mpeg'
+}
+
+
+def resolve_workspace_path(path_value):
+    if path_value is None:
+        return None
+    if os.path.isabs(path_value):
+        return os.path.abspath(path_value)
+    return os.path.abspath(os.path.join(app.root_path, path_value))
+
+
+def is_subpath(child_path, parent_path):
+    try:
+        return os.path.commonpath([child_path, parent_path]) == os.path.commonpath([parent_path])
+    except ValueError:
+        return False
 
 # Statikus fájlok kiszolgálása a workdir mappából
 @app.route('/workdir/<path:filename>')
@@ -15,6 +70,212 @@ def serve_workdir(filename):
 # Konfiguráció betöltése
 with open('config.json') as config_file:
     config = json.load(config_file)
+
+def get_config_copy():
+    with config_lock:
+        return copy.deepcopy(config)
+
+
+def persist_config(updated_config):
+    global config
+    with config_lock:
+        config = updated_config
+        with open('config.json', 'w', encoding='utf-8') as config_file:
+            json.dump(config, config_file, indent=2, ensure_ascii=False)
+
+
+def list_tts_models(tts_root):
+    if not os.path.isdir(tts_root):
+        return []
+    return sorted(
+        [
+            entry
+            for entry in os.listdir(tts_root)
+            if os.path.isdir(os.path.join(tts_root, entry))
+        ]
+    )
+
+
+def update_workflow_job(job_id, **kwargs):
+    with workflow_lock:
+        if job_id in workflow_jobs:
+            workflow_jobs[job_id].update(kwargs)
+
+
+def get_workflow_job(job_id):
+    with workflow_lock:
+        return workflow_jobs.get(job_id)
+
+
+def get_project_jobs(project_name):
+    sanitized_name = secure_filename(project_name)
+    with workflow_lock:
+        return [
+            job.copy()
+            for job in workflow_jobs.values()
+            if job.get('project') == sanitized_name
+        ]
+
+
+def register_workflow_job(job_id, job_data):
+    with workflow_lock:
+        workflow_jobs[job_id] = job_data
+        workflow_events[job_id] = threading.Event()
+
+
+def set_workflow_thread(job_id, thread):
+    with workflow_lock:
+        workflow_threads[job_id] = thread
+
+
+def get_workflow_thread(job_id):
+    with workflow_lock:
+        return workflow_threads.get(job_id)
+
+
+def get_workflow_event(job_id):
+    with workflow_lock:
+        return workflow_events.get(job_id)
+
+
+def cleanup_workflow_resources(job_id):
+    with workflow_lock:
+        workflow_threads.pop(job_id, None)
+        workflow_events.pop(job_id, None)
+
+
+def request_workflow_cancel(job_id):
+    event = get_workflow_event(job_id)
+    if not event:
+        return False
+    if not event.is_set():
+        event.set()
+    return True
+
+
+def is_cancel_requested(job_id):
+    event = get_workflow_event(job_id)
+    return event.is_set() if event else False
+
+
+def build_log_links(project_name, logs_subdir, log_filename):
+    relative_path = os.path.join(secure_filename(project_name), logs_subdir, log_filename)
+    return {
+        'relative': relative_path,
+        'url': f"/workdir/{relative_path}"
+    }
+
+
+def read_log_tail(log_path, max_bytes=12000):
+    if not os.path.exists(log_path):
+        return ""
+    try:
+        with open(log_path, 'rb') as log_file:
+            log_file.seek(0, os.SEEK_END)
+            file_size = log_file.tell()
+            if file_size <= max_bytes:
+                log_file.seek(0)
+            else:
+                log_file.seek(-max_bytes, os.SEEK_END)
+            data = log_file.read().decode('utf-8', errors='replace')
+            if file_size > max_bytes:
+                newline_index = data.find('\n')
+                if newline_index != -1:
+                    data = data[newline_index + 1:]
+        return data
+    except Exception as exc:
+        logging.error("Log olvasási hiba: %s", exc, exc_info=True)
+        return ""
+
+
+def run_workflow_job(job_id, project_name, params):
+    sanitized_project = secure_filename(project_name)
+    log_handler = None
+    cancel_event = get_workflow_event(job_id)
+
+    def should_stop():
+        return cancel_event.is_set() if cancel_event else False
+
+    try:
+        initial_status = 'cancelling' if should_stop() else 'running'
+        initial_message = 'Megszakítás kérve, előkészítés folyamatban...' if initial_status == 'cancelling' else 'Feldolgozás folyamatban...'
+        update_workflow_job(
+            job_id,
+            status=initial_status,
+            started_at=datetime.utcnow().isoformat(),
+            message=initial_message,
+            cancel_requested=should_stop()
+        )
+
+        current_config = get_config_copy()
+        workdir_path = current_config['DIRECTORIES']['workdir']
+        project_path = os.path.join(workdir_path, sanitized_project)
+
+        main_bash.create_project_structure(project_path, current_config['PROJECT_SUBDIRS'])
+        log_handler, log_file = main_bash.setup_logging(
+            project_path,
+            current_config['PROJECT_SUBDIRS']['logs'],
+            sanitized_project
+        )
+        log_filename = os.path.basename(log_file)
+        log_links = build_log_links(sanitized_project, current_config['PROJECT_SUBDIRS']['logs'], log_filename)
+        update_workflow_job(job_id, log=log_links)
+
+        try:
+            success = main_bash.run_dubbing_workflow(
+                sanitized_project,
+                project_path,
+                current_config,
+                params,
+                should_stop=should_stop
+            )
+            if success == "cancelled":
+                update_workflow_job(
+                    job_id,
+                    status='cancelled',
+                    finished_at=datetime.utcnow().isoformat(),
+                    message='Workflow megszakítva.',
+                    cancel_requested=False
+                )
+            elif success:
+                update_workflow_job(
+                    job_id,
+                    status='completed',
+                    finished_at=datetime.utcnow().isoformat(),
+                    message='Workflow sikeresen lefutott.',
+                    cancel_requested=False
+                )
+            else:
+                update_workflow_job(
+                    job_id,
+                    status='failed',
+                    finished_at=datetime.utcnow().isoformat(),
+                    message='A workflow hibával leállt, részletek a logban.',
+                    cancel_requested=False
+                )
+        finally:
+            if log_handler:
+                main_bash.remove_logging_handler(log_handler)
+    except Exception as exc:
+        logging.exception("Workflow futtatási hiba: %s", exc)
+        if should_stop():
+            update_workflow_job(
+                job_id,
+                status='cancelled',
+                finished_at=datetime.utcnow().isoformat(),
+                message='Workflow megszakítva.',
+                cancel_requested=False
+            )
+        else:
+            update_workflow_job(
+                job_id,
+                status='failed',
+                finished_at=datetime.utcnow().isoformat(),
+                message=f'Hiba: {exc}',
+                cancel_requested=False
+            )
+    finally:
+        cleanup_workflow_resources(job_id)
 
 @app.route('/')
 def index():
@@ -37,26 +298,49 @@ def show_project(project_name):
         'name': project_name,
         'files': {
             'upload': [],
+            'upload_grouped': [],
             'extracted_audio': [],
+            'extracted_audio_grouped': [],
             'separated_audio_background': [],
+            'separated_audio_background_grouped': [],
             'separated_audio_speech': []
         }
     }
+
+    def group_files_by_extension(file_list):
+        grouped = {}
+        for filename in sorted(file_list):
+            ext = os.path.splitext(filename)[1].lower()
+            grouped.setdefault(ext, []).append(filename)
+        grouped_list = []
+        for ext_key in sorted(grouped.keys()):
+            files = grouped[ext_key]
+            display = ext_key[1:].upper() if ext_key else 'Nincs kiterjesztés'
+            grouped_list.append({
+                'extension': ext_key,
+                'display': display,
+                'files': files,
+                'count': len(files)
+            })
+        return grouped_list
 
     # Uploaded files
     upload_dir_path = os.path.join(project_dir, config['PROJECT_SUBDIRS']['upload'])
     if os.path.exists(upload_dir_path):
         project_data['files']['upload'] = os.listdir(upload_dir_path)
+        project_data['files']['upload_grouped'] = group_files_by_extension(project_data['files']['upload'])
 
     # Extracted audio files
     extracted_audio_dir_path = os.path.join(project_dir, config['PROJECT_SUBDIRS']['extracted_audio'])
     if os.path.exists(extracted_audio_dir_path):
         project_data['files']['extracted_audio'] = os.listdir(extracted_audio_dir_path)
+        project_data['files']['extracted_audio_grouped'] = group_files_by_extension(project_data['files']['extracted_audio'])
 
     # Separated background audio files
     separated_bg_audio_dir_path = os.path.join(project_dir, config['PROJECT_SUBDIRS']['separated_audio_background'])
     if os.path.exists(separated_bg_audio_dir_path):
         project_data['files']['separated_audio_background'] = os.listdir(separated_bg_audio_dir_path)
+        project_data['files']['separated_audio_background_grouped'] = group_files_by_extension(project_data['files']['separated_audio_background'])
 
     # Separated speech audio files (and their JSON transcriptions)
     speech_files_data = []
@@ -97,6 +381,10 @@ def show_project(project_name):
     return render_template('project.html', 
                          project=project_data,
                          config=config,
+                         audio_extensions=AUDIO_EXTENSIONS,
+                         video_extensions=VIDEO_EXTENSIONS,
+                         audio_mime_map=AUDIO_MIME_MAP,
+                         video_mime_map=VIDEO_MIME_MAP,
                          can_review=can_review,
                          has_transcribable_audio=has_transcribable_audio)
 
@@ -685,33 +973,260 @@ def get_api_key():
 
 @app.route('/run-translation', methods=['POST'])
 def run_translation():
-    data = request.get_json()
+    data = request.get_json() or {}
     input_dir = data.get('input_dir')
     output_dir = data.get('output_dir')
-    input_language = data.get('input_language')
-    output_language = data.get('output_language')
-    auth_key = data.get('auth_key')
+    input_language = (data.get('input_language') or '').strip()
+    output_language = (data.get('output_language') or '').strip()
+    auth_key = (data.get('auth_key') or '').strip()
 
     if not all([input_dir, output_dir, input_language, output_language, auth_key]):
         return jsonify({'success': False, 'error': 'Minden mező kitöltése kötelező'}), 400
 
     try:
-        # Parancs összeállítása
-        cmd = [
-            'python', 'scripts/translate.py',
-            '-input_dir', input_dir,
-            '-output_dir', output_dir,
-            '-input_language', input_language,
-            '-output_language', output_language,
-            '-auth_key', auth_key
-        ]
+        current_config = get_config_copy()
+        workdir_path = resolve_workspace_path(current_config['DIRECTORIES']['workdir'])
+        input_dir_abs = resolve_workspace_path(input_dir)
+        output_dir_abs = resolve_workspace_path(output_dir)
 
-        # Parancs futtatása aszinkron módon
+        if not (input_dir_abs and output_dir_abs):
+            return jsonify({'success': False, 'error': 'Érvénytelen könyvtár útvonal'}), 400
+
+        if not is_subpath(input_dir_abs, workdir_path) or not is_subpath(output_dir_abs, workdir_path):
+            return jsonify({'success': False, 'error': 'A megadott könyvtárak a workdir-en kívülre mutatnak'}), 400
+
+        project_path = os.path.dirname(input_dir_abs)
+        project_name = os.path.basename(project_path)
+        if not project_name:
+            return jsonify({'success': False, 'error': 'Projekt neve nem meghatározható az útvonalból'}), 400
+        if os.path.dirname(output_dir_abs) != project_path:
+            return jsonify({'success': False, 'error': 'A bemeneti és kimeneti könyvtárak nem ugyanahhoz a projekthez tartoznak'}), 400
+
+        upload_dir = os.path.join(project_path, current_config['PROJECT_SUBDIRS']['upload'])
+        target_suffix = f"{output_language.lower()}.srt"
+        has_target_srt = False
+        if os.path.isdir(upload_dir):
+            for filename in os.listdir(upload_dir):
+                if filename.lower().endswith(target_suffix):
+                    has_target_srt = True
+                    break
+
+        if has_target_srt:
+            cmd = [
+                'python', 'scripts/translate_chatgpt_srt_easy_codex.py',
+                '-project_name', project_name,
+                '-input_language', input_language,
+                '-output_language', output_language,
+                '-auth_key', auth_key
+            ]
+            mode = 'srt_align'
+        else:
+            cmd = [
+                'python', 'scripts/old3/translate.py',
+                '-input_dir', input_dir_abs,
+                '-output_dir', output_dir_abs,
+                '-input_language', input_language,
+                '-output_language', output_language,
+                '-auth_key', auth_key
+            ]
+            mode = 'deepl'
+
         subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        return jsonify({'success': True, 'message': 'Fordítás elindult'})
+        return jsonify({
+            'success': True,
+            'message': 'Fordítás elindult',
+            'mode': mode,
+            'script': cmd[1]
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/workflow-options/<project_name>', methods=['GET'])
+def get_workflow_options_api(project_name):
+    sanitized_project = secure_filename(project_name)
+    current_config = get_config_copy()
+    workdir_path = current_config['DIRECTORIES']['workdir']
+    project_dir = os.path.join(workdir_path, sanitized_project)
+
+    if not os.path.isdir(project_dir):
+        return jsonify({'success': False, 'error': 'Projekt nem található'}), 404
+
+    tts_root = current_config['DIRECTORIES']['TTS']
+    models = list_tts_models(tts_root)
+    last_params = current_config.get('LAST_USED_PARAMS', {}) or {}
+
+    def extract_model_name(path_value):
+        if not path_value:
+            return None
+        return os.path.basename(os.path.normpath(path_value))
+
+    defaults = {
+        'translation_context': last_params.get('translation_context', ''),
+        'tts_model': extract_model_name(last_params.get('tts_model_path')),
+        'tts_model_run4': extract_model_name(last_params.get('tts_model_path_run4')),
+        'lang_code': last_params.get('lang_code', 'hun')
+    }
+
+    if not defaults['tts_model'] and models:
+        defaults['tts_model'] = models[0]
+    if not defaults['tts_model_run4'] and models:
+        defaults['tts_model_run4'] = models[0]
+
+    recent_jobs = sorted(
+        get_project_jobs(sanitized_project),
+        key=lambda job: job.get('started_at') or job.get('created_at') or '',
+        reverse=True
+    )
+    latest_job = recent_jobs[0] if recent_jobs else None
+
+    return jsonify({
+        'success': True,
+        'models': models,
+        'defaults': defaults,
+        'languages': ['hun', 'eng', 'ger', 'fra'],
+        'latest_job': latest_job
+    })
+
+
+@app.route('/api/run-workflow/<project_name>', methods=['POST'])
+def run_workflow_api(project_name):
+    sanitized_project = secure_filename(project_name)
+    data = request.get_json() or {}
+
+    translation_context = (data.get('translation_context') or '').strip()
+    tts_model = data.get('tts_model')
+    tts_model_run4 = data.get('tts_model_run4')
+    lang_code = (data.get('lang_code') or '').strip()
+
+    if not translation_context:
+        return jsonify({'success': False, 'error': 'A fordítási kontextus megadása kötelező.'}), 400
+    if not tts_model or not tts_model_run4:
+        return jsonify({'success': False, 'error': 'Mindkét TTS modell kiválasztása kötelező.'}), 400
+    if not lang_code:
+        return jsonify({'success': False, 'error': 'A nyelvi kód megadása kötelező.'}), 400
+
+    current_config = get_config_copy()
+    workdir_path = current_config['DIRECTORIES']['workdir']
+    project_dir = os.path.join(workdir_path, sanitized_project)
+    if not os.path.isdir(project_dir):
+        return jsonify({'success': False, 'error': 'A projekt nem található.'}), 404
+
+    with workflow_lock:
+        active_for_project = [
+            job_id for job_id, job in workflow_jobs.items()
+            if job.get('project') == sanitized_project and job.get('status') in ('queued', 'running', 'cancelling')
+        ]
+    if active_for_project:
+        return jsonify({'success': False, 'error': 'Már fut egy workflow ehhez a projekthez.'}), 409
+
+    tts_root = current_config['DIRECTORIES']['TTS']
+    model_path = os.path.join(tts_root, tts_model)
+    model_path_run4 = os.path.join(tts_root, tts_model_run4)
+
+    if not os.path.isdir(model_path):
+        return jsonify({'success': False, 'error': f'A kiválasztott modell nem létezik: {model_path}'}), 400
+    if not os.path.isdir(model_path_run4):
+        return jsonify({'success': False, 'error': f'A 4. futtatás modellje nem létezik: {model_path_run4}'}), 400
+
+    params = {
+        'translation_context': translation_context,
+        'tts_model_path': model_path,
+        'tts_model_path_run4': model_path_run4,
+        'lang_code': lang_code
+    }
+
+    updated_config = copy.deepcopy(current_config)
+    updated_config['LAST_USED_PARAMS'] = params
+    persist_config(updated_config)
+
+    job_id = uuid.uuid4().hex
+    job_data = {
+        'job_id': job_id,
+        'project': sanitized_project,
+        'status': 'queued',
+        'created_at': datetime.utcnow().isoformat(),
+        'message': 'Feladat sorban áll.',
+        'log': None,
+        'cancel_requested': False,
+        'params': {
+            'translation_context': translation_context,
+            'tts_model': tts_model,
+            'tts_model_run4': tts_model_run4,
+            'lang_code': lang_code
+        }
+    }
+    register_workflow_job(job_id, job_data)
+
+    thread = threading.Thread(target=run_workflow_job, args=(job_id, sanitized_project, params), daemon=True)
+    set_workflow_thread(job_id, thread)
+    thread.start()
+
+    return jsonify({'success': True, 'job_id': job_id})
+
+
+@app.route('/api/stop-workflow/<job_id>', methods=['POST'])
+def stop_workflow(job_id):
+    job = get_workflow_job(job_id)
+    if not job:
+        return jsonify({'success': False, 'error': 'Feladat nem található.'}), 404
+
+    if job.get('status') in ('completed', 'failed', 'cancelled'):
+        return jsonify({'success': False, 'error': 'A feladat már befejeződött.'}), 400
+
+    if job.get('cancel_requested'):
+        return jsonify({'success': True, 'message': 'Megszakítás már folyamatban.'})
+
+    if not request_workflow_cancel(job_id):
+        return jsonify({'success': False, 'error': 'A feladat már nem fut.'}), 409
+
+    update_workflow_job(
+        job_id,
+        status='cancelling',
+        message='Megszakítás kérése folyamatban...',
+        cancel_requested=True
+    )
+    return jsonify({'success': True, 'message': 'Megszakítás kérve. Várakozás a leállásra.'})
+
+
+@app.route('/api/workflow-log/<job_id>', methods=['GET'])
+def get_workflow_log(job_id):
+    job = get_workflow_job(job_id)
+    if not job:
+        return jsonify({'success': False, 'error': 'Feladat nem található.'}), 404
+
+    log_info = job.get('log') or {}
+    log_relative = log_info.get('relative')
+    log_text = ""
+    log_available = False
+
+    if log_relative:
+        current_config = get_config_copy()
+        workdir_path = current_config['DIRECTORIES']['workdir']
+        absolute_path = resolve_workspace_path(os.path.join(workdir_path, log_relative))
+        if absolute_path and os.path.exists(absolute_path):
+            log_available = True
+            log_text = read_log_tail(absolute_path)
+
+    completed = job.get('status') in ('completed', 'failed', 'cancelled')
+
+    return jsonify({
+        'success': True,
+        'log': log_text,
+        'log_available': log_available,
+        'status': job.get('status'),
+        'completed': completed,
+        'cancel_requested': job.get('cancel_requested', False)
+    })
+
+
+@app.route('/api/workflow-status/<job_id>', methods=['GET'])
+def get_workflow_status(job_id):
+    job = get_workflow_job(job_id)
+    if not job:
+        return jsonify({'success': False, 'error': 'Feladat nem található'}), 404
+    return jsonify({'success': True, 'job': job})
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

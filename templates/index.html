@@ -68,6 +68,25 @@
                                     <label for="videoFile" class="form-label">Videó fájl</label>
                                     <input type="file" class="form-control" id="videoFile" name="file" accept="video/*" required>
                                 </div>
+<<<<<<< ours
+                                <div class="mb-3">
+                                    <label for="subtitleFile" class="form-label">Felirat fájl (opcionális)</label>
+                                    <input type="file" class="form-control" id="subtitleFile" name="subtitleFile" accept=".srt">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="subtitleSuffix" class="form-label">Felirat kiegészítés (pl. _hu, _eng)</label>
+                                    <input type="text" class="form-control" id="subtitleSuffix" name="subtitleSuffix" placeholder="_hu">
+                                    <small class="text-muted">A felirat neve a videó nevéhez igazodik, a megadott kiegészítéssel.</small>
+                                </div>
+                                <div class="mb-3 d-none" id="uploadProgressContainer">
+                                    <label class="form-label">Feltöltés állapota</label>
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="uploadProgressBar" role="progressbar" style="width: 0%" aria-valuemin="0" aria-valuemax="100">0%</div>
+                                    </div>
+                                    <div class="small text-muted mt-1" id="uploadProgressText"></div>
+                                </div>
+=======
+>>>>>>> theirs
         </div>
     </div>
 
@@ -111,6 +130,98 @@
         }
 
         // Új projekt létrehozása
+<<<<<<< ours
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadProgressContainer = document.getElementById('uploadProgressContainer');
+        const uploadProgressBar = document.getElementById('uploadProgressBar');
+        const uploadProgressText = document.getElementById('uploadProgressText');
+
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const projectName = document.getElementById('projectName').value.trim();
+            if (!projectName) {
+                alert('Add meg a projekt nevét!');
+                return;
+            }
+
+            const videoInput = document.getElementById('videoFile');
+            if (!videoInput.files.length) {
+                alert('Válassz videó fájlt!');
+                return;
+            }
+
+            const subtitleInput = document.getElementById('subtitleFile');
+            if (subtitleInput.files.length && !subtitleInput.files[0].name.toLowerCase().endswith('.srt')) {
+                alert('Csak .srt felirat fájl tölthető fel.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('projectName', projectName);
+            formData.append('file', videoInput.files[0]);
+
+            const subtitleSuffix = document.getElementById('subtitleSuffix').value.trim();
+            if (subtitleSuffix) {
+                formData.append('subtitleSuffix', subtitleSuffix);
+            }
+            if (subtitleInput.files.length) {
+                formData.append('subtitleFile', subtitleInput.files[0]);
+            }
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/upload-video', true);
+
+        uploadProgressContainer.classList.remove('d-none');
+            uploadProgressBar.style.width = '0%';
+            uploadProgressBar.textContent = '0%';
+            uploadProgressText.textContent = 'Feltöltés előkészítése...';
+
+            xhr.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable) {
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    uploadProgressBar.style.width = percent + '%';
+                    uploadProgressBar.textContent = percent + '%';
+                    uploadProgressText.textContent = `Feltöltve: ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`;
+                }
+            });
+
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    try {
+                        const result = JSON.parse(xhr.responseText || '{}');
+                        if (xhr.status >= 200 && xhr.status < 300 && result.success !== false) {
+                            uploadProgressBar.classList.add('bg-success');
+                            uploadProgressText.textContent = 'Feltöltés befejezve. oldal frissítése...';
+                            setTimeout(() => location.reload(), 800);
+                        } else {
+                            throw new Error(result.error || 'Ismeretlen hiba történt a feltöltés közben.');
+                        }
+                    } catch (error) {
+                        console.error('Hiba:', error);
+                        uploadProgressBar.classList.add('bg-danger');
+                        uploadProgressText.textContent = error.message;
+                        alert('Hiba történt a feltöltés során: ' + error.message);
+                    }
+                }
+            };
+
+            xhr.onerror = function() {
+                uploadProgressBar.classList.add('bg-danger');
+                uploadProgressText.textContent = 'Hálózati hiba történt a feltöltés során.';
+                alert('Hálózati hiba történt a feltöltés során.');
+            };
+
+            xhr.send(formData);
+        });
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+=======
         document.getElementById('uploadForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             const formData = new FormData(this);
@@ -135,6 +246,7 @@
                 alert('Hiba történt a feltöltés során');
             }
         });
+>>>>>>> theirs
     </script>
 </body>
 </html>
