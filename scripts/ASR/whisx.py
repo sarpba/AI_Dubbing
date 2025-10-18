@@ -1,4 +1,5 @@
 import os
+import json
 import argparse
 import whisperx
 import gc
@@ -6,6 +7,7 @@ import time
 import datetime
 import sys
 from multiprocessing import Process, Queue
+from pathlib import Path
 import torch
 import subprocess
 
@@ -108,7 +110,6 @@ def worker(gpu_id, task_queue, hf_token, language_code):
 
             # 5. Save the results
             with open(json_file, "w", encoding="utf-8") as f:
-                import json
                 json.dump(result, f, ensure_ascii=False, indent=4)
 
             # 6. Clean up to free GPU memory
@@ -178,18 +179,46 @@ def transcribe_directory(directory, gpu_ids, hf_token, language_code):
     for p in processes:
         p.join()
 
+
+def load_config_and_get_paths(project_name: str) -> str:
+    """Betölti a config.json-t, és visszaadja a projekt feldolgozandó mappájának elérési útját."""
+    try:
+        project_root = Path(__file__).resolve().parent.parent.parent
+        config_path = project_root / "config.json"
+
+        if not config_path.is_file():
+            raise FileNotFoundError(f"A 'config.json' nem található a projekt gyökerében: {project_root}")
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        workdir = project_root / config["DIRECTORIES"]["workdir"]
+        input_subdir = config["PROJECT_SUBDIRS"]["separated_audio_speech"]
+        processing_path = workdir / project_name / input_subdir
+
+        if not processing_path.is_dir():
+            raise FileNotFoundError(f"A feldolgozandó mappa nem létezik: {processing_path}")
+
+        print("Projekt beállítások betöltve:")
+        print(f"  - Projekt név:     {project_name}")
+        print(f"  - Feldolgozandó mappa (bemenet és kimenet): {processing_path}")
+
+        return str(processing_path)
+    except (json.JSONDecodeError, KeyError, FileNotFoundError) as e:
+        print(f"Hiba a konfiguráció betöltése vagy az útvonalak meghatározása közben: {e}")
+        print("Kérlek, ellenőrizd a 'config.json' fájlt és a projekt mappaszerkezetét.")
+        sys.exit(1)
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Transcribe audio files in a directory and its subdirectories using WhisperX with multiple GPUs.")
-    parser.add_argument("directory", type=str, help="The directory containing the audio files.")
+    parser = argparse.ArgumentParser(description="Transcribe audio files in a project-specific directory (config.json alapú) WhisperX és több GPU használatával.")
+    parser.add_argument("-p", "--project-name", required=True, help="A projekt neve (a 'workdir' alatti mappa), amit fel kell dolgozni.")
     parser.add_argument('--gpus', type=str, default=None, help="GPU indices to use, separated by commas (e.g., '0,2,3')")
     parser.add_argument('--hf_token', type=str, default=None, help="Hugging Face Access Token to access PyAnnote gated models. If not provided, diarization will be skipped.")
     parser.add_argument('--language', type=str, default=None, help="Optional language code (e.g., 'en', 'es'). If not provided, language detection is used.")
 
     args = parser.parse_args()
 
-    if not os.path.isdir(args.directory):
-        print(f"Error: The specified directory does not exist: {args.directory}")
-        sys.exit(1)
+    processing_directory = load_config_and_get_paths(args.project_name)
 
     # Determine GPUs to use
     if args.gpus:
@@ -214,4 +243,4 @@ if __name__ == "__main__":
             sys.exit(1)
 
     # Start transcription with the determined GPUs and optional language code
-    transcribe_directory(args.directory, gpu_ids, args.hf_token, args.language)
+    transcribe_directory(processing_directory, gpu_ids, args.hf_token, args.language)

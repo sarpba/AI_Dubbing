@@ -234,8 +234,12 @@
     "script": "ASR/whisx.py",
     "required": [
       {
-        "name": "directory",
-        "type": "positional",
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option",
         "default": null
       }
     ],
