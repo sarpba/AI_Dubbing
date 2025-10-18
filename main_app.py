@@ -1043,6 +1043,31 @@ def show_project(project_name):
             })
         return grouped_list
 
+    def build_directory_tree(current_path, relative_path=''):
+        entries = []
+        try:
+            for name in sorted(os.listdir(current_path)):
+                if name.startswith('.'):
+                    continue
+                full_path = os.path.join(current_path, name)
+                rel_path = os.path.join(relative_path, name) if relative_path else name
+                if os.path.isdir(full_path):
+                    entries.append({
+                        'name': name,
+                        'type': 'directory',
+                        'path': rel_path.replace('\\', '/'),
+                        'children': build_directory_tree(full_path, rel_path)
+                    })
+                else:
+                    entries.append({
+                        'name': name,
+                        'type': 'file',
+                        'path': rel_path.replace('\\', '/')
+                    })
+        except Exception as exc:
+            logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", current_path, exc)
+        return entries
+
     # Uploaded files
     upload_dir_path = os.path.join(project_dir, config['PROJECT_SUBDIRS']['upload'])
     if os.path.exists(upload_dir_path):
@@ -1099,6 +1124,7 @@ def show_project(project_name):
     
     return render_template('project.html', 
                          project=project_data,
+                         project_tree=build_directory_tree(project_dir),
                          config=config,
                          audio_extensions=AUDIO_EXTENSIONS,
                          video_extensions=VIDEO_EXTENSIONS,
