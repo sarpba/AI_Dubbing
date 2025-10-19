@@ -2,7 +2,7 @@
 
 **Futtatási környezet:** `sync`  
 **API:** `huggingface`  
-**Belépési pont:** `DIARIZE/split_segments_by_speaker_codex.py`
+**Belépési pont:** `DIARIZE/split_segments_by_speaker.py`
 
 A szkript a pyannote `speaker-diarization-3.1` pipeline-ját használja a már meglévő időzített szegmensek beszélőkhöz rendelésére. A meglévő JSON szegmenseket kibővíti vagy szétválasztja a diarizáció eredménye alapján, opcionális biztonsági mentéssel és naplózással.
 

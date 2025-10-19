@@ -2,7 +2,7 @@
 
 **Futtatási környezet:** `sync`  
 **API:** `chatgpt`  
-**Belépési pont:** `TRANSLATE/translate_chatgpt_srt_easy_codex.py`
+**Belépési pont:** `TRANSLATE/translate_chatgpt_srt_easy.py`
 
 A szkript a ChatGPT API-t használja arra, hogy a projekt időzített transzkripcióját cél nyelvre fordítsa, miközben opcionálisan figyelembe veszi az eredeti feliratot (SRT) kontextusként. A kulcsokat a `keyholder.json` fájlban tárolja, és gondoskodik a chunkolt feldolgozásról a tokénlimit elkerülésére.
 

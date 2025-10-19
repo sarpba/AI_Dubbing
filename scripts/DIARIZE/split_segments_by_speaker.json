@@ -1,7 +1,7 @@
 {
   "enviroment": "sync",
   "api": "huggingface",
-  "script": "DIARIZE/split_segments_by_speaker_codex.py",
+  "script": "DIARIZE/split_segments_by_speaker.py",
   "description": "A beszéd szegmenseket beszélőnként szétválasztja.",
   "required": [
     {

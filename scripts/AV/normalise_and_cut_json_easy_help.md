@@ -1,7 +1,7 @@
 # normalise_and_cut_json_easy_codex – konfigurációs útmutató
 
 **Futtatási környezet:** `sync`  
-**Belépési pont:** `AV/normalise_and_cut_json_easy_codex.py`
+**Belépési pont:** `AV/normalise_and_cut_json_easy.py`
 
 A szkript a TTS által generált szinkron szegmenseket hangerőben az eredeti beszédhez igazítja, és – ha szükséges – a diarizáció alapján levágja a szegmensek elejét a pontosabb illeszkedés érdekében.
 
