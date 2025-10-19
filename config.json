@@ -38,7 +38,7 @@
       "params": {}
     },
     {
-      "script": "AV/separate_audio_easy_codex.py",
+      "script": "AV/separate_audio_easy.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {
@@ -62,13 +62,13 @@
       "params": {}
     },
     {
-      "script": "DIARIZE/split_segments_by_speaker_codex.py",
+      "script": "DIARIZE/split_segments_by_speaker.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
-      "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
+      "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {
@@ -98,7 +98,7 @@
       "enabled": true
     },
     {
-      "script": "TTS/f5_tts_easy_codex_EQ.py",
+      "script": "TTS/f5_tts_easy_EQ.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {
@@ -131,7 +131,7 @@
       }
     },
     {
-      "script": "AV/normalise_and_cut_json_easy_codex.py",
+      "script": "AV/normalise_and_cut_json_easy.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {}
