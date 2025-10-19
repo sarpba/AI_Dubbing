@@ -45,6 +45,9 @@ except ImportError:
 # --- VAD (Voice Activity Detection) logika ---
 ALLOWED_SAMPLE_RATES = (8000, 16000, 32000, 48000)
 TARGET_SAMPLE_RATE = 16000
+TAIL_SILENCE_MS = 100  # mindig hagyjunk 0.1s csendet a fájlok végén
+TRIM_SILENCE_THRESHOLD_DB = -50.0
+TRIM_SILENCE_CHUNK_MS = 5
 
 def convert_to_allowed_format(path):
     temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -91,6 +94,50 @@ def get_speech_start_time(audio_path):
     return None
 
 # --- Fájlfeldolgozó függvények ---
+def trim_trailing_silence(audio: AudioSegment,
+                          tail_silence_ms: int = TAIL_SILENCE_MS,
+                          silence_threshold_db: float = TRIM_SILENCE_THRESHOLD_DB,
+                          chunk_size_ms: int = TRIM_SILENCE_CHUNK_MS):
+    """
+    Eltávolítja a fájl végén lévő csendet úgy, hogy mindig maradjon tail_silence_ms csend.
+    """
+    tail_silence_ms = max(0, int(round(tail_silence_ms)))
+    chunk_size_ms = max(1, int(round(chunk_size_ms)))
+    trim_point = len(audio)
+
+    def is_silent(segment: AudioSegment) -> bool:
+        if len(segment) == 0:
+            return True
+        if segment.rms == 0:
+            return True
+        level = segment.dBFS
+        if math.isinf(level):
+            return True
+        return level < silence_threshold_db
+
+    while trim_point > 0:
+        start = max(0, trim_point - chunk_size_ms)
+        if not is_silent(audio[start:trim_point]):
+            break
+        trim_point = start
+
+    existing_tail = len(audio) - trim_point
+    trim_amount = max(0, existing_tail - tail_silence_ms)
+    padded_ms = 0
+
+    if trim_amount > 0:
+        trimmed_audio = audio[:len(audio) - trim_amount]
+    else:
+        trimmed_audio = audio
+
+    remaining_tail = existing_tail - trim_amount
+    if remaining_tail < tail_silence_ms:
+        padded_ms = tail_silence_ms - remaining_tail
+        if padded_ms > 0:
+            trimmed_audio += AudioSegment.silent(duration=padded_ms)
+
+    return trimmed_audio, trim_amount, padded_ms
+
 def process_single_file_timing(input_audio_path, reference_audio_path, delete_empty):
     result = {"status": "skipped_timing", "time_diff": 0.0, "action": "none"}
     input_start_time = get_speech_start_time(input_audio_path)
@@ -106,20 +153,22 @@ def process_single_file_timing(input_audio_path, reference_audio_path, delete_em
         return result
     time_difference = reference_start_time - input_start_time
     result["time_diff"] = time_difference
-    if abs(time_difference) < 0.001:
-        result["status"] = "success"
-        return result
     try:
         audio = AudioSegment.from_file(input_audio_path)
     except Exception:
         result["status"] = "error_loading_audio"
         return result
     try:
-        if time_difference > 0:
+        adjusted_audio = audio
+        needs_export = False
+        tolerance = 0.001
+        if time_difference > tolerance:
             result["action"] = "added_silence"
-            adjusted_audio = AudioSegment.silent(duration=time_difference * 1000) + audio
-        else:
-            trim_duration = abs(time_difference) * 1000
+            silence_duration_ms = int(round(time_difference * 1000))
+            adjusted_audio = AudioSegment.silent(duration=silence_duration_ms) + audio
+            needs_export = True
+        elif time_difference < -tolerance:
+            trim_duration = int(round(abs(time_difference) * 1000))
             if trim_duration >= len(audio):
                 result["status"] = "error_trim_too_long"
                 if delete_empty and os.path.exists(input_audio_path):
@@ -127,8 +176,18 @@ def process_single_file_timing(input_audio_path, reference_audio_path, delete_em
                 return result
             result["action"] = "trimmed_silence"
             adjusted_audio = audio[trim_duration:]
-        file_format = os.path.splitext(input_audio_path)[1].lstrip('.').lower()
-        adjusted_audio.export(input_audio_path, format=file_format if file_format in ['mp3', 'wav'] else 'wav')
+            needs_export = True
+
+        trimmed_audio, trimmed_ms, padded_ms = trim_trailing_silence(adjusted_audio)
+        if trimmed_ms > 0 or padded_ms > 0:
+            result["tail_trimmed_ms"] = trimmed_ms
+            result["tail_padded_ms"] = padded_ms
+            adjusted_audio = trimmed_audio
+            needs_export = True
+
+        if needs_export:
+            file_format = os.path.splitext(input_audio_path)[1].lstrip('.').lower()
+            adjusted_audio.export(input_audio_path, format=file_format if file_format in ['mp3', 'wav'] else 'wav')
         result["status"] = "success"
     except Exception:
         result["status"] = "error_exporting"

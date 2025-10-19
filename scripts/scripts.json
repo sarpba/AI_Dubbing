@@ -303,6 +303,53 @@
   },
   {
     "enviroment": "sync",
+    "script": "AV/merge_chunks_with_background_beta.py",
+    "description": "A korábban generált szinkron darabokat időrendben, egymás után illeszti és rákeveri a háttér audiót.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "narrator",
+        "flags": [
+          "-narrator",
+          "--narrator"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "background_volume",
+        "flags": [
+          "--background-volume"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "max_speedup",
+        "flags": [
+          "--max-speedup"
+        ],
+        "type": "option",
+        "default": 10
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
     "script": "AV/merge_chunks_with_background_easy.py",
     "description": "A korábban generált szinkron darabokat összemuxolja a háttér audióval.",
     "required": [

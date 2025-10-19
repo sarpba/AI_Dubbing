@@ -1,45 +1,15 @@
 {
-  "CONFIG": {
-    "default_tts_engine": "f5-tts",
-    "default_tts_modell_dir": "hun_v7_3",
-    "default_translater_engine": "TTS",
-    "default_source_lang": "en",
-    "default_target_lang": "hu"
-  },
-  "DIRECTORIES": {
-    "normalisers": "normalisers",
-    "scripts": "scripts",
-    "TTS": "TTS",
-    "workdir": "workdir"
-  },
-  "PROJECT_SUBDIRS": {
-    "upload": "1_upload",
-    "extracted_audio": "1.5_extracted_audio",
-    "separated_audio_background": "2_separated_audio_background",
-    "separated_audio_speech": "2_separated_audio_speech",
-    "translated": "4_translated_json",
-    "translated_splits": "5_translated_splits",
-    "noice_splits": "6_noice_splits",
-    "film_dubbing": "7_film_dubbing",
-    "download": "8_Download",
-    "logs": "logs"
-  },
-  "LAST_USED_PARAMS": {
-    "translation_context": "Foundation TV series",
-    "tts_model_path": "TTS/hun_v1_v3",
-    "tts_model_path_run4": "TTS/hun_v5",
-    "lang_code": "hun"
-  },
-  "LAST_WORKFLOW": [
+  "name": "Magyar nyelvű narrált videó készítés",
+  "steps": [
     {
       "script": "AV/extract_audio_easy_channels.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AV/separate_audio_easy_codex.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "chunk_size": "5",
@@ -50,14 +20,8 @@
       }
     },
     {
-      "script": "ASR/whisx.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
       "script": "ASR/parakeet-tdt-0.6b-v2.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
@@ -77,7 +41,7 @@
     },
     {
       "script": "TRANSLATE/translate.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "auth_key": "base64:YzM4NWM1NmItNmIyMy00OTE3LTkzMDktZTBjZDJjYTc5YWE5OmZ4",
@@ -115,7 +79,7 @@
     },
     {
       "script": "TTS/f5_tts_narrator.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "debug": true,
@@ -132,7 +96,7 @@
     },
     {
       "script": "AV/normalise_and_cut_json_easy_codex.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
@@ -153,8 +117,8 @@
       "params": {
         "background_volume": "80",
         "debug": false,
-        "narrator": true,
-        "max_speedup": "15"
+        "max_speedup": "15",
+        "narrator": true
       }
     },
     {
@@ -166,5 +130,5 @@
       }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "default"
+  "description": "Automatizált feldolgozási lánc az elérhető szkriptekkel."
 }
