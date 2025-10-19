@@ -11,6 +11,23 @@
   ],
   "optional": [
     {
+      "name": "narrator",
+      "flags": [
+        "-narrator",
+        "--narrator"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "background_volume",
+      "flags": [
+        "--background-volume"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
       "name": "debug",
       "flags": [
         "--debug"

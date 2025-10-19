@@ -1,5 +1,6 @@
 {
   "enviroment": "sync",
+  "api": "huggingface",
   "script": "ASR/whisx.py",
   "required": [
     {

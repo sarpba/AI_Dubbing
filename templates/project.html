@@ -35,6 +35,15 @@
             margin-left: 1rem;
             padding-left: 0.5rem;
         }
+        .script-api-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+        .script-api-highlight {
+            color: #b8860b;
+            font-weight: 600;
+        }
     </style>
     <script>
         const PROJECT_NAME = "{{ project.name }}";
@@ -61,6 +70,8 @@
             deepl: { wrapperId: 'workflowKeyFieldDeepl', inputId: 'workflowKeyDeepl', payloadKey: 'deepl_api_key' },
             huggingface: { wrapperId: 'workflowKeyFieldHuggingface', inputId: 'workflowKeyHuggingface', payloadKey: 'huggingface_token' }
         };
+        const SECRET_PARAM_NAMES = {{ secret_param_names|tojson }};
+        const SECRET_VALUE_PLACEHOLDER = '***';
 
         const workflowWidgets = [
             {
@@ -330,20 +341,29 @@
             if (script && script.parameters) {
                 script.parameters.forEach(param => {
                     const value = step.params ? step.params[param.name] : undefined;
+                    const hasValue = value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
                     if (param.type === 'flag') {
                         if (value === true) {
                             summary.push(`${param.name}=on`);
                         } else if (value === false) {
                             summary.push(`${param.name}=off`);
                         }
-                    } else if (value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '')) {
+                    } else if (param.secret) {
+                        if (hasValue) {
+                            summary.push(`${param.name}=${SECRET_VALUE_PLACEHOLDER}`);
+                        }
+                    } else if (hasValue) {
                         summary.push(`${param.name}=${value}`);
                     }
                 });
             }
             Object.entries(step.params || {}).forEach(([key, value]) => {
                 if (!script || !(script.parameters || []).some(param => param.name === key)) {
-                    summary.push(`${key}=${value}`);
+                    if (SECRET_PARAM_NAMES.includes(key)) {
+                        summary.push(`${key}=${SECRET_VALUE_PLACEHOLDER}`);
+                    } else if (value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '')) {
+                        summary.push(`${key}=${value}`);
+                    }
                 }
             });
             return summary.length ? summary.join(', ') : 'Nincs megadott paraméter';
@@ -845,10 +865,19 @@
                     infoCell.append(buttonRow);
                 } else {
                     const titleWrap = document.createElement('div');
+                    const titleRow = document.createElement('div');
+                    titleRow.className = 'd-flex align-items-center gap-2 flex-wrap';
                     const title = document.createElement('div');
-                    title.className = 'fw-semibold';
+                    title.className = 'fw-semibold mb-0';
                     title.textContent = (script && script.display_name) || step.script;
-                    titleWrap.append(title);
+                    titleRow.append(title);
+                    if (script && script.api) {
+                        const apiBadge = document.createElement('span');
+                        apiBadge.className = 'badge bg-warning text-dark script-api-badge';
+                        apiBadge.textContent = `${String(script.api).toUpperCase()} API`;
+                        titleRow.append(apiBadge);
+                    }
+                    titleWrap.append(titleRow);
 
                     if (script && script.description) {
                         const desc = document.createElement('div');
@@ -870,6 +899,13 @@
                     summary.className = 'small mt-1';
                     summary.textContent = describeStepParameters(step, script, missing);
                     infoCell.append(summary);
+
+                    if (script && script.api) {
+                        const apiInfoLine = document.createElement('div');
+                        apiInfoLine.className = 'small mt-1 script-api-highlight';
+                        apiInfoLine.textContent = `API használat: ${String(script.api).toUpperCase()}`;
+                        infoCell.append(apiInfoLine);
+                    }
 
                     if (script && script.required_keys && script.required_keys.length) {
                         const keyLine = document.createElement('div');
@@ -1025,13 +1061,23 @@
                 header.className = 'd-flex justify-content-between align-items-start gap-3';
 
                 const titleWrap = document.createElement('div');
+                const titleRow = document.createElement('div');
+                titleRow.className = 'd-flex align-items-center gap-2 flex-wrap';
                 const title = document.createElement('div');
                 title.className = 'fw-semibold';
                 title.textContent = script.display_name || script.script;
+                titleRow.append(title);
+                if (script.api) {
+                    const apiBadge = document.createElement('span');
+                    apiBadge.className = 'badge bg-warning text-dark script-api-badge';
+                    apiBadge.textContent = `${String(script.api).toUpperCase()} API`;
+                    titleRow.append(apiBadge);
+                }
+                titleWrap.append(titleRow);
                 const subtitle = document.createElement('div');
                 subtitle.className = 'small text-muted';
                 subtitle.textContent = script.description || script.script;
-                titleWrap.append(title, subtitle);
+                titleWrap.append(subtitle);
 
                 if (script.description && script.script && script.description !== script.script) {
                     const pathInfo = document.createElement('div');
@@ -1059,6 +1105,13 @@
                     envInfo.className = 'small mt-1';
                     envInfo.innerHTML = `<strong>Környezet:</strong> ${script.environment}`;
                     item.append(envInfo);
+                }
+
+                if (script.api) {
+                    const apiInfo = document.createElement('div');
+                    apiInfo.className = 'small mt-1 script-api-highlight';
+                    apiInfo.innerHTML = `<strong>API:</strong> ${String(script.api).toUpperCase()}`;
+                    item.append(apiInfo);
                 }
 
                 const requiredParams = (script.parameters || []).filter(param => param.required && !param.autofill);
@@ -1304,15 +1357,75 @@
                     label.className = 'form-label fw-semibold';
                     label.setAttribute('for', `workflow-param-${param.name}`);
                     label.textContent = param.name + (param.required ? ' *' : '');
+                    group.append(label);
                     const input = document.createElement('input');
-                    input.type = 'text';
                     input.className = 'form-control';
                     input.id = `workflow-param-${param.name}`;
                     input.dataset.param = param.name;
                     input.dataset.type = param.type;
-                    const value = step.params ? step.params[param.name] : '';
-                    input.value = value !== undefined && value !== null ? value : '';
-                    group.append(label, input);
+                    const rawValue = step.params ? step.params[param.name] : undefined;
+                    let helper = null;
+                    let clearBtn = null;
+                    if (param.secret) {
+                        const storedValue = rawValue !== undefined && rawValue !== null ? String(rawValue) : '';
+                        const hasExisting = storedValue.trim() !== '';
+                        input.type = 'password';
+                        input.autocomplete = 'off';
+                        input.dataset.secret = 'true';
+                        input.dataset.cleared = 'false';
+                        input.dataset.hasExisting = hasExisting ? 'true' : 'false';
+                        if (hasExisting) {
+                            input.placeholder = '••••••';
+                            input.dataset.original = storedValue;
+                        } else {
+                            input.placeholder = 'API kulcs';
+                        }
+                        input.value = '';
+                        helper = document.createElement('div');
+                        helper.className = 'form-text';
+                        helper.textContent = hasExisting
+                            ? 'Kulcs jelenleg el van mentve. Hagyd üresen, ha nem módosítod.'
+                            : 'Adja meg az API kulcsot.';
+                        if (hasExisting) {
+                            clearBtn = document.createElement('button');
+                            clearBtn.type = 'button';
+                            clearBtn.className = 'btn btn-sm btn-outline-danger mt-2';
+                            clearBtn.textContent = 'Kulcs törlése';
+                            clearBtn.addEventListener('click', () => {
+                                input.value = '';
+                                input.placeholder = 'Kulcs törlésre jelölve';
+                                input.dataset.cleared = 'true';
+                                input.dataset.original = '';
+                                input.dataset.hasExisting = 'false';
+                                helper.textContent = 'Kulcs törlésre kerül mentéskor.';
+                            });
+                        }
+                        input.addEventListener('input', () => {
+                            const trimmed = input.value.trim();
+                            if (trimmed.length === 0) {
+                                if (input.dataset.cleared === 'true') {
+                                    helper.textContent = 'Kulcs törlésre kerül mentéskor.';
+                                } else if (input.dataset.hasExisting === 'true') {
+                                    helper.textContent = 'Kulcs jelenleg el van mentve. Hagyd üresen, ha nem módosítod.';
+                                } else {
+                                    helper.textContent = 'Adja meg az API kulcsot.';
+                                }
+                            } else {
+                                input.dataset.cleared = 'false';
+                                helper.textContent = 'Új kulcs kerül mentésre.';
+                            }
+                        });
+                    } else {
+                        input.type = 'text';
+                        input.value = rawValue !== undefined && rawValue !== null ? rawValue : '';
+                    }
+                    group.append(input);
+                    if (helper) {
+                        group.append(helper);
+                    }
+                    if (clearBtn) {
+                        group.append(clearBtn);
+                    }
                 }
 
                 if (param.flags && param.flags.length) {
@@ -1348,11 +1461,30 @@
                 if (type === 'flag') {
                     newParams[name] = input.checked;
                 } else {
-                    const value = input.value.trim();
-                    if (value === '') {
-                        delete newParams[name];
+                    const isSecret = input.dataset.secret === 'true';
+                    const rawValue = input.value;
+                    const trimmedValue = rawValue.trim();
+                    if (isSecret) {
+                        const cleared = input.dataset.cleared === 'true';
+                        const hasExisting = input.dataset.hasExisting === 'true';
+                        const originalValue = input.dataset.original || '';
+                        if (cleared) {
+                            delete newParams[name];
+                        } else if (trimmedValue === '') {
+                            if (hasExisting && originalValue) {
+                                newParams[name] = originalValue;
+                            } else {
+                                delete newParams[name];
+                            }
+                        } else {
+                            newParams[name] = trimmedValue;
+                        }
                     } else {
-                        newParams[name] = value;
+                        if (trimmedValue === '') {
+                            delete newParams[name];
+                        } else {
+                            newParams[name] = trimmedValue;
+                        }
                     }
                 }
             });

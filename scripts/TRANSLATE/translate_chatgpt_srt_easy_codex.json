@@ -1,5 +1,6 @@
 {
   "enviroment": "sync",
+  "api": "chatgpt",
   "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
   "description": "A beolvasott időzített transcripciót a rendelkezésre álló feliratot felhasználva lefordítja a kívánt nyelvre a ChatGPT segítségével.",
   "required": [

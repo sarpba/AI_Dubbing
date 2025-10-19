@@ -3,8 +3,9 @@ import sys
 import argparse
 import deepl
 import json
+import base64
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 for candidate in Path(__file__).resolve().parents:
     if (candidate / "tools").is_dir():
@@ -40,6 +41,52 @@ def load_config() -> Tuple[dict, Path]:
     except (FileNotFoundError, json.JSONDecodeError) as exc:
         print(f"Hiba a konfiguráció betöltésekor ({config_path}): {exc}")
         sys.exit(1)
+
+
+def get_keyholder_path(project_root: Path) -> Path:
+    """Keyholder fájl elérési útja."""
+    return project_root / "keyholder.json"
+
+
+def save_api_key(project_root: Path, api_key: str) -> None:
+    """DeepL API kulcs mentése base64 kódolással a keyholder.json fájlba."""
+    keyholder_path = get_keyholder_path(project_root)
+    try:
+        data: Dict[str, Any] = {}
+        if keyholder_path.exists():
+            with open(keyholder_path, "r", encoding="utf-8") as fp:
+                try:
+                    data = json.load(fp)
+                except json.JSONDecodeError:
+                    print("Figyelmeztetés: A keyholder.json nem olvasható, új fájl készül.")
+                    data = {}
+        encoded_key = base64.b64encode(api_key.encode("utf-8")).decode("utf-8")
+        data["deepl_api_key"] = encoded_key
+        with open(keyholder_path, "w", encoding="utf-8") as fp:
+            json.dump(data, fp, indent=2)
+        print(f"DeepL API kulcs elmentve ide: {keyholder_path}")
+    except Exception as exc:
+        print(f"Hiba a DeepL API kulcs mentésekor: {exc}")
+
+
+def load_api_key(project_root: Path) -> Optional[str]:
+    """DeepL API kulcs betöltése a keyholder.json fájlból."""
+    keyholder_path = get_keyholder_path(project_root)
+    if not keyholder_path.exists():
+        return None
+    try:
+        with open(keyholder_path, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+        encoded_key = data.get("deepl_api_key")
+        if not encoded_key:
+            return None
+        return base64.b64decode(encoded_key.encode("utf-8")).decode("utf-8")
+    except (json.JSONDecodeError, KeyError, base64.binascii.Error) as exc:
+        print(f"Hiba a DeepL API kulcs betöltésekor: {exc}")
+        return None
+    except Exception as exc:
+        print(f"Váratlan hiba a DeepL API kulcs betöltésekor: {exc}")
+        return None
 
 
 def resolve_project_paths(project_name: str, config: dict, project_root: Path) -> Tuple[Path, Path]:
@@ -95,8 +142,19 @@ def find_json_file(directory):
     
     return json_files[0], None
 
-def main(project_name: str, input_lang: Optional[str], output_lang: Optional[str], auth_key: str):
+def main(project_name: str, input_lang: Optional[str], output_lang: Optional[str], auth_key_arg: Optional[str]):
     config, project_root = load_config()
+    auth_key = auth_key_arg
+    if auth_key:
+        save_api_key(project_root, auth_key)
+    else:
+        print("DeepL API kulcs nincs megadva, betöltés a keyholder.json fájlból...")
+        auth_key = load_api_key(project_root)
+
+    if not auth_key:
+        print("Hiba: Nincs elérhető DeepL API kulcs.")
+        return
+
     input_dir_path, output_dir_path = resolve_project_paths(project_name, config, project_root)
     input_dir = str(input_dir_path)
     output_dir = str(output_dir_path)
@@ -229,8 +287,9 @@ if __name__ == '__main__':
     parser.add_argument(
         '-auth_key',
         '--auth-key',
-        required=True,
-        help='A DeepL API hitelesítési kulcs.'
+        required=False,
+        default=None,
+        help='A DeepL API hitelesítési kulcs. Megadás esetén elmentődik a keyholder.json-ba.'
     )
     add_debug_argument(parser)
 

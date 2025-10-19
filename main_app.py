@@ -83,11 +83,89 @@ PROJECT_AUTOFILL_OVERRIDES = {
     'project_path': 'project_path',
 }
 SECRET_PARAM_NAMES = {'auth_key', 'hf_token'}
+ENCODED_SECRET_PREFIX = 'base64:'
+SECRET_VALUE_PLACEHOLDER = '***'
 ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue'}
 
 
 class WorkflowValidationError(Exception):
     """Egy workflow lépés konfigurációja érvénytelen."""
+
+
+def is_secret_param(name: str) -> bool:
+    return name in SECRET_PARAM_NAMES
+
+
+def mask_workflow_secret_params(steps: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    masked_steps: List[Dict[str, Any]] = copy.deepcopy(steps or [])
+    for step in masked_steps:
+        params = step.get('params')
+        if not isinstance(params, dict):
+            continue
+        for key, value in list(params.items()):
+            if not is_secret_param(key):
+                continue
+            if isinstance(value, str):
+                if value.startswith(ENCODED_SECRET_PREFIX):
+                    continue
+                encoded_value = encode_keyholder_value(value)
+                if encoded_value:
+                    params[key] = f"{ENCODED_SECRET_PREFIX}{encoded_value}"
+                else:
+                    params.pop(key, None)
+            elif value is None:
+                params.pop(key, None)
+    return masked_steps
+
+
+def unmask_secret_param_value(value: Any) -> Any:
+    if isinstance(value, str) and value.startswith(ENCODED_SECRET_PREFIX):
+        decoded = decode_keyholder_value(value[len(ENCODED_SECRET_PREFIX):])
+        if decoded is not None:
+            return decoded
+    return value
+
+
+def mask_applied_params_for_ui(applied_params: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    masked: List[Dict[str, Any]] = []
+    for param in applied_params or []:
+        entry = param.copy()
+        if is_secret_param(entry.get('name')):
+            entry['value'] = SECRET_VALUE_PLACEHOLDER
+        masked.append(entry)
+    return masked
+
+
+def mask_command_for_ui(command: Optional[List[str]], applied_params: Optional[List[Dict[str, Any]]], script_meta: Dict[str, Any]) -> List[str]:
+    masked = list(command or [])
+    secret_flags: Set[str] = set()
+    for param_meta in script_meta.get('parameters', []):
+        if is_secret_param(param_meta.get('name')):
+            for flag in param_meta.get('flags') or []:
+                secret_flags.add(flag)
+    for idx, token in enumerate(masked[:-1]):
+        if token in secret_flags:
+            masked[idx + 1] = SECRET_VALUE_PLACEHOLDER
+    secret_values = {
+        str(param.get('value'))
+        for param in applied_params or []
+        if is_secret_param(param.get('name')) and param.get('value') is not None
+    }
+    for idx, token in enumerate(masked):
+        if token in secret_values:
+            masked[idx] = SECRET_VALUE_PLACEHOLDER
+    return masked
+
+
+def build_masked_command_and_params(
+    command: Optional[List[str]],
+    applied_params: Optional[List[Dict[str, Any]]],
+    script_meta: Dict[str, Any]
+) -> Tuple[List[str], List[Dict[str, Any]]]:
+    return (
+        mask_command_for_ui(command, applied_params, script_meta),
+        mask_applied_params_for_ui(applied_params),
+    )
 
 
 def resolve_workspace_path(path_value):
@@ -224,7 +302,8 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     script_name = raw_entry.get('script')
     if not script_name:
         return None
-    environment = raw_entry.get('enviroment') or raw_entry.get('environment') or ''
+    environment = (raw_entry.get('enviroment') or raw_entry.get('environment') or '') or ''
+    api_name = raw_entry.get('api')
     parameters: List[Dict[str, Any]] = []
 
     def append_params(param_list, required: bool):
@@ -255,7 +334,8 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         'parameters': parameters,
         'notes': raw_entry.get('notes'),
         'raw': raw_entry,
-        'required_keys': sorted(SCRIPT_KEY_REQUIREMENTS.get(script_name, set()))
+        'required_keys': sorted(SCRIPT_KEY_REQUIREMENTS.get(script_name, set())),
+        'api': api_name,
     }
 
 
@@ -336,10 +416,12 @@ def _load_workflow_file(path: Path) -> Optional[Dict[str, Any]]:
         logging.warning("Workflow fájl nem tartalmaz érvényes 'steps' listát: %s", path)
         return None
 
+    masked_steps = mask_workflow_secret_params(steps)
+
     return {
         'name': name,
         'description': description,
-        'steps': steps
+        'steps': masked_steps
     }
 
 
@@ -399,9 +481,11 @@ def save_workflow_template_file(
     if target_path.exists() and not overwrite:
         raise WorkflowValidationError("Már létezik ugyanilyen nevű workflow. Engedélyezd a felülírást.")
 
+    masked_steps = mask_workflow_secret_params(steps)
+
     payload: Dict[str, Any] = {
         'name': name or file_id,
-        'steps': steps
+        'steps': masked_steps
     }
     if description:
         payload['description'] = description
@@ -719,12 +803,23 @@ def normalize_workflow_steps(payload: Any) -> Tuple[List[Dict[str, Any]], Set[st
         params = step.get('params') or {}
         if not isinstance(params, dict):
             raise WorkflowValidationError(f"A(z) {script_meta['display_name']} paraméterei hibás formátumúak.")
+        normalized_params: Dict[str, Any] = {}
+        for key, value in params.items():
+            current_value = value
+            if isinstance(current_value, str):
+                current_value = current_value.strip()
+                if current_value == '':
+                    current_value = None
+            if is_secret_param(key) and current_value is not None:
+                normalized_params[key] = unmask_secret_param_value(current_value)
+            else:
+                normalized_params[key] = current_value
 
         normalized_step = {
             'script': script_meta['id'],
             'enabled': enabled,
             'halt_on_fail': halt_on_fail,
-            'params': params
+            'params': normalized_params
         }
         if enabled:
             enabled_count += 1
@@ -835,6 +930,10 @@ def persist_config(updated_config):
 
 def update_workflow_job(job_id, **kwargs):
     with workflow_lock:
+        if 'workflow' in kwargs:
+            kwargs['workflow'] = mask_workflow_secret_params(kwargs['workflow'])
+        if 'execution_steps' in kwargs:
+            kwargs['execution_steps'] = mask_workflow_secret_params(kwargs['execution_steps'])
         if job_id in workflow_jobs:
             workflow_jobs[job_id].update(kwargs)
 
@@ -856,6 +955,11 @@ def get_project_jobs(project_name):
 
 def register_workflow_job(job_id, job_data):
     with workflow_lock:
+        if isinstance(job_data, dict):
+            if 'workflow' in job_data:
+                job_data['workflow'] = mask_workflow_secret_params(job_data['workflow'])
+            if 'execution_steps' in job_data:
+                job_data['execution_steps'] = mask_workflow_secret_params(job_data['execution_steps'])
         workflow_jobs[job_id] = job_data
         workflow_events[job_id] = threading.Event()
 
@@ -961,6 +1065,8 @@ def run_workflow_job(job_id, project_name, workflow_payload):
         template_id = workflow_payload.get('template_id')
         steps = workflow_payload.get('steps') or []
         workflow_state = workflow_payload.get('workflow_state') or steps
+        masked_steps = mask_workflow_secret_params(steps)
+        masked_workflow_state = mask_workflow_secret_params(workflow_state)
         active_steps = [
             step for step in steps
             if step.get('enabled', True) and step.get('type') != 'widget'
@@ -970,8 +1076,8 @@ def run_workflow_job(job_id, project_name, workflow_payload):
             job_id,
             total_steps=total_steps,
             template_id=template_id,
-            workflow=workflow_state,
-            execution_steps=steps
+            workflow=masked_workflow_state,
+            execution_steps=masked_steps
         )
 
         keyholder_snapshot = load_keyholder_data()
@@ -1009,6 +1115,8 @@ def run_workflow_job(job_id, project_name, workflow_payload):
             except WorkflowValidationError as exc:
                 raise
 
+            masked_command, masked_applied_params = build_masked_command_and_params(command, applied_params, script_meta)
+
             log_prefix = f"[{script_meta['id']}]"
             update_workflow_job(
                 job_id,
@@ -1019,7 +1127,7 @@ def run_workflow_job(job_id, project_name, workflow_payload):
                     'total': total_steps,
                     'script': script_meta['id'],
                     'display_name': script_meta['display_name'],
-                    'command': command,
+                    'command': masked_command,
                 },
                 cancel_requested=should_stop()
             )
@@ -1028,8 +1136,8 @@ def run_workflow_job(job_id, project_name, workflow_payload):
             step_record = {
                 'script': script_meta['id'],
                 'display_name': script_meta['display_name'],
-                'command': command,
-                'applied_params': applied_params,
+                'command': masked_command,
+                'applied_params': masked_applied_params,
             }
 
             if result == "cancelled":
@@ -1245,7 +1353,8 @@ def show_project(project_name):
                          audio_mime_map=AUDIO_MIME_MAP,
                          video_mime_map=VIDEO_MIME_MAP,
                          can_review=can_review,
-                         has_transcribable_audio=has_transcribable_audio)
+                         has_transcribable_audio=has_transcribable_audio,
+                         secret_param_names=sorted(SECRET_PARAM_NAMES))
 
 
 @app.route('/api/project-tree/<project_name>', methods=['GET'])
@@ -2218,7 +2327,7 @@ def get_workflow_options_api(project_name):
             selected_template = template_data.get('id') or selected_template
 
     defaults = {
-        'workflow': defaults_workflow,
+        'workflow': mask_workflow_secret_params(defaults_workflow),
         'selected_template': selected_template
     }
 
@@ -2289,7 +2398,9 @@ def run_workflow_api(project_name):
         }), 400
 
     updated_config = copy.deepcopy(current_config)
-    updated_config['LAST_WORKFLOW'] = normalized_full_steps
+    encoded_full_steps = mask_workflow_secret_params(normalized_full_steps)
+    encoded_steps = mask_workflow_secret_params(normalized_steps)
+    updated_config['LAST_WORKFLOW'] = encoded_full_steps
     if template_id:
         updated_config['LAST_WORKFLOW_TEMPLATE'] = template_id
     else:
@@ -2305,8 +2416,8 @@ def run_workflow_api(project_name):
         'message': 'Feladat sorban áll.',
         'log': None,
         'cancel_requested': False,
-        'workflow': normalized_full_steps,
-        'execution_steps': normalized_steps,
+        'workflow': encoded_full_steps,
+        'execution_steps': encoded_steps,
         'required_keys': list(required_keys),
         'template_id': template_id
     }

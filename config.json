@@ -80,7 +80,7 @@
       "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "auth_key": "c385c56b-6b23-4917-9309-e0cd2ca79aa9:fx",
+        "auth_key": "base64:YzM4NWM1NmItNmIyMy00OTE3LTkzMDktZTBjZDJjYTc5YWE5OmZ4",
         "debug": false,
         "input_language": "en",
         "output_language": "hu"
@@ -115,26 +115,30 @@
     },
     {
       "script": "TTS/f5_tts_narrator.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "debug": true,
         "keep_best_over_tolerance": true,
+        "max_retries": "1",
         "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
         "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
         "norm": "hun",
         "normalize_ref_audio": false,
         "phonetic_ref": false,
         "remove_silence": false,
-        "save_failures": true,
-        "max_retries": "1"
+        "save_failures": true
       }
     },
     {
       "script": "AV/merge_chunks_with_background_easy.py",
       "enabled": true,
       "halt_on_fail": true,
-      "params": {}
+      "params": {
+        "narrator": true,
+        "background_volume": "80",
+        "debug": false
+      }
     },
     {
       "script": "AV/merge_to_video_easy.py",

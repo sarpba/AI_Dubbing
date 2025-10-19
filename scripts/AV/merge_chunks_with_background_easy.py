@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 from pydub import AudioSegment
+import math
 
 import sys
 
@@ -67,7 +68,18 @@ def parse_filename(filename):
         
     return start_time, end_time
 
-def merge_wav_files(input_folder, output_file, background_file=None):
+def apply_volume_percent(audio_segment, percent):
+    """
+    Adjust the volume of an AudioSegment based on a percentage value.
+    100% leaves the audio unchanged.
+    """
+    if percent == 100:
+        return audio_segment
+    gain_db = 20 * math.log10(percent / 100.0)
+    return audio_segment.apply_gain(gain_db)
+
+
+def merge_wav_files(input_folder, output_file, background_file=None, background_volume_percent=100):
     """
     Merge WAV files from the input_folder into a single WAV file.
     Each file is overlaid at the start time specified in its filename.
@@ -88,7 +100,8 @@ def merge_wav_files(input_folder, output_file, background_file=None):
                 # Optional: Verify that audio duration matches the filename
                 expected_duration = end_time - start_time
                 actual_duration = len(audio)
-                if abs(expected_duration - actual_duration) > 10:  # Allow 10 ms discrepancy
+                # Only warn when the produced segment is noticeably longer than the original window
+                if actual_duration - expected_duration > 10:  # Allow 10 ms discrepancy
                     print(f"Warning: Duration mismatch in '{filename}'. Expected {expected_duration} ms, got {actual_duration} ms.")
                 timeline.append((start_time, audio))
                 if end_time > max_end_time:
@@ -121,6 +134,8 @@ def merge_wav_files(input_folder, output_file, background_file=None):
         except Exception as e:
             print(f"Hiba a háttérzene fájl betöltésekor: {e}")
             return
+
+        background = apply_volume_percent(background, background_volume_percent)
         
         # Determine the duration of the final audio
         final_duration = len(final_audio)
@@ -151,8 +166,17 @@ def main():
                     "A könyvtárstruktúrát a 'config.json' fájl alapján határozza meg."
     )
     parser.add_argument('project_name', help='A feldolgozandó projekt könyvtár neve a "workdir"-en belül.')
+    parser.add_argument('-narrator', '--narrator', action='store_true',
+                        help='Narrátor mód aktiválása: háttér a "extracted_audio" mappából.')
+    parser.add_argument('--background-volume', type=int, choices=range(1, 101), metavar='PERCENT',
+                        help='Narrátor módban a háttér hangereje százalékban (1-100).')
     add_debug_argument(parser)
     args = parser.parse_args()
+
+    if args.background_volume is not None and not args.narrator:
+        parser.error("A '--background-volume' opció csak narrátor módban használható.")
+
+    background_volume_percent = args.background_volume if args.background_volume is not None else 100
     configure_debug_mode(args.debug)
     project_name = args.project_name
 
@@ -178,7 +202,11 @@ def main():
         subdirs = config['PROJECT_SUBDIRS']
         input_subdir = subdirs['translated_splits']
         output_subdir = subdirs['film_dubbing']
-        background_subdir = subdirs['separated_audio_background']
+        background_key = 'extracted_audio' if args.narrator else 'separated_audio_background'
+        if background_key not in subdirs:
+            print(f"Hiba: A config.json nem tartalmazza a(z) '{background_key}' bejegyzést a PROJECT_SUBDIRS alatt.")
+            return
+        background_subdir = subdirs[background_key]
     except KeyError as e:
         print(f"Hiba: Hiányzó kulcs a config.json fájlban: {e}")
         return
@@ -222,7 +250,7 @@ def main():
     output_file = str(output_dir / f"{timestamp}.wav")
     print(f"A kimeneti fájl neve: {output_file}")
     
-    merge_wav_files(str(input_folder), output_file, background_file)
+    merge_wav_files(str(input_folder), output_file, background_file, background_volume_percent)
 
 if __name__ == "__main__":
     main()

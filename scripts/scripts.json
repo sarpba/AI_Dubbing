@@ -231,6 +231,7 @@
   },
   {
     "enviroment": "sync",
+    "api": "huggingface",
     "script": "ASR/whisx.py",
     "required": [
       {
@@ -312,6 +313,23 @@
       }
     ],
     "optional": [
+      {
+        "name": "narrator",
+        "flags": [
+          "-narrator",
+          "--narrator"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "background_volume",
+        "flags": [
+          "--background-volume"
+        ],
+        "type": "option",
+        "default": null
+      },
       {
         "name": "debug",
         "flags": [
@@ -671,6 +689,7 @@
   },
   {
     "enviroment": "sync",
+    "api": "huggingface",
     "script": "DIARIZE/split_segments_by_speaker_codex.py",
     "description": "A beszéd szegmenseket beszélőnként szétválasztja.",
     "required": [
@@ -803,6 +822,7 @@
   },
   {
     "enviroment": "sync",
+    "api": "deepl",
     "script": "TRANSLATE/translate.py",
     "description": "Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.",
     "required": [
@@ -856,6 +876,7 @@
   },
   {
     "enviroment": "sync",
+    "api": "chatgpt",
     "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
     "description": "A beolvasott időzített transcripciót a rendelkezésre álló feliratot felhasználva lefordítja a kívánt nyelvre a ChatGPT segítségével.",
     "required": [

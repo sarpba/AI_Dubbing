@@ -1,5 +1,6 @@
 {
   "enviroment": "sync",
+  "api": "deepl",
   "script": "TRANSLATE/translate.py",
   "description": "Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.",
   "required": [

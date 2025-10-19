@@ -3,31 +3,25 @@
   "steps": [
     {
       "script": "AV/extract_audio_easy_channels.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AV/separate_audio_easy_codex.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "chunk_size": "5",
+        "debug": false,
         "device": "cuda",
-        "non_speech_silence": true,
         "keep_full_audio": false,
-        "debug": false
+        "non_speech_silence": true
       }
     },
     {
-      "script": "ASR/whisx.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
       "script": "ASR/parakeet-tdt-0.6b-v2.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
@@ -39,7 +33,7 @@
     },
     {
       "script": "TRANSLATE/translate_chatgpt_srt_easy_codex.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "output_language": "HU"
@@ -50,10 +44,10 @@
       "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "auth_key": "c385c56b-6b23-4917-9309-e0cd2ca79aa9:fx",
+        "auth_key": "base64:YzM4NWM1NmItNmIyMy00OTE3LTkzMDktZTBjZDJjYTc5YWE5OmZ4",
+        "debug": false,
         "input_language": "en",
-        "output_language": "hu",
-        "debug": false
+        "output_language": "hu"
       }
     },
     {
@@ -85,23 +79,24 @@
     },
     {
       "script": "TTS/f5_tts_narrator.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "norm": "hun",
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "debug": true,
+        "keep_best_over_tolerance": true,
+        "max_retries": "1",
         "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "remove_silence": false,
-        "phonetic_ref": false,
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "norm": "hun",
         "normalize_ref_audio": false,
-        "save_failures": false,
-        "keep_best_over_tolerance": false,
-        "debug": false
+        "phonetic_ref": false,
+        "remove_silence": false,
+        "save_failures": true
       }
     },
     {
       "script": "AV/merge_chunks_with_background_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
