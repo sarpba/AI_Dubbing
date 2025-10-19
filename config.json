@@ -76,7 +76,7 @@
     },
     {
       "script": "TTS/f5_tts_easy_EQ.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "debug": false,
@@ -108,10 +108,15 @@
       }
     },
     {
-      "script": "AV/merge_chunks_with_background_easy.py",
+      "script": "AV/merge_chunks_with_background_beta.py",
       "enabled": true,
       "halt_on_fail": true,
-      "params": {}
+      "params": {
+        "narrator": true,
+        "background_volume": "80",
+        "max_speedup": "15",
+        "debug": false
+      }
     },
     {
       "script": "AV/merge_to_video_easy.py",

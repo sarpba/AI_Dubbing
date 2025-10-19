@@ -93,6 +93,8 @@ letter_pronunciations = {
     'Á': 'á', 'É': 'é', 'Í': 'í', 'Ó': 'ó', 'Ö': 'ö', 'Ő': 'ő', 'Ú': 'ú', 'Ü': 'ü', 'Ű': 'ű'
 }
 
+WORD_TOKEN_PATTERN = re.compile(r"\b[\wÁÉÍÓÖŐÚÜŰáéíóöőúüű'-]+\b")
+
 HUNGARIAN_BASE_CHARS = set('abcdefghijklmnopqrstuvwxyzáéíóöőúüű')
 HUNGARIAN_ACCENTED_CHARS = set('áéíóöőúüű')
 HUNGARIAN_COMMON_SUFFIXES = (
@@ -290,12 +292,8 @@ def replace_alphanumeric(text):
                 result_parts.append(' ')
             elif part.isalpha():
                 if idx > 0 and parts[idx-1] == '-':
-                    # Csak kisbetűs suffix-eket hagyjuk változatlanul
-                    if part.islower() and part in ['es', 'os', 'as', 'ert', 'ig', 'bol', 'rol']:
-                        result_parts.append(part)
-                    else:
-                        # Nagybetűs suffix-eket betűzzük
-                        result_parts.append(pronounce_letters(part))
+                    # A kötőjel utáni toldalékot hagyjuk érintetlenül
+                    result_parts.append(part)
                 else:
                     result_parts.append(pronounce_letters(part))
             elif part.isdigit():
@@ -555,15 +553,18 @@ def should_phonemize_word(word, existing_lower):
     return True
 
 
-def collect_new_changes(text, existing_changes):
+def collect_new_changes(text, existing_changes, skip_words=None):
     if not HAS_PHONEMIZER:
         return {}
 
     existing_lower = {key.lower() for key in existing_changes}
-    candidates = re.findall(r"\b[\wÁÉÍÓÖŐÚÜŰáéíóöőúüű'-]+\b", text)
+    skip_lower = {word.lower() for word in skip_words} if skip_words else set()
+    candidates = WORD_TOKEN_PATTERN.findall(text)
     new_entries = {}
 
     for word in candidates:
+        if skip_lower and word.lower() in skip_lower:
+            continue
         if not should_phonemize_word(word, existing_lower):
             continue
         phonetic = phonemize_to_hungarian(word)
@@ -839,15 +840,10 @@ def normalize(text):
     force_changes = load_force_changes('force_changes.csv')
     force_changes_end = load_force_changes_end('force_changes_end.csv')
     changes = load_changes()
+    original_tokens_lower = {token.lower() for token in WORD_TOKEN_PATTERN.findall(text)}
 
     text = replace_roman_numerals(text)  # Római számok arabra (pl. IV. -> 4.)
     text = replace_times(text)  # Időpontok kezelése előbb, hogy a "-kor" még változatlan legyen
-
-    new_changes = collect_new_changes(text, changes)
-    if new_changes:
-        append_changes_to_file(new_changes)
-        changes.update({key: value for key, (value, _) in new_changes.items()})
-
     text = apply_changes(text, changes)
     text = apply_force_changes(text, force_changes)
     #text = replace_acronyms(text)
@@ -856,6 +852,15 @@ def normalize(text):
     text = replace_ordinals(text) # Sorszámok (pl. 4. -> negyedik)
     text = replace_numbers(text) # Számok szöveggé
     
+    current_tokens = WORD_TOKEN_PATTERN.findall(text)
+    skip_for_new_changes = {token.lower() for token in current_tokens if token.lower() not in original_tokens_lower}
+    new_changes = collect_new_changes(text, changes, skip_words=skip_for_new_changes)
+    if new_changes:
+        append_changes_to_file(new_changes)
+        new_simple_changes = {key: value for key, (value, _) in new_changes.items()}
+        changes.update(new_simple_changes)
+        text = apply_changes(text, new_simple_changes)
+        
     text = remove_unwanted_characters(text) 
     # Kivételek kezelése kötőjelekkel
     exceptions = {
