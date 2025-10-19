@@ -1,3 +1,5 @@
+# THE REPO IS COMPLETLY REWORKED, IT'S WORKING WELL, BUT NEED TO UPDATE THE README YET... IF YOU TRY IT, YOU NEED TO CREATE THE 3 (sync, f5-tts_hun, parakeet_fix) ANACONDA ENVIROMENT ALONE AT THE MOMENT. I'LL UPDATE THE README AS SOON AS POSSIBLE.
+
 # AI-dubbing is a semi-automatic video (podcasts, movies, series) Dubbing system.
 ## Translate any video into your native language and keep the voices of the characters.
 
