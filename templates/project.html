@@ -1301,6 +1301,30 @@
             }
         }
 
+        function updateWorkflowParamsHelp(script) {
+            const helpBox = document.getElementById('workflowParamsHelp');
+            if (!helpBox) {
+                return;
+            }
+            const helpText = (script && typeof script.help_markdown === 'string') ? script.help_markdown.trim() : '';
+            if (!helpText) {
+                helpBox.classList.add('d-none');
+                helpBox.innerHTML = '';
+                return;
+            }
+            helpBox.classList.remove('d-none');
+            helpBox.innerHTML = '';
+            const title = document.createElement('h6');
+            title.className = 'mb-2';
+            title.textContent = 'Segédlet';
+            const block = document.createElement('div');
+            block.className = 'small bg-body-tertiary p-3 border rounded';
+            block.style.whiteSpace = 'pre-wrap';
+            block.style.fontFamily = 'var(--bs-body-font-family, inherit)';
+            block.textContent = helpText;
+            helpBox.append(title, block);
+        }
+
         function renderWorkflowParamsForm(script, step) {
             const container = document.getElementById('workflowParamsContainer');
             const alertBox = document.getElementById('workflowParamsAlert');
@@ -1309,6 +1333,7 @@
                 alertBox.textContent = '';
             }
             if (!container) {
+                updateWorkflowParamsHelp(script);
                 return;
             }
             container.innerHTML = '';
@@ -1318,6 +1343,7 @@
                 placeholder.className = 'text-muted';
                 placeholder.textContent = 'Ehhez a lépéshez nem szükséges beállítás.';
                 container.append(placeholder);
+                updateWorkflowParamsHelp(script);
                 return;
             }
             params.forEach(param => {
@@ -1437,6 +1463,7 @@
 
                 container.append(group);
             });
+            updateWorkflowParamsHelp(script);
         }
 
         function saveWorkflowParams() {
@@ -2463,6 +2490,7 @@
                         <form id="workflowParamsForm">
                             <div id="workflowParamsContainer" class="vstack gap-3"></div>
                         </form>
+                        <div id="workflowParamsHelp" class="mt-4 d-none"></div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>

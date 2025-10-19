@@ -325,6 +325,20 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     append_params(raw_entry.get('required'), True)
     append_params(raw_entry.get('optional'), False)
 
+    help_markdown: Optional[str] = None
+    try:
+        script_path = Path(script_name)
+        if script_path.is_absolute():
+            script_path = Path(script_path.name)
+        help_path = (SCRIPTS_DIR / script_path).with_name(f"{script_path.stem}_help.md")
+        if help_path.is_file():
+            try:
+                help_markdown = help_path.read_text(encoding='utf-8')
+            except OSError as exc:
+                logging.warning("Nem olvasható segédlet fájl: %s (%s)", help_path, exc)
+    except (OSError, ValueError) as exc:
+        logging.warning("Hibás segédlet elérési út: %s (%s)", script_name, exc)
+
     return {
         'id': script_name,
         'script': script_name,
@@ -336,6 +350,7 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         'raw': raw_entry,
         'required_keys': sorted(SCRIPT_KEY_REQUIREMENTS.get(script_name, set())),
         'api': api_name,
+        'help_markdown': help_markdown,
     }
 
 
