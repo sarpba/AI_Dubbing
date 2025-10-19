@@ -1,5 +1,5 @@
 {
-  "name": "Alapértelmezett",
+  "name": "Szinkron készítés F5-TTS-el. Félautomata. SRT célnyelvi felirat szükséges.",
   "steps": [
     {
       "script": "AV/extract_audio_easy_channels.py",
@@ -51,25 +51,8 @@
       "params": {
         "debug": false,
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "keep_best_over_tolerance": false,
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "norm": "hun",
-        "normalize_ref_audio": false,
-        "phonetic_ref": false,
-        "remove_silence": false,
-        "save_failures": true
-      }
-    },
-    {
-      "script": "TTS/f5_tts_narrator.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "debug": true,
         "keep_best_over_tolerance": true,
-        "max_retries": "1",
         "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
         "norm": "hun",
         "normalize_ref_audio": false,
         "phonetic_ref": false,
@@ -92,5 +75,5 @@
       }
     }
   ],
-  "description": "Automatizált feldolgozási lánc az elérhető szkriptekkel."
+  "description": "A widgetnél lehetőség van a szegmensek és a fordítás felülvizsgálatára."
 }

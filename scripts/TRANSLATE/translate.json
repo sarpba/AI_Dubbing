@@ -12,7 +12,9 @@
       ],
       "type": "option",
       "default": null
-    },
+    }
+  ],
+  "optional": [
     {
       "name": "auth_key",
       "flags": [
@@ -21,9 +23,7 @@
       ],
       "type": "option",
       "default": null
-    }
-  ],
-  "optional": [
+    },
     {
       "name": "input_language",
       "flags": [

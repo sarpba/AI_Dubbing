@@ -8,7 +8,7 @@ A szkript a DeepL fordító API-t használja, hogy a `separated_audio_speech` k�
 
 ## Kötelező beállítások
 - `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A projekt neve a `workdir` alatt, amelynek anyagát fordítani kell.
-- `auth_key` (`-auth_key`, `--auth-key`, option, alapértelmezés: nincs): DeepL REST API kulcs. Megadáskor a szkript elmenti base64 formában a `keyholder.json` fájlba; ha nem adod meg, előbb onnan próbál olvasni.
+- `auth_key` (`-auth_key`, `--auth-key`, option, alapértelmezés: nincs): DeepL REST API kulcs. Megadáskor a szkript elmenti base64 formában a `keyholder.json` fájlba; ha nem adod meg, előbb onnan próbál olvasni. Valamilyen formában, vagy parancssorban, vagy a webfelületen egyszer kötelezőp megadni, egyébként hibával leáll a script, utána már beolvassa a `keyholder.json`-ból.
 
 ## Opcionális beállítások
 - `input_language` (`-input_language`, `--input-language`, option, alapértelmezés: config vagy nincs): A forrásnyelv kódja. Üresen hagyva a `config.json` `CONFIG.default_source_lang` beállítására esik vissza.

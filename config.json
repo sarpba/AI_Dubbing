@@ -33,13 +33,13 @@
   "LAST_WORKFLOW": [
     {
       "script": "AV/extract_audio_easy_channels.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AV/separate_audio_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "chunk_size": "5",
@@ -50,40 +50,17 @@
       }
     },
     {
-      "script": "ASR/whisx.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
       "script": "ASR/parakeet-tdt-0.6b-v2.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "DIARIZE/split_segments_by_speaker.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "output_language": "HU"
-      }
-    },
-    {
-      "script": "TRANSLATE/translate.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "auth_key": "base64:YzM4NWM1NmItNmIyMy00OTE3LTkzMDktZTBjZDJjYTc5YWE5OmZ4",
-        "debug": false,
-        "input_language": "en",
-        "output_language": "hu"
       }
     },
     {
@@ -99,7 +76,7 @@
     },
     {
       "script": "TTS/f5_tts_easy_EQ.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "debug": false,
@@ -131,31 +108,10 @@
       }
     },
     {
-      "script": "AV/normalise_and_cut_json_easy.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
       "script": "AV/merge_chunks_with_background_easy.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "background_volume": "80",
-        "debug": false,
-        "narrator": true
-      }
-    },
-    {
-      "script": "AV/merge_chunks_with_background_beta.py",
       "enabled": true,
       "halt_on_fail": true,
-      "params": {
-        "background_volume": "80",
-        "debug": false,
-        "narrator": true,
-        "max_speedup": "15"
-      }
+      "params": {}
     },
     {
       "script": "AV/merge_to_video_easy.py",
@@ -166,5 +122,5 @@
       }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "default"
+  "LAST_WORKFLOW_TEMPLATE": "magyar_nyelvu_narralt_video_keszites"
 }
