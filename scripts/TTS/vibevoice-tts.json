@@ -7,6 +7,14 @@
       "name": "project_name",
       "type": "positional",
       "default": null
+    },
+    {
+      "name": "norm",
+      "flags": [
+        "--norm"
+      ],
+      "type": "option",
+      "default": null
     }
   ],
   "optional": [
@@ -99,12 +107,52 @@
       "default": "Speaker 1"
     },
     {
+      "name": "max_retries",
+      "flags": [
+        "--max_retries"
+      ],
+      "type": "option",
+      "default": 5
+    },
+    {
+      "name": "tolerance_factor",
+      "flags": [
+        "--tolerance_factor"
+      ],
+      "type": "option",
+      "default": 1.0
+    },
+    {
+      "name": "min_tolerance",
+      "flags": [
+        "--min_tolerance"
+      ],
+      "type": "option",
+      "default": 2
+    },
+    {
+      "name": "whisper_model",
+      "flags": [
+        "--whisper_model"
+      ],
+      "type": "option",
+      "default": "openai/whisper-large-v3"
+    },
+    {
+      "name": "beam_size",
+      "flags": [
+        "--beam_size"
+      ],
+      "type": "option",
+      "default": 5
+    },
+    {
       "name": "seed",
       "flags": [
         "--seed"
       ],
       "type": "option",
-      "default": 0
+      "default": -1
     },
     {
       "name": "max_segments",
@@ -121,6 +169,30 @@
       ],
       "type": "flag",
       "default": false
+    },
+    {
+      "name": "save_failures",
+      "flags": [
+        "--save_failures"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "keep_best_over_tolerance",
+      "flags": [
+        "--keep_best_over_tolerance"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "max_workers",
+      "flags": [
+        "--max_workers"
+      ],
+      "type": "option",
+      "default": null
     },
     {
       "name": "debug",

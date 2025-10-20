@@ -17,6 +17,7 @@ TTS/*/
 *.log
 
 # Audiofájlok
+*.aac
 *.mp3
 *.wav
 *.flac

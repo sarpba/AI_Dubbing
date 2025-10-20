@@ -1,18 +1,24 @@
 import argparse
 import datetime
+import importlib.util
 import json
 import logging
+import math
 import os
 import random
+import shutil
 import sys
 import tempfile
 import time
+import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import soundfile as sf
 import torch
+import torch.multiprocessing as mp
+import tqdm
 from transformers.utils import logging as transformers_logging
 
 # Ensure project root is importable so we can reuse shared tooling.
@@ -21,6 +27,23 @@ for candidate in Path(__file__).resolve().parents:
         if str(candidate) not in sys.path:
             sys.path.insert(0, str(candidate))
         break
+
+try:
+    import whisper
+except ImportError:  # pragma: no cover
+    whisper = None
+try:
+    from transformers import pipeline
+except ImportError:  # pragma: no cover
+    pipeline = None
+try:
+    from num2words import num2words
+except ImportError:  # pragma: no cover
+    num2words = None
+try:
+    from Levenshtein import distance as levenshtein_distance
+except ImportError:  # pragma: no cover
+    levenshtein_distance = None
 
 try:
     from vibevoice.modular.lora_loading import load_lora_assets
@@ -50,6 +73,8 @@ def find_project_root() -> Path:
 
 PROJECT_ROOT = find_project_root()
 DEFAULT_EQ_CONFIG_PATH = PROJECT_ROOT / "scripts" / "TTS" / "EQ.json"
+NORMALIZER_TO_WHISPER_LANG = {"hun": "hu", "eng": "en"}
+WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
 
 
 def set_random_seeds(seed: int, device: str) -> None:
@@ -193,12 +218,198 @@ def apply_eq_curve_to_audio(
     return equalized_audio.astype(np.float32, copy=False)
 
 
+def normalize_text_for_comparison(text: str) -> str:
+    text = text.lower().strip()
+    text = text.replace("ly", "j")
+    text = re.sub(r"[.,?!-]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def convert_numbers_to_words(text: str, lang: str) -> str:
+    if num2words is None:
+        return text
+
+    def replace_match(match: re.Match[str]) -> str:
+        try:
+            return num2words(int(match.group(0)), lang=lang)
+        except Exception:
+            return match.group(0)
+
+    return re.sub(r"\b\d+\b", replace_match, text)
+
+
+def load_normalizer(normaliser_path: Path) -> Optional[Callable[[str], str]]:
+    if not normaliser_path.exists():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("normaliser", normaliser_path)
+        if spec is None or spec.loader is None:
+            logger.error("Failed to initialize normalizer loader from %s", normaliser_path)
+            return None
+        normaliser_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(normaliser_module)  # type: ignore[attr-defined]
+        if hasattr(normaliser_module, "normalize"):
+            return getattr(normaliser_module, "normalize")
+        logger.warning("Normalizer at %s does not expose a 'normalize' function.", normaliser_path)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("Failed to load normalizer from %s: %s", normaliser_path, exc, exc_info=True)
+    return None
+
+
+def compute_tolerance(word_count: int, tolerance_factor: float, min_tolerance: int) -> int:
+    calculated = math.ceil(word_count * tolerance_factor)
+    return max(calculated, min_tolerance)
+
+
+def increment_stat(stats, key: str, increment: int = 1) -> None:
+    current = int(stats.get(key, 0))
+    stats[key] = current + increment
+
+
+def log_generation_attempt(
+    worker_label: str,
+    filename: str,
+    attempt: int,
+    max_attempts: int,
+    normalized_original: str,
+    normalized_transcribed: str,
+    distance: int,
+    tolerance: int,
+    outcome: str,
+) -> None:
+    message = (
+        f"\n--- Generálás Log ({worker_label} | Fájl: {filename}) ---\n"
+        f"Generálási próbálkozás: {attempt}/{max_attempts}\n"
+        f"Gen_text (normalizált): {normalized_original}\n"
+        f"Whisperrel visszaolvasott (normalizált): {normalized_transcribed}\n"
+        f"Távolság / Megengedett: {distance} / {tolerance}\n"
+        f"{outcome}\n"
+        "----------------------------------------------------------"
+    )
+    logger.info(message)
+
+
+def save_failed_attempt(
+    args: argparse.Namespace,
+    filename_stem: str,
+    attempt_num: int,
+    distance: int,
+    tolerance: int,
+    temp_gen_path: str,
+    original_text: str,
+    transcribed_text: str,
+) -> None:
+    try:
+        debug_segment_dir = Path(args.failed_generations_dir) / filename_stem
+        debug_segment_dir.mkdir(parents=True, exist_ok=True)
+
+        info_json_path = debug_segment_dir / "info.json"
+        info: Dict[str, object] = {}
+        if info_json_path.exists():
+            with open(info_json_path, "r", encoding="utf-8") as fh:
+                info = json.load(fh)
+
+        attempt_filename = f"{filename_stem}_attempt_{attempt_num}_dist_{distance}.wav"
+        shutil.copy(temp_gen_path, debug_segment_dir / attempt_filename)
+
+        failures = info.setdefault("failures", [])
+        if isinstance(failures, list):
+            failures.append(
+                {
+                    "attempt": attempt_num,
+                    "distance": distance,
+                    "allowed_tolerance": tolerance,
+                    "original_text": original_text,
+                    "transcribed_text": transcribed_text,
+                    "saved_audio_filename": attempt_filename,
+                }
+            )
+        info["last_update"] = datetime.datetime.utcnow().isoformat()
+
+        with open(info_json_path, "w", encoding="utf-8") as fh:
+            json.dump(info, fh, ensure_ascii=False, indent=2)
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        logger.error("Failed to save debug information for %s: %s", filename_stem, exc, exc_info=True)
+
+
+def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[Callable[[str], str]], Optional[str]]:
+    if args.seed != -1:
+        return None, None
+
+    if levenshtein_distance is None:
+        logger.error("Verification requires the 'python-Levenshtein' package.")
+        return None, None
+    if num2words is None:
+        logger.error("Verification requires the 'num2words' package.")
+        return None, None
+
+    whisper_language = NORMALIZER_TO_WHISPER_LANG.get(args.norm.lower())
+    if not whisper_language:
+        logger.error("No Whisper language mapping found for normalizer '%s'.", args.norm)
+        return None, None
+
+    is_hf_model = "/" in args.whisper_model
+    if is_hf_model:
+        if pipeline is None:
+            logger.error(
+                "transformers.pipeline is unavailable, cannot load Hugging Face ASR model '%s'.",
+                args.whisper_model,
+            )
+            return None, None
+
+        device_for_pipeline = device
+        if device_for_pipeline.startswith("cuda"):
+            # pipeline expects device index for cuda
+            device_for_pipeline = int(device.split(":")[-1]) if ":" in device else device
+        transcriber = pipeline(
+            "automatic-speech-recognition",
+            model=args.whisper_model,
+            torch_dtype=torch.float16 if device != "cpu" else torch.float32,
+            device=device_for_pipeline,
+        )
+
+        def run(audio_path: str) -> str:
+            generate_kwargs = {
+                "language": WHISPER_LANG_CODE_TO_NAME.get(whisper_language),
+                "num_beams": args.beam_size,
+            }
+            output = transcriber(audio_path, generate_kwargs=generate_kwargs)
+            if isinstance(output, dict):
+                return output.get("text", "")
+            return str(output)
+
+        return run, whisper_language
+
+    if whisper is None:
+        logger.error("openai-whisper is unavailable, cannot load model '%s'.", args.whisper_model)
+        return None, None
+
+    model_name = args.whisper_model.replace("openai/", "")
+    transcriber = whisper.load_model(model_name, device=device)
+
+    def run(audio_path: str) -> str:
+        result = transcriber.transcribe(
+            audio_path,
+            language=whisper_language,
+            fp16=torch.cuda.is_available(),
+            beam_size=args.beam_size,
+        )
+        return result.get("text", "")
+
+    return run, whisper_language
 def parse_arguments() -> argparse.Namespace:
     default_device = "cuda" if torch.cuda.is_available() else "cpu"
     parser = argparse.ArgumentParser(
         description="VibeVoice alapú TTS a fordított sávok szegmensenkénti generálásához.",
     )
     parser.add_argument("project_name", type=str, help="A projekt könyvtár neve a 'workdir' mappán belül.")
+    parser.add_argument(
+        "--norm",
+        type=str,
+        required=True,
+        help="Normalizálási profil azonosító (pl. 'hun', 'eng').",
+    )
     parser.add_argument(
         "--model_path",
         type=str,
@@ -266,8 +477,38 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--seed",
         type=int,
-        default=0,
-        help="Véletlenszám-generátor magja (0 esetén nincs fixálás).",
+        default=-1,
+        help="Véletlenszám-generátor magja (-1 esetén véletlen és Whisper ellenőrzés).",
+    )
+    parser.add_argument(
+        "--max_retries",
+        type=int,
+        default=5,
+        help="Maximális generálási kísérletek száma a visszaellenőrzés során.",
+    )
+    parser.add_argument(
+        "--tolerance_factor",
+        type=float,
+        default=1.0,
+        help="Levenshtein tolerancia szorzó (szószám * faktor).",
+    )
+    parser.add_argument(
+        "--min_tolerance",
+        type=int,
+        default=2,
+        help="Szövegellenőrzés minimális toleranciája.",
+    )
+    parser.add_argument(
+        "--whisper_model",
+        type=str,
+        default="openai/whisper-large-v3",
+        help="Whisper modell az ellenőrzéshez (HF azonosító vagy openai/ prefix).",
+    )
+    parser.add_argument(
+        "--beam_size",
+        type=int,
+        default=5,
+        help="Whisper dekódolás nyalábszélessége.",
     )
     parser.add_argument(
         "--max_segments",
@@ -279,6 +520,22 @@ def parse_arguments() -> argparse.Namespace:
         "--overwrite",
         action="store_true",
         help="Létező kimeneti fájlok felülírása újragenerálás esetén.",
+    )
+    parser.add_argument(
+        "--save_failures",
+        action="store_true",
+        help="Sikertelen generálási kísérletek mentése diagnosztikához.",
+    )
+    parser.add_argument(
+        "--keep_best_over_tolerance",
+        action="store_true",
+        help="Megőrzi a legjobb próbálkozást akkor is, ha a toleranciát túllépi.",
+    )
+    parser.add_argument(
+        "--max_workers",
+        type=int,
+        default=None,
+        help="Párhuzamos GPU workerek maximális száma.",
     )
     add_debug_argument(parser)
     return parser.parse_args()
@@ -314,7 +571,10 @@ def prepare_output_directories(args: argparse.Namespace, config: Dict[str, objec
     Path(args.output_dir_noise).mkdir(parents=True, exist_ok=True)
 
 
-def load_vibevoice_components(args: argparse.Namespace) -> Tuple[VibeVoiceProcessor, VibeVoiceForConditionalGenerationInference]:
+def load_vibevoice_components(
+    args: argparse.Namespace,
+    device: str,
+) -> Tuple[VibeVoiceProcessor, VibeVoiceForConditionalGenerationInference]:
     model_path = args.model_dir or args.model_path
     if not model_path:
         raise ValueError("A VibeVoice modell elérési útja nem lett megadva (--model_path).")
@@ -324,19 +584,16 @@ def load_vibevoice_components(args: argparse.Namespace) -> Tuple[VibeVoiceProces
     logger.info("Processor betöltése: %s", model_path)
     processor = VibeVoiceProcessor.from_pretrained(model_path)
 
-    device = args.device
-    if device == "mps":
+    device_lower = device.lower()
+    if device_lower == "mps":
         load_dtype = torch.float32
         attn_impl_primary = "sdpa"
-        device_map = None
-    elif device == "cuda":
+    elif device_lower.startswith("cuda"):
         load_dtype = torch.bfloat16
         attn_impl_primary = "flash_attention_2"
-        device_map = "cuda"
     else:
         load_dtype = torch.float32
         attn_impl_primary = "sdpa"
-        device_map = "cpu"
 
     logger.info(
         "Modell betöltése: %s | device=%s | dtype=%s | attn_impl=%s",
@@ -350,11 +607,10 @@ def load_vibevoice_components(args: argparse.Namespace) -> Tuple[VibeVoiceProces
         model = VibeVoiceForConditionalGenerationInference.from_pretrained(
             model_path,
             torch_dtype=load_dtype,
-            device_map=device_map,
             attn_implementation=attn_impl_primary,
         )
-        if device == "mps":
-            model.to("mps")
+        if device_lower.startswith("cuda") or device_lower == "mps":
+            model.to(device)
     except Exception as exc:  # pragma: no cover - environment dependent fallback
         if attn_impl_primary == "flash_attention_2":
             logger.warning(
@@ -364,9 +620,10 @@ def load_vibevoice_components(args: argparse.Namespace) -> Tuple[VibeVoiceProces
             model = VibeVoiceForConditionalGenerationInference.from_pretrained(
                 model_path,
                 torch_dtype=load_dtype,
-                device_map=("cuda" if device == "cuda" else "cpu"),
                 attn_implementation="sdpa",
             )
+            if device_lower.startswith("cuda") or device_lower == "mps":
+                model.to(device)
         else:
             raise
 
@@ -471,6 +728,11 @@ def process_segment(
     processor: VibeVoiceProcessor,
     model: VibeVoiceForConditionalGenerationInference,
     eq_config: Optional[Dict[str, object]],
+    transcribe_fn: Optional[Callable[[str], str]],
+    whisper_language: Optional[str],
+    normalize_fn: Optional[Callable[[str], str]],
+    device: str,
+    worker_label: str,
 ) -> Tuple[bool, Optional[str]]:
     start_time = segment.get("start")
     end_time = segment.get("end")
@@ -493,57 +755,276 @@ def process_segment(
         logger.debug("Kihagyva (létező fájl): %s", output_path)
         return True, None
 
+    gen_text = original_gen_text
+    if normalize_fn:
+        try:
+            gen_text = normalize_fn(gen_text)
+        except Exception as exc:
+            logger.error("Szöveg normalizálása sikertelen '%s' szegmensnél: %s", filename, exc, exc_info=True)
+            return False, f"Normalizálási hiba: {exc}"
+
+    formatted_text = ensure_script_format(gen_text, args.speaker_name)
+    if not formatted_text:
+        return False, "Üres generálandó szöveg."
+
     ref_chunk = audio_data[start_sample:end_sample]
     ref_chunk = apply_eq_curve_to_audio(ref_chunk, sample_rate, eq_config)
     if args.normalize_ref_audio:
         ref_chunk = normalize_peak(ref_chunk.copy(), args.ref_audio_peak)
 
-    # VibeVoice a referenciamintát fájlból várja, ezért ideiglenes fájlba mentünk.
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_ref_file:
         temp_ref_path = tmp_ref_file.name
     try:
         sf.write(temp_ref_path, ref_chunk, sample_rate)
 
-        formatted_text = ensure_script_format(original_gen_text, args.speaker_name)
-        if not formatted_text:
-            return False, "Üres generálandó szöveg."
-
         inputs = prepare_inputs(
             processor=processor,
             text=formatted_text,
             voice_sample_paths=[temp_ref_path],
-            device=args.device,
+            device=device,
         )
 
-        logger.debug("Generálás indul: %s", filename)
-        generation_start = time.time()
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=None,
-                cfg_scale=args.cfg_scale,
-                tokenizer=processor.tokenizer,
-                generation_config={"do_sample": False},
-                verbose=False,
-                is_prefill=not args.disable_prefill,
-            )
-        generation_time = time.time() - generation_start
-        logger.debug("Generálás kész %.2f mp alatt: %s", generation_time, filename)
+        attempts = args.max_retries if transcribe_fn else 1
+        normalized_original = normalize_text_for_comparison(gen_text)
+        tolerance_word_count = len(gen_text.split())
+        best_distance = float("inf")
+        best_temp_path: Optional[str] = None
+        best_transcribed: str = ""
+        last_error: Optional[str] = None
+        filename_stem = Path(filename).stem
 
-        speech_outputs = getattr(outputs, "speech_outputs", None)
-        if not speech_outputs or speech_outputs[0] is None:
-            return False, "A modell nem adott vissza audiót."
+        for attempt in range(1, attempts + 1):
+            temp_gen_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=args.output_dir)
+            temp_gen_path = temp_gen_file.name
+            temp_gen_file.close()
+            keep_temp = False
+            try:
+                generation_start = time.time()
+                with torch.no_grad():
+                    outputs = model.generate(
+                        **inputs,
+                        max_new_tokens=None,
+                        cfg_scale=args.cfg_scale,
+                        tokenizer=processor.tokenizer,
+                        generation_config={"do_sample": False},
+                        verbose=False,
+                        is_prefill=not args.disable_prefill,
+                    )
+                generation_time = time.time() - generation_start
+                logger.debug("Generálás kész %.2f mp alatt: %s (attempt %s)", generation_time, filename, attempt)
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        processor.save_audio(speech_outputs[0], output_path=str(output_path))
-        return True, None
-    except Exception as exc:  # pragma: no cover - runtime dependent
-        return False, f"Generálási hiba: {exc}"
+                speech_outputs = getattr(outputs, "speech_outputs", None)
+                if not speech_outputs or speech_outputs[0] is None:
+                    raise RuntimeError("A modell nem adott vissza audiót.")
+
+                processor.save_audio(speech_outputs[0], output_path=temp_gen_path)
+
+                if not transcribe_fn:
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(temp_gen_path, output_path)
+                    return True, None
+
+                raw_transcribed = transcribe_fn(temp_gen_path)
+                converted_transcribed = convert_numbers_to_words(
+                    raw_transcribed,
+                    lang=whisper_language or "",
+                )
+                normalized_transcribed = normalize_text_for_comparison(converted_transcribed)
+                final_tolerance = compute_tolerance(
+                    tolerance_word_count,
+                    args.tolerance_factor,
+                    args.min_tolerance,
+                )
+                distance = levenshtein_distance(normalized_original, normalized_transcribed)
+                outcome = (
+                    "Sikeres ellenőrzés"
+                    if distance <= final_tolerance or distance <= 1
+                    else "Ellenőrzés sikertelen"
+                )
+                log_generation_attempt(
+                    worker_label,
+                    filename,
+                    attempt,
+                    attempts,
+                    normalized_original,
+                    normalized_transcribed,
+                    distance,
+                    final_tolerance,
+                    outcome,
+                )
+
+                if distance <= final_tolerance or distance <= 1:
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    os.replace(temp_gen_path, output_path)
+                    if best_temp_path and os.path.exists(best_temp_path):
+                        os.remove(best_temp_path)
+                    return True, None
+
+                last_error = f"Levenshtein távolság {distance}, tolerancia {final_tolerance}"
+                if args.save_failures:
+                    save_failed_attempt(
+                        args=args,
+                        filename_stem=filename_stem,
+                        attempt_num=attempt,
+                        distance=distance,
+                        tolerance=final_tolerance,
+                        temp_gen_path=temp_gen_path,
+                        original_text=gen_text,
+                        transcribed_text=converted_transcribed,
+                    )
+
+                if distance < best_distance:
+                    if best_temp_path and os.path.exists(best_temp_path):
+                        os.remove(best_temp_path)
+                    best_distance = distance
+                    best_transcribed = converted_transcribed
+                    best_temp_path = temp_gen_path
+                    keep_temp = True
+                else:
+                    keep_temp = False
+
+            except Exception as exc:
+                last_error = f"Generálási hiba: {exc}"
+                logger.error("Hiba a(z) %s szegmens generálása közben: %s", filename, exc, exc_info=True)
+            finally:
+                if not keep_temp and os.path.exists(temp_gen_path):
+                    os.remove(temp_gen_path)
+
+        final_tolerance = compute_tolerance(
+            tolerance_word_count,
+            args.tolerance_factor,
+            args.min_tolerance,
+        )
+        is_best_available = best_temp_path and os.path.exists(best_temp_path)
+        accept_outside_tolerance = (
+            args.keep_best_over_tolerance
+            and is_best_available
+            and best_distance < float("inf")
+        )
+        if is_best_available and (best_distance <= final_tolerance or accept_outside_tolerance):
+            if best_distance <= final_tolerance:
+                logger.info(
+                    "%s: A legjobb próbálkozás elfogadva (distance: %s, tolerance: %s) -> %s",
+                    worker_label,
+                    best_distance,
+                    final_tolerance,
+                    filename,
+                )
+            else:
+                logger.warning(
+                    "%s: A legjobb próbálkozás tolerancia felett is elfogadva (distance: %s, tolerance: %s) -> %s",
+                    worker_label,
+                    best_distance,
+                    final_tolerance,
+                    filename,
+                )
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(best_temp_path, output_path)
+            return True, None
+
+        if best_temp_path and os.path.exists(best_temp_path):
+            os.remove(best_temp_path)
+
+        return False, last_error or "Generálás ismeretlen okból sikertelen."
     finally:
         try:
             os.remove(temp_ref_path)
         except OSError:
             pass
+
+
+def run_segments_on_device(
+    device: str,
+    worker_label: str,
+    args: argparse.Namespace,
+    segments: List[Dict[str, object]],
+    input_wav_path_str: str,
+    eq_config: Optional[Dict[str, object]],
+    stats,
+    failed_segments_info,
+    progress_position: int = 0,
+    prefetched_audio: Optional[Tuple[np.ndarray, int]] = None,
+) -> None:
+    if not segments:
+        return
+
+    set_random_seeds(args.seed, device)
+    transcribe_fn, whisper_language = create_transcriber(args, device)
+    if args.seed == -1 and transcribe_fn is None:
+        logger.error("%s: Whisper alapú ellenőrzés szükséges, de nem betölthető.", worker_label)
+        return
+
+    normaliser_path = Path(args.normalisers_dir) / args.norm / "normaliser.py"
+    normalize_fn = load_normalizer(normaliser_path)
+    processor, model = load_vibevoice_components(args, device)
+
+    if prefetched_audio is not None:
+        full_audio_data, sample_rate = prefetched_audio
+    else:
+        full_audio_data, sample_rate = sf.read(input_wav_path_str)
+
+    progress_iter = tqdm.tqdm(
+        segments,
+        desc=f"Processing on {worker_label}",
+        position=progress_position,
+        leave=False,
+    )
+    for segment in progress_iter:
+        start_time = segment.get("start", 0.0)
+        end_time = segment.get("end", 0.0)
+        filename = f"{time_to_filename_str(start_time)}_{time_to_filename_str(end_time)}.wav"
+        ok, error_msg = process_segment(
+            segment=segment,
+            args=args,
+            audio_data=full_audio_data,
+            sample_rate=sample_rate,
+            processor=processor,
+            model=model,
+            eq_config=eq_config,
+            transcribe_fn=transcribe_fn,
+            whisper_language=whisper_language,
+            normalize_fn=normalize_fn,
+            device=device,
+            worker_label=worker_label,
+        )
+        if ok:
+            increment_stat(stats, "successful")
+        else:
+            increment_stat(stats, "failed")
+            failed_segments_info.append(
+                {
+                    "filename": filename,
+                    "text": segment.get("translated_text") or segment.get("text") or "",
+                    "reason": error_msg or "",
+                }
+            )
+
+
+def gpu_worker(
+    worker_idx: int,
+    args: argparse.Namespace,
+    all_chunks: List[List[Dict[str, object]]],
+    input_wav_path_str: str,
+    eq_config,
+    stats,
+    failed_segments_info,
+) -> None:
+    cuda_id = worker_idx
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_id)
+    torch.cuda.set_device(0)
+    device = "cuda:0"
+    worker_label = f"GPU-{cuda_id}"
+    run_segments_on_device(
+        device=device,
+        worker_label=worker_label,
+        args=args,
+        segments=all_chunks[worker_idx],
+        input_wav_path_str=input_wav_path_str,
+        eq_config=eq_config,
+        stats=stats,
+        failed_segments_info=failed_segments_info,
+        progress_position=worker_idx,
+    )
 
 
 def process_project(args: argparse.Namespace) -> None:
@@ -569,6 +1050,11 @@ def process_project(args: argparse.Namespace) -> None:
     segments = data.get("segments", [])
     segments.sort(key=lambda item: item.get("start", 0.0))
 
+    if args.max_segments is not None:
+        original_len = len(segments)
+        segments = segments[: args.max_segments]
+        logger.info("Szegmensek limitálva: %s -> %s (max_segments=%s)", original_len, len(segments), args.max_segments)
+
     audio_data, sample_rate = sf.read(input_wav_path)
     logger.info(
         "Referencia audió adatai: %s mintavétel, %.2f mp",
@@ -584,64 +1070,101 @@ def process_project(args: argparse.Namespace) -> None:
         eq_config_path = None
     eq_config = load_eq_curve_config(eq_config_path)
 
-    args.device = resolve_device(args.device)
-    set_random_seeds(args.seed, args.device)
+    cfg_dirs = config_data["DIRECTORIES"]
+    full_project_path = (PROJECT_ROOT / cfg_dirs["workdir"]) / args.project_name
+    args.normalisers_dir = str(PROJECT_ROOT / cfg_dirs["normalisers"])
+    args.failed_generations_dir = str(full_project_path / "failed_generations")
+    if args.save_failures:
+        Path(args.failed_generations_dir).mkdir(parents=True, exist_ok=True)
 
-    processor, model = load_vibevoice_components(args)
+    resolved_device = resolve_device(args.device)
+    args.device = resolved_device
 
-    stats = {
-        "successful": 0,
-        "failed": 0,
-        "skipped": 0,
-        "total": len(segments),
-        "errors": [],
-    }
+    total_segments = len(segments)
+    stats_summary: Dict[str, int] = {"successful": 0, "failed": 0, "total": total_segments}
+    failed_segments: List[Dict[str, str]] = []
 
-    for index, segment in enumerate(segments, start=1):
-        if args.max_segments is not None and stats["successful"] + stats["failed"] >= args.max_segments:
-            logger.info("Elérte a megadott max szegmens limitet (%s).", args.max_segments)
-            break
+    input_wav_path_str = str(input_wav_path)
 
-        ok, error_msg = process_segment(
-            segment=segment,
-            args=args,
-            audio_data=audio_data,
-            sample_rate=sample_rate,
-            processor=processor,
-            model=model,
-            eq_config=eq_config,
-        )
-        if ok:
-            stats["successful"] += 1
+    if total_segments == 0:
+        logger.warning("Nincs feldolgozandó szegmens a projektben.")
+        return
+
+    if resolved_device.startswith("cuda") and torch.cuda.is_available():
+        num_gpus = torch.cuda.device_count()
+        max_workers = args.max_workers if args.max_workers is not None else num_gpus
+        num_workers = max(1, min(num_gpus, max_workers))
+
+        if num_workers > 1:
+            logger.info("Több-GPU feldolgozás %s workerrel.", num_workers)
+            chunks: List[List[Dict[str, object]]] = [[] for _ in range(num_workers)]
+            for idx, segment in enumerate(segments):
+                chunks[idx % num_workers].append(segment)
+
+            with mp.Manager() as manager:
+                stats_proxy = manager.dict({"successful": 0, "failed": 0, "total": total_segments})
+                failed_proxy = manager.list()
+                mp.spawn(
+                    gpu_worker,
+                    nprocs=num_workers,
+                    args=(
+                        args,
+                        chunks,
+                        input_wav_path_str,
+                        eq_config,
+                        stats_proxy,
+                        failed_proxy,
+                    ),
+                    join=True,
+                )
+                stats_summary = dict(stats_proxy)
+                failed_segments = list(failed_proxy)
         else:
-            stats["failed"] += 1
-            filename = (
-                f"{time_to_filename_str(segment.get('start', 0.0))}_"
-                f"{time_to_filename_str(segment.get('end', 0.0))}.wav"
+            torch.cuda.set_device(0)
+            run_segments_on_device(
+                device="cuda:0",
+                worker_label="GPU-0",
+                args=args,
+                segments=segments,
+                input_wav_path_str=input_wav_path_str,
+                eq_config=eq_config,
+                stats=stats_summary,
+                failed_segments_info=failed_segments,
+                progress_position=0,
+                prefetched_audio=(audio_data, sample_rate),
             )
-            stats["errors"].append({"filename": filename, "reason": error_msg})
-            logger.error("Szegmens feldolgozása sikertelen (%s): %s", filename, error_msg)
+    else:
+        worker_label = resolved_device.upper()
+        run_segments_on_device(
+            device=resolved_device,
+            worker_label=worker_label,
+            args=args,
+            segments=segments,
+            input_wav_path_str=input_wav_path_str,
+            eq_config=eq_config,
+            stats=stats_summary,
+            failed_segments_info=failed_segments,
+            progress_position=0,
+            prefetched_audio=(audio_data, sample_rate),
+        )
 
-        if index % 10 == 0 or index == len(segments):
-            logger.info(
-                "Haladás: %s/%s | sikeres: %s | sikertelen: %s",
-                index,
-                len(segments),
-                stats["successful"],
-                stats["failed"],
-            )
+    successful = int(stats_summary.get("successful", 0))
+    failed = int(stats_summary.get("failed", 0))
+    total = int(stats_summary.get("total", total_segments))
+    processed = successful + failed
 
     logger.info("=" * 50)
     logger.info(
-        "Összegzés\n  - Összes szegmens: %s\n  - Sikeres: %s\n  - Sikertelen: %s",
-        stats["total"],
-        stats["successful"],
-        stats["failed"],
+        "Összegzés\n  - Összes szegmens: %s\n  - Feldolgozott: %s\n  - Sikeres: %s\n  - Sikertelen: %s",
+        total,
+        processed,
+        successful,
+        failed,
     )
-    if stats["errors"]:
-        logger.info("Sikertelen szegmensek:")
-        for item in stats["errors"]:
-            logger.info("  * %s -> %s", item["filename"], item["reason"])
+    if failed_segments:
+        logger.info("Sikertelen szegmensek listája:")
+        for item in sorted(failed_segments, key=lambda x: x.get("filename", "")):
+            logger.info("  * %s -> %s", item.get("filename"), item.get("reason"))
     logger.info("=" * 50)
 
 
@@ -668,4 +1191,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()

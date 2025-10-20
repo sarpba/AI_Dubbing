@@ -75,31 +75,29 @@
       "enabled": true
     },
     {
+      "script": "TTS/vibevoice-tts.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "debug": false,
+        "disable_prefill": false,
+        "keep_best_over_tolerance": true,
+        "model_path": "Cseti/VibeVoice_7B_hun_v2",
+        "norm": "hun",
+        "normalize_ref_audio": false,
+        "overwrite": true,
+        "save_failures": true
+      }
+    },
+    {
       "script": "TTS/f5_tts_easy_EQ.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {
         "debug": false,
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "keep_best_over_tolerance": false,
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "norm": "hun",
-        "normalize_ref_audio": false,
-        "phonetic_ref": false,
-        "remove_silence": false,
-        "save_failures": true
-      }
-    },
-    {
-      "script": "TTS/f5_tts_narrator.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "debug": true,
         "keep_best_over_tolerance": true,
-        "max_retries": "1",
         "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
         "norm": "hun",
         "normalize_ref_audio": false,
         "phonetic_ref": false,
@@ -108,15 +106,16 @@
       }
     },
     {
-      "script": "AV/merge_chunks_with_background_beta.py",
+      "script": "AV/normalise_and_cut_json_easy.py",
       "enabled": true,
       "halt_on_fail": true,
-      "params": {
-        "background_volume": "80",
-        "debug": false,
-        "max_speedup": "15",
-        "narrator": true
-      }
+      "params": {}
+    },
+    {
+      "script": "AV/merge_chunks_with_background_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
     },
     {
       "script": "AV/merge_to_video_easy.py",
@@ -125,24 +124,7 @@
       "params": {
         "language": "hun"
       }
-    },
-    {
-      "type": "widget",
-      "widget": "reviewContinue",
-      "enabled": true
-    },
-    {
-      "script": "TTS/vibevoice-tts.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {
-        "debug": false,
-        "disable_prefill": false,
-        "model_path": "Cseti/VibeVoice_7B_hun_v2",
-        "normalize_ref_audio": false,
-        "overwrite": true
-      }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "magyar_nyelvu_narralt_video_keszites"
+  "LAST_WORKFLOW_TEMPLATE": "default"
 }
