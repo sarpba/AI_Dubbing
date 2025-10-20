@@ -1,15 +1,32 @@
 # Kizárt könyvtárak
-workdir/
+workdir/*/
 **/__pycache__/
-info.txt
-TTS/*/
-tools/
-script.log
-separate.log
-infer_batch.log
-.gradio
-*extract.sh
-*whisx_simple_old.py
+.gradio/
 .old/
+
+# Kizárt konfigurációs és adatfájlok
 keyholder.json
 users.json
+
+# Kizárt scriptek és eszközök
+*extract.sh
+*whisx_simple_old.py
+tools/
+TTS/*/
+
+# Naplófájlok (log)
+*.log
+
+# Audiofájlok
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.m4a
+
+# Videófájlok
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
