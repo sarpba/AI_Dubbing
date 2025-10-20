@@ -1343,5 +1343,139 @@
         "default": false
       }
     ]
+  },
+  {
+    "enviroment": "vibevoice",
+    "script": "TTS/vibevoice-tts.py",
+    "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "model_path",
+        "flags": [
+          "--model_path"
+        ],
+        "type": "option",
+        "default": "microsoft/VibeVoice-1.5b"
+      },
+      {
+        "name": "model_dir",
+        "flags": [
+          "--model_dir"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "checkpoint_path",
+        "flags": [
+          "--checkpoint_path"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "device",
+        "flags": [
+          "--device"
+        ],
+        "type": "option",
+        "default": "auto"
+      },
+      {
+        "name": "cfg_scale",
+        "flags": [
+          "--cfg_scale"
+        ],
+        "type": "option",
+        "default": 1.3
+      },
+      {
+        "name": "disable_prefill",
+        "flags": [
+          "--disable_prefill"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "ddpm_steps",
+        "flags": [
+          "--ddpm_steps"
+        ],
+        "type": "option",
+        "default": 10
+      },
+      {
+        "name": "eq_config",
+        "flags": [
+          "--eq_config"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "normalize_ref_audio",
+        "flags": [
+          "--normalize_ref_audio"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "ref_audio_peak",
+        "flags": [
+          "--ref_audio_peak"
+        ],
+        "type": "option",
+        "default": 0.95
+      },
+      {
+        "name": "speaker_name",
+        "flags": [
+          "--speaker_name"
+        ],
+        "type": "option",
+        "default": "Speaker 1"
+      },
+      {
+        "name": "seed",
+        "flags": [
+          "--seed"
+        ],
+        "type": "option",
+        "default": 0
+      },
+      {
+        "name": "max_segments",
+        "flags": [
+          "--max_segments"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "overwrite",
+        "flags": [
+          "--overwrite"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
   }
 ]

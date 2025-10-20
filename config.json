@@ -112,10 +112,10 @@
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "narrator": true,
         "background_volume": "80",
+        "debug": false,
         "max_speedup": "15",
-        "debug": false
+        "narrator": true
       }
     },
     {
@@ -124,6 +124,23 @@
       "halt_on_fail": true,
       "params": {
         "language": "hun"
+      }
+    },
+    {
+      "type": "widget",
+      "widget": "reviewContinue",
+      "enabled": true
+    },
+    {
+      "script": "TTS/vibevoice-tts.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "debug": false,
+        "disable_prefill": false,
+        "model_path": "Cseti/VibeVoice_7B_hun_v2",
+        "normalize_ref_audio": false,
+        "overwrite": true
       }
     }
   ],
