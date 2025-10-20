@@ -6,7 +6,6 @@ workdir/*/
 
 # Kizárt konfigurációs és adatfájlok
 keyholder.json
-users.json
 
 # Kizárt scriptek és eszközök
 *extract.sh
