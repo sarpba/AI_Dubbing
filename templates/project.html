@@ -66,6 +66,68 @@
         .markdown-content code {
             font-size: 0.9em;
         }
+        .workflow-context-menu {
+            position: absolute;
+            display: none;
+            min-width: 240px;
+            background-color: var(--bs-body-bg, #ffffff);
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            padding: 0.25rem 0;
+            z-index: 1080;
+        }
+        .workflow-context-menu.show {
+            display: block;
+        }
+        .workflow-context-item {
+            position: relative;
+            padding: 0.35rem 1.5rem 0.35rem 0.75rem;
+            white-space: nowrap;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+        .workflow-context-item:hover {
+            background-color: rgba(13, 110, 253, 0.08);
+        }
+        .workflow-context-item.disabled {
+            color: #adb5bd;
+            pointer-events: none;
+        }
+        .workflow-context-item.has-submenu::after {
+            content: '>';
+            position: absolute;
+            right: 0.6rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.75rem;
+            color: var(--bs-secondary-color, #6c757d);
+        }
+        .workflow-context-submenu {
+            position: absolute;
+            top: 0;
+            left: 100%;
+            margin-left: 2px;
+            min-width: 220px;
+            background-color: var(--bs-body-bg, #ffffff);
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 0.5rem;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            padding: 0.25rem 0;
+            display: none;
+            z-index: 1081;
+        }
+        .workflow-context-item.has-submenu:hover > .workflow-context-submenu {
+            display: block;
+        }
+        .workflow-context-divider {
+            height: 1px;
+            margin: 0.25rem 0;
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+        tr.workflow-context-target > * {
+            background-color: rgba(13, 110, 253, 0.08) !important;
+        }
     </style>
     <script>
         const PROJECT_NAME = "{{ project.name }}";
@@ -86,6 +148,11 @@
         let workflowTemplates = [];
         let currentTemplateId = null;
         let workflowInitialized = false;
+        let workflowContextMenu = null;
+        let workflowContextState = {
+            targetIndex: null,
+            targetRow: null
+        };
 
         const workflowKeyFieldMap = {
             chatgpt: { wrapperId: 'workflowKeyFieldChatgpt', inputId: 'workflowKeyChatgpt', payloadKey: 'chatgpt_api_key' },
@@ -616,17 +683,6 @@
                 saveTemplateBtn.addEventListener('click', showSaveWorkflowModal);
             }
 
-            const addBtn = document.getElementById('addWorkflowStepBtn');
-            if (addBtn) {
-                addBtn.addEventListener('click', () => {
-                    if (!availableScripts.length) {
-                        alert('A scripts lista még nem töltődött be. Próbáld újra néhány másodperc múlva.');
-                        return;
-                    }
-                    openWorkflowStepPicker();
-                });
-            }
-
             const resetBtn = document.getElementById('resetWorkflowBtn');
             if (resetBtn) {
                 resetBtn.addEventListener('click', () => {
@@ -657,18 +713,242 @@
             if (searchInput) {
                 searchInput.addEventListener('input', event => populateWorkflowStepList(event.target.value || ''));
             }
+        }
 
-            const widgetMenu = document.getElementById('workflowWidgetMenu');
-            if (widgetMenu) {
-                widgetMenu.querySelectorAll('[data-widget-id]').forEach(item => {
-                    item.addEventListener('click', event => {
-                        const widgetId = event.currentTarget.getAttribute('data-widget-id');
-                        if (widgetId) {
-                            addWorkflowWidget(widgetId);
-                        }
-                    });
+        function initWorkflowContextMenu() {
+            if (workflowContextMenu) {
+                return;
+            }
+            workflowContextMenu = document.createElement('div');
+            workflowContextMenu.id = 'workflowContextMenu';
+            workflowContextMenu.className = 'workflow-context-menu';
+            workflowContextMenu.addEventListener('contextmenu', event => event.preventDefault());
+            document.body.append(workflowContextMenu);
+
+            document.addEventListener('click', event => {
+                if (!workflowContextMenu || !workflowContextMenu.classList.contains('show')) {
+                    return;
+                }
+                if (workflowContextMenu.contains(event.target)) {
+                    return;
+                }
+                hideWorkflowContextMenu();
+            });
+
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') {
+                    hideWorkflowContextMenu();
+                }
+            });
+
+            window.addEventListener('resize', hideWorkflowContextMenu);
+            document.addEventListener('scroll', hideWorkflowContextMenu, true);
+
+            const stepsTable = document.getElementById('workflowStepsTable');
+            if (stepsTable) {
+                stepsTable.addEventListener('contextmenu', event => {
+                    const row = event.target.closest('tr[data-step-index]');
+                    const rawIndex = row ? parseInt(row.dataset.stepIndex, 10) : NaN;
+                    const targetIndex = Number.isNaN(rawIndex) ? null : rawIndex;
+                    showWorkflowContextMenu(event, row || null, targetIndex);
                 });
             }
+        }
+
+        function hideWorkflowContextMenu() {
+            if (!workflowContextMenu) {
+                return;
+            }
+            workflowContextMenu.classList.remove('show');
+            workflowContextMenu.innerHTML = '';
+            if (workflowContextState.targetRow) {
+                workflowContextState.targetRow.classList.remove('workflow-context-target');
+            }
+            workflowContextState.targetIndex = null;
+            workflowContextState.targetRow = null;
+        }
+
+        function showWorkflowContextMenu(event, rowElement, targetIndex) {
+            event.preventDefault();
+            if (!workflowContextMenu) {
+                return;
+            }
+
+            hideWorkflowContextMenu();
+
+            workflowContextState.targetIndex = typeof targetIndex === 'number' ? targetIndex : null;
+            workflowContextState.targetRow = rowElement || null;
+            if (workflowContextState.targetRow) {
+                workflowContextState.targetRow.classList.add('workflow-context-target');
+            }
+
+            const positions = [
+                { key: 'above', label: 'Beszúrás fölé' },
+                { key: 'below', label: 'Beszúrás alá' }
+            ];
+
+            positions.forEach(position => {
+                const item = document.createElement('div');
+                item.className = 'workflow-context-item has-submenu';
+                item.textContent = position.label;
+                const submenu = buildWorkflowInsertSubmenu(position.key);
+                item.append(submenu);
+                workflowContextMenu.append(item);
+            });
+
+            const pageX = event.pageX;
+            const pageY = event.pageY;
+            workflowContextMenu.style.left = `${pageX}px`;
+            workflowContextMenu.style.top = `${pageY}px`;
+            workflowContextMenu.classList.add('show');
+
+            requestAnimationFrame(() => {
+                const rect = workflowContextMenu.getBoundingClientRect();
+                let adjustedLeft = pageX;
+                let adjustedTop = pageY;
+                const viewportRight = window.scrollX + window.innerWidth;
+                const viewportBottom = window.scrollY + window.innerHeight;
+                if (rect.right > viewportRight) {
+                    adjustedLeft = viewportRight - rect.width - 8;
+                }
+                if (rect.bottom > viewportBottom) {
+                    adjustedTop = viewportBottom - rect.height - 8;
+                }
+                workflowContextMenu.style.left = `${Math.max(window.scrollX + 8, adjustedLeft)}px`;
+                workflowContextMenu.style.top = `${Math.max(window.scrollY + 8, adjustedTop)}px`;
+            });
+        }
+
+        function buildWorkflowInsertSubmenu(position) {
+            const submenu = document.createElement('div');
+            submenu.className = 'workflow-context-submenu';
+            const groupedScripts = getScriptsGroupedByDirectory();
+
+            if (workflowWidgets.length) {
+                const widgetItem = document.createElement('div');
+                widgetItem.className = 'workflow-context-item has-submenu';
+                widgetItem.textContent = 'Widgetek';
+                const widgetSubmenu = document.createElement('div');
+                widgetSubmenu.className = 'workflow-context-submenu';
+
+                workflowWidgets.forEach(widget => {
+                    const widgetOption = document.createElement('div');
+                    widgetOption.className = 'workflow-context-item';
+                    widgetOption.textContent = widget.name;
+                    widgetOption.addEventListener('click', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        insertWorkflowWidget(widget.id, position);
+                    });
+                    widgetSubmenu.append(widgetOption);
+                });
+
+                widgetItem.append(widgetSubmenu);
+                submenu.append(widgetItem);
+            }
+
+            if (workflowWidgets.length && groupedScripts.length) {
+                const divider = document.createElement('div');
+                divider.className = 'workflow-context-divider';
+                submenu.append(divider);
+            }
+
+            groupedScripts.forEach(([directory, scripts]) => {
+                const dirItem = document.createElement('div');
+                dirItem.className = 'workflow-context-item has-submenu';
+                dirItem.textContent = directory || 'Gyökér';
+                const scriptSubmenu = document.createElement('div');
+                scriptSubmenu.className = 'workflow-context-submenu';
+
+                scripts.forEach(script => {
+                    const scriptOption = document.createElement('div');
+                    scriptOption.className = 'workflow-context-item';
+                    scriptOption.textContent = script.display_name || script.script;
+                    scriptOption.addEventListener('click', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        insertWorkflowScript(script.id, position);
+                    });
+                    scriptSubmenu.append(scriptOption);
+                });
+
+                dirItem.append(scriptSubmenu);
+                submenu.append(dirItem);
+            });
+
+            if (!workflowWidgets.length && !groupedScripts.length) {
+                const empty = document.createElement('div');
+                empty.className = 'workflow-context-item disabled';
+                empty.textContent = 'Nincs elérhető elem';
+                submenu.append(empty);
+            }
+
+            return submenu;
+        }
+
+        function getScriptsGroupedByDirectory() {
+            const map = new Map();
+            availableScripts.forEach(script => {
+                const normalizedPath = String(script.script || '').replace(/\\/g, '/');
+                let relativePath = normalizedPath;
+                if (relativePath.startsWith('scripts/')) {
+                    relativePath = relativePath.slice('scripts/'.length);
+                }
+                const lastSlash = relativePath.lastIndexOf('/');
+                const directory = lastSlash >= 0 ? relativePath.slice(0, lastSlash) : '';
+                if (!map.has(directory)) {
+                    map.set(directory, []);
+                }
+                map.get(directory).push(script);
+            });
+
+            const sortedDirectories = Array.from(map.entries()).sort((a, b) => {
+                const dirA = a[0] || '';
+                const dirB = b[0] || '';
+                if (dirA === dirB) {
+                    return 0;
+                }
+                if (!dirA) {
+                    return -1;
+                }
+                if (!dirB) {
+                    return 1;
+                }
+                return dirA.localeCompare(dirB);
+            });
+
+            return sortedDirectories.map(([directory, scripts]) => {
+                const sortedScripts = scripts
+                    .slice()
+                    .sort((scriptA, scriptB) => {
+                        const labelA = (scriptA.display_name || scriptA.script || '').toLowerCase();
+                        const labelB = (scriptB.display_name || scriptB.script || '').toLowerCase();
+                        return labelA.localeCompare(labelB);
+                    });
+                return [directory, sortedScripts];
+            });
+        }
+
+        function calculateInsertIndex(position) {
+            if (typeof workflowContextState.targetIndex !== 'number' || Number.isNaN(workflowContextState.targetIndex)) {
+                return workflowSteps.length;
+            }
+            if (position === 'above') {
+                return Math.max(0, Math.min(workflowContextState.targetIndex, workflowSteps.length));
+            }
+            return Math.max(0, Math.min(workflowContextState.targetIndex + 1, workflowSteps.length));
+        }
+
+        function insertWorkflowScript(scriptId, position) {
+            const insertIndex = calculateInsertIndex(position);
+            hideWorkflowContextMenu();
+            addWorkflowStep(scriptId, insertIndex);
+        }
+
+        function insertWorkflowWidget(widgetId, position) {
+            const insertIndex = calculateInsertIndex(position);
+            hideWorkflowContextMenu();
+            addWorkflowWidget(widgetId, insertIndex);
         }
 
         function initWorkflowModals() {
@@ -818,6 +1098,7 @@
                 const isWidget = step.type === 'widget';
                 const script = !isWidget ? findScriptById(step.script) : null;
                 const row = document.createElement('tr');
+                row.dataset.stepIndex = String(index);
                 if (isWidget) {
                     row.classList.add('table-info');
                 }
@@ -1199,7 +1480,7 @@
             });
         }
 
-        function addWorkflowStep(scriptId) {
+        function addWorkflowStep(scriptId, insertIndex = workflowSteps.length) {
             const script = findScriptById(scriptId);
             if (!script) {
                 alert(`Ismeretlen szkript: ${scriptId}`);
@@ -1212,12 +1493,17 @@
                 halt_on_fail: template ? (template.halt_on_fail !== undefined ? template.halt_on_fail : true) : true,
                 params: template ? cloneObject(template.params) : {}
             };
-            workflowSteps.push(newStep);
+            let targetIndex = parseInt(insertIndex, 10);
+            if (Number.isNaN(targetIndex)) {
+                targetIndex = workflowSteps.length;
+            }
+            targetIndex = Math.max(0, Math.min(targetIndex, workflowSteps.length));
+            workflowSteps.splice(targetIndex, 0, newStep);
             renderWorkflowSteps();
             updateInfoBox('secondary', `${script.display_name || script.script} hozzáadva a workflow-hoz.`);
         }
 
-        function addWorkflowWidget(widgetId) {
+        function addWorkflowWidget(widgetId, insertIndex = workflowSteps.length) {
             const widget = findWidgetById(widgetId);
             if (!widget) {
                 alert(`Ismeretlen widget: ${widgetId}`);
@@ -1228,7 +1514,12 @@
                 widget: widget.id,
                 enabled: true
             };
-            workflowSteps.push(newStep);
+            let targetIndex = parseInt(insertIndex, 10);
+            if (Number.isNaN(targetIndex)) {
+                targetIndex = workflowSteps.length;
+            }
+            targetIndex = Math.max(0, Math.min(targetIndex, workflowSteps.length));
+            workflowSteps.splice(targetIndex, 0, newStep);
             renderWorkflowSteps();
             updateInfoBox('secondary', `${widget.name} widget hozzáadva a workflow-hoz.`);
         }
@@ -2367,6 +2658,7 @@
             initFileBrowser();
             initWorkflowModals();
             initWorkflowButtons();
+            initWorkflowContextMenu();
             initWorkflowKeyModal();
             const refreshLogBtn = document.getElementById('refreshWorkflowLogBtn');
             if (refreshLogBtn) {
@@ -2432,21 +2724,8 @@
                         <button type="button" class="btn btn-outline-success btn-sm" id="saveWorkflowBtn">Mentés sablonként</button>
                     </div>
                     <div class="d-flex flex-wrap align-items-center gap-2">
-                        <div class="d-flex flex-wrap gap-2">
-                            <div class="btn-group">
-                                <button type="button" class="btn btn-primary" id="addWorkflowStepBtn">Lépés hozzáadása</button>
-                                <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                    Widget hozzáadása
-                                </button>
-                                <ul class="dropdown-menu" id="workflowWidgetMenu">
-                                    <li><h6 class="dropdown-header">Speciális widgetek</h6></li>
-                                    <li>
-                                        <button class="dropdown-item" type="button" data-widget-id="reviewContinue">
-                                            Review + Continue widget
-                                        </button>
-                                    </li>
-                                </ul>
-                            </div>
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <span class="text-muted small">Jobb klikk a táblázatban a lépések beszúrásához.</span>
                             <button type="button" class="btn btn-outline-secondary" id="resetWorkflowBtn">Alapértelmezett lépések</button>
                         </div>
                         <span class="badge bg-warning text-dark d-none" id="workflowMissingBadge">Hiányzó paraméterek</span>

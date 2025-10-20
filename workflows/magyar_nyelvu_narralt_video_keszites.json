@@ -26,12 +26,10 @@
       "params": {}
     },
     {
-      "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
+      "script": "TRANSLATE/translate.py",
       "enabled": true,
       "halt_on_fail": true,
-      "params": {
-        "output_language": "HU"
-      }
+      "params": {}
     },
     {
       "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
@@ -45,24 +43,8 @@
       "enabled": true
     },
     {
-      "script": "TTS/f5_tts_easy_EQ.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "debug": false,
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "keep_best_over_tolerance": false,
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "norm": "hun",
-        "normalize_ref_audio": false,
-        "phonetic_ref": false,
-        "remove_silence": false,
-        "save_failures": true
-      }
-    },
-    {
       "script": "TTS/f5_tts_narrator.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "debug": true,
@@ -82,10 +64,10 @@
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "narrator": true,
         "background_volume": "80",
+        "debug": false,
         "max_speedup": "15",
-        "debug": false
+        "narrator": true
       }
     },
     {
