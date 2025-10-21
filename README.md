@@ -1,108 +1,54 @@
-# THE REPO IS COMPLETLY REWORKED, IT'S WORKING WELL, BUT NEED TO UPDATE THE README YET... IF YOU TRY IT, YOU NEED TO CREATE THE 3 (sync, f5-tts_hun, parakeet_fix) ANACONDA ENVIROMENT ALONE AT THE MOMENT. I'LL UPDATE THE README AS SOON AS POSSIBLE.
 
-# AI-dubbing is a semi-automatic video (podcasts, movies, series) Dubbing system.
-## Translate any video into your native language and keep the voices of the characters.
+# AI Dubbing
 
-## The new main_app is not finished yet, but the main_bash2.py fully working. The new dubbing app is mostly working in eng->hun way only. If you want to use other language, then need to modificat the code.
+## Áttekintés (HU)
+Az AI Dubbing egy eszközkészlet videók és hanganyagok többnyelvű szinkronizálásához. A folyamat WhisperX-alapú átiratozást, opcionális beszélőszétválasztást és többféle TTS modellt kombinál a végső kimenet előállításához.
 
+## Overview (EN)
+AI Dubbing is a toolkit for multilingual dubbing of videos and audio. The pipeline combines WhisperX-based transcription, optional speaker diarization, and multiple TTS models to produce the final track.
 
+## Telepítési és környezeti útmutató (HU)
+1. Telepítsd az alap `sync` conda környezetet a [sync-linux telepítési útmutató](ENVIROMENTS/sync-linux.md) lépései szerint; ez a környezet a projekt fő függőségeit tartalmazza.
+2. Ha speciális TTS vagy kísérleti modelleket is futtatnál, állíts be külön környezeteket az alábbi dokumentumok alapján:
+   - [f5-tts-linux telepítési útmutató](ENVIROMENTS/f5-tts-linux.md)
+   - [parakeet-linux telepítési útmutató](ENVIROMENTS/parakeet-linux.md)
+   - [vibevoice-linux telepítési útmutató](ENVIROMENTS/vibevoice-linux.md)
+3. A fenti leírások feltételezik, hogy a repó az `AI_Dubbing` könyvtár alatt érhető el, és hogy Anaconda/Miniconda már telepítve van.
 
-The project uses the following AI models:
+## Installation and Environment Setup (EN)
+1. Install the base `sync` conda environment by following the [sync-linux setup guide](ENVIROMENTS/sync-linux.md); it contains the core dependencies required to run the project.
+2. If you need specialized TTS or experimental models, provision additional environments as described in:
+   - [f5-tts-linux setup guide](ENVIROMENTS/f5-tts-linux.md)
+   - [parakeet-linux setup guide](ENVIROMENTS/parakeet-linux.md)
+   - [vibevoice-linux setup guide](ENVIROMENTS/vibevoice-linux.md)
+3. These guides assume the repository is available under `AI_Dubbing` and that Anaconda/Miniconda is already installed on your system.
 
-OpenAI Whisper, 
-Pyannote Speaker Diarization, 
-Facebookresearch demucs MDXnet, 
-SWivid F5-TTS
+## Modell- és API-előkészítés (HU)
+- Frissítsd a `whisperx/alignment.py` fájlt, és állíts be pontosabb alapértelmezett igazítási modelleket, hogy javuljon az időzítés pontossága.
+- Másold a saját `model.pt`, `vocab.txt` és `model_conf.json` fájljaidat a megfelelő `TTS/XXX` alkönyvtárba; sablonfájlokat a `TTS` mappában találsz.
+- (Opcionális) Hozz létre Hugging Face fiókot, fogadd el a Pyannote Speaker Diarization 3.1 licencét, majd generálj és tárolj biztonságosan egy olvasási API-kulcsot: https://huggingface.co/pyannote/speaker-diarization-3.1
+- Regisztrálj DeepL fiókot, aktiváld az ingyenes API-előfizetést, és készíts API-kulcsot (kb. 500 000 karakter/hó, ~10–20 óra videó).
 
-It's a hobby project. I'll just a little maintan.
+## Model and API Preparation (EN)
+- Update `whisperx/alignment.py` to point to more accurate default alignment models; this improves timeline precision during transcription.
+- Copy your `model.pt`, `vocab.txt`, and `model_conf.json` into the appropriate `TTS/XXX` subdirectory. Configuration templates are available in the `TTS` folder.
+- (Optional) Create a Hugging Face account, accept the Pyannote Speaker Diarization 3.1 license, and securely store a read-only API token: https://huggingface.co/pyannote/speaker-diarization-3.1
+- Register for a DeepL account, enable the free API tier, and generate an API key (500,000 characters/month, roughly 10–20 hours of video).
 
-At the moment It run on linux only with anaconda it use 2 enviroment.
-
-Prepare F5-TTS anaconda enviroment:
-```
-conda create -n f5-tts python=3.10 && conda activate f5-tts
-conda install git
-pip install torch==2.3.0+cu118 torchaudio==2.3.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
-pip install git+https://github.com/SWivid/F5-TTS.git
-pip install num2words Levenshtein nltk
-conda deactivate
-```
-
-Prepare AI_dubbing anaconda enviroment:
-```
-conda  create -n sync python=3.10 && conda activate sync
-pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
-conda install git
-pip install git+https://github.com/m-bain/whisperx.git
-conda install cudatoolkit=11.8 cudnn=8.*
-#git clone https://github.com/sarpba/AI_Dubbing.git
-cd AI_Dubbing_new
-pip install -r requirements.txt
-sudo wget -qO - https://mkvtoolnix.download/gpg-pub-moritzbunkus.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/mkvtoolnix.gpg
-echo "deb [arch=amd64] https://mkvtoolnix.download/ubuntu/ $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/mkvtoolnix.list
-sudo apt update
-sudo apt install ffmpeg
-sudo apt install gcc
-sudo apt install mkvtoolnix mkvtoolnix-gui
-```
-
-Nvidia ASR enviroment:
-```
-sudo apt update
-sudo apt install build-essential
-```
+## Alkalmazás futtatása (HU)
 ```bash
-conda create -n parakeet-fix python=3.10 -y
-conda activate parakeet-fix
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-pip install nemo_toolkit[asr]
-pip install librosa soundfile
-pip install cuda-python>=12.3
-```
-
-Edit the whisperx alignment.py, and change the default aligment models to better if have. It's important for more precise alignment process.
-
-Copy your F5-TTS model.pt and vocab.txt into the TTS directory. 
-
-Create a Hugging Face account (it's optional, only need if you want to use speaker diarization), and accept the licenses for the following:
-Pyannote Speaker Diarization 3.1 Generate a read API key and save it securely. https://huggingface.co/pyannote/speaker-diarization-3.1
-
-
-Register for a DeepL account, activate the API with a free subscription, and generate an API key as well. This free tier includes up to 500,000 characters per month, equivalent to roughly 10-20 hour video.
-
-RUN:
-```
 conda activate sync
 cd AI_Dubbing
 python main_app.py
 ```
 
-todo:
-
-- make a manual correction tab, for change automatic translated texts or base audio if need. (text change done)
-- need a good working normaliser metod which is with multilang moduls (change numbers and spacial characters to words, because the finetuned modells not heandle it good)
-- good working speaker diarization for segment reworking. (segment reworking done, but it based on speaker diarization, it can use it for podcasts with one speaker)
-- non line per line translate, for understand and handle the context (based on chatgpt 4o)
-- narration mode (with one narrator only)
-- timed SRT upload isnted whisper transcript (manuall edited srt with subtitle editor 4.0.8.)
-...
-
-License: MIT
-
-
-
-# windows install in docker desktop (With Nvidia GPU support, min. 8-12gb vRAM):
-
-```
-git clone https://github.com/sarpba/AI_Dubbing.git
+## Running the Application (EN)
+```bash
+conda activate sync
 cd AI_Dubbing
-cd docker
-docker build --build-arg HF_TOKEN=YOUR_HF_TOKEN -t ai_dubbing:0.0.1 .
+python main_app.py
 ```
 
-start:
-```
-docker run --gpus all -p 7860:7860 -p 7861:7861 ai_dubbing:0.0.1
-```
-
+## Licenc / License
+MIT
 

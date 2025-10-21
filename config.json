@@ -32,77 +32,19 @@
   },
   "LAST_WORKFLOW": [
     {
-      "script": "AV/extract_audio_easy_channels.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "AV/separate_audio_easy.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {
-        "chunk_size": "5",
-        "debug": false,
-        "device": "cuda",
-        "keep_full_audio": false,
-        "non_speech_silence": true
-      }
-    },
-    {
-      "script": "ASR/parakeet-tdt-0.6b-v2.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {
-        "output_language": "HU"
-      }
-    },
-    {
-      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "type": "widget",
-      "widget": "reviewContinue",
-      "enabled": true
-    },
-    {
       "script": "TTS/vibevoice-tts.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {
-        "debug": false,
-        "disable_prefill": false,
-        "keep_best_over_tolerance": true,
-        "model_path": "Cseti/VibeVoice_7B_hun_v2",
-        "norm": "hun",
-        "normalize_ref_audio": false,
-        "overwrite": true,
-        "save_failures": true
-      }
-    },
-    {
-      "script": "TTS/f5_tts_easy_EQ.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {
         "debug": false,
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "keep_best_over_tolerance": true,
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
+        "disable_prefill": false,
+        "keep_best_over_tolerance": false,
+        "model_path": "Cseti/VibeVoice_7B_hun_v2",
         "norm": "hun",
         "normalize_ref_audio": false,
-        "phonetic_ref": false,
-        "remove_silence": false,
-        "save_failures": true
+        "overwrite": false,
+        "save_failures": true,
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json"
       }
     },
     {
@@ -126,5 +68,5 @@
       }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "default"
+  "LAST_WORKFLOW_TEMPLATE": "teszt"
 }

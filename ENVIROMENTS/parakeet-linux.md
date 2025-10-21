@@ -10,25 +10,11 @@ sudo apt update
 sudo apt install build-essential
 ```
 
-A Környezet Újraépítése
+A Környezet építése
 
 ```bash
 conda create -n parakeet python=3.10 -y
 conda activate parakeet
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-pip install nemo_toolkit[asr]
-pip install librosa soundfile
-pip install cuda-python>=12.3
-```
-
-A Környezet Újraépítése
-```
-sudo apt update
-sudo apt install build-essential
-```
-```bash
-conda create -n parakeet-fix python=3.10 -y
-conda activate parakeet-fix
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 pip install nemo_toolkit[asr]
 pip install librosa soundfile
