@@ -32,19 +32,49 @@
   },
   "LAST_WORKFLOW": [
     {
+      "script": "ASR/parakeet-tdt-0.6b-v2.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "input_language": "en",
+        "output_language": "hu",
+        "context": "Soth Park series episode",
+        "stream": false,
+        "allow_sensitive_content": true,
+        "debug": false
+      }
+    },
+    {
+      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "type": "widget",
+      "widget": "reviewContinue",
+      "enabled": true
+    },
+    {
       "script": "TTS/vibevoice-tts.py",
       "enabled": false,
       "halt_on_fail": true,
       "params": {
         "debug": false,
         "disable_prefill": false,
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
         "keep_best_over_tolerance": false,
         "model_path": "Cseti/VibeVoice_7B_hun_v2",
         "norm": "hun",
         "normalize_ref_audio": false,
         "overwrite": false,
-        "save_failures": true,
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json"
+        "save_failures": true
       }
     },
     {

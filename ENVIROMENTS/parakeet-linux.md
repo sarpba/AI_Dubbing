@@ -19,4 +19,5 @@ pip3 install torch torchvision torchaudio --index-url https://download.pytorch.o
 pip install nemo_toolkit[asr]
 pip install librosa soundfile
 pip install cuda-python>=12.3
+conda install -c conda-forge libstdcxx-ng
 ```
