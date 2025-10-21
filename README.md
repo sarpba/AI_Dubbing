@@ -10,18 +10,18 @@ AI Dubbing is a toolkit for multilingual dubbing of videos and audio. The pipeli
 ## Telepítési és környezeti útmutató (HU)
 1. Telepítsd az alap `sync` conda környezetet a [sync-linux telepítési útmutató](ENVIROMENTS/sync-linux.md) lépései szerint; ez a környezet a projekt fő függőségeit tartalmazza.
 2. Ha speciális TTS vagy kísérleti modelleket is futtatnál, állíts be külön környezeteket az alábbi dokumentumok alapján:
-   - [f5-tts-linux telepítési útmutató](ENVIROMENTS/f5-tts-linux.md)
-   - [parakeet-linux telepítési útmutató](ENVIROMENTS/parakeet-linux.md)
-   - [vibevoice-linux telepítési útmutató](ENVIROMENTS/vibevoice-linux.md)
-3. A fenti leírások feltételezik, hogy a repó az `AI_Dubbing` könyvtár alatt érhető el, és hogy Anaconda/Miniconda már telepítve van.
+   - [f5-tts-linux telepítési útmutató](ENVIROMENTS/f5-tts-linux.md) (ez az alap TTS modul)
+   - [parakeet-linux telepítési útmutató](ENVIROMENTS/parakeet-linux.md) (whisperx ASR helyett, pontosabb)
+   - [vibevoice-linux telepítési útmutató](ENVIROMENTS/vibevoice-linux.md) (kisérleti modul, egyelőre teszt jelleggel)
+3. A fenti leírások feltételezik, hogy a repó az `AI_Dubbing` könyvtár alatt érhető el, és hogy Anaconda már telepítve van.
 
 ## Installation and Environment Setup (EN)
 1. Install the base `sync` conda environment by following the [sync-linux setup guide](ENVIROMENTS/sync-linux.md); it contains the core dependencies required to run the project.
 2. If you need specialized TTS or experimental models, provision additional environments as described in:
-   - [f5-tts-linux setup guide](ENVIROMENTS/f5-tts-linux.md)
-   - [parakeet-linux setup guide](ENVIROMENTS/parakeet-linux.md)
-   - [vibevoice-linux setup guide](ENVIROMENTS/vibevoice-linux.md)
-3. These guides assume the repository is available under `AI_Dubbing` and that Anaconda/Miniconda is already installed on your system.
+   - [f5-tts-linux setup guide](ENVIROMENTS/f5-tts-linux.md) (base TTS modul)
+   - [parakeet-linux setup guide](ENVIROMENTS/parakeet-linux.md) (insted of whisperx, it's more accurate)
+   - [vibevoice-linux setup guide](ENVIROMENTS/vibevoice-linux..md) (experimental module for testing purposes only)
+3. These guides assume the repository is available under `AI_Dubbing` and that Anaconda is already installed on your system.
 
 ## Modell- és API-előkészítés (HU)
 - Frissítsd a `whisperx/alignment.py` fájlt, és állíts be pontosabb alapértelmezett igazítási modelleket, hogy javuljon az időzítés pontossága.
