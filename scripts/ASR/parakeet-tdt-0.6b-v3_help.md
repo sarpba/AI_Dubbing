@@ -1,6 +1,6 @@
 # parakeet-tdt-0.6b-v3 – konfigurációs útmutató
 
-**Futtatási környezet:** `parakeet-fix`  
+**Futtatási környezet:** `parakeet`  
 **Belépési pont:** `ASR/parakeet-tdt-0.6b-v3.py`
 
 Ez a szkript a Parakeet TDT 0.6B V3 modellre épít, és JSON alapú átiratokat készít a projekt hanganyagaiból. A V2 verzióhoz hasonlóan támogatja az automatikus és a kézi darabolást.

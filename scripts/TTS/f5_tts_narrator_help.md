@@ -1,6 +1,6 @@
 # f5_tts_narrator – konfigurációs útmutató
 
-**Futtatási környezet:** `f5-tts_hun`  
+**Futtatási környezet:** `f5-tts`  
 **Belépési pont:** `TTS/f5_tts_narrator.py`
 
 A szkript egy narrátor referenciára építve generálja újra a projekt összes szinkron szegmensét F5-TTS modellel. A feldolgozás közben a referencia hangot normalizálja, opcionális EQ görbét alkalmaz, majd Whisper alapú verifikációval biztosítja a pontosságot.

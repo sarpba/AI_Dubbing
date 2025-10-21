@@ -1,5 +1,5 @@
 {
-  "enviroment": "parakeet-fix",
+  "enviroment": "parakeet",
   "script": "DIARIZE/e2e_diarize_speech.py",
   "description": "Alpha verzió egyelóre ne használd! Beszélődiarizáció végrehajtása az End-to-End Diarization modell segítségével.",
   "required": [

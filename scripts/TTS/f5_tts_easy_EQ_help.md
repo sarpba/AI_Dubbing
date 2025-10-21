@@ -1,6 +1,6 @@
 # f5_tts_easy_codex_EQ – konfigurációs útmutató
 
-**Futtatási környezet:** `f5-tts_hun`  
+**Futtatási környezet:** `f5-tts`  
 **Belépési pont:** `TTS/f5_tts_easy_EQ.py`
 
 A szkript a finomhangolt F5-TTS pipeline-t használja, hogy a projekt `translated_splits` tartalmából készítsen új szinkronhangot. A referencia hangot normalizálja, opcionális EQ-t alkalmaz, majd Whisper-alapú verifikációval ellenőrzi a kimenetet.

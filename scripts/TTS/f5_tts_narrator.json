@@ -1,5 +1,5 @@
 {
-  "enviroment": "f5-tts_hun",
+  "enviroment": "f5-tts",
   "script": "TTS/f5_tts_narrator.py",
   "description": "Narrátor referencia alapján generálja az összes szinkron szegmenst F5-TTS-sel.",
   "required": [

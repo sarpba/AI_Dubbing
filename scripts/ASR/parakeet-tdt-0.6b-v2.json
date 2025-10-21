@@ -1,5 +1,5 @@
 {
-  "enviroment": "parakeet-fix",
+  "enviroment": "parakeet",
   "script": "ASR/parakeet-tdt-0.6b-v2.py",
   "description": "A Parakeet TDT 0.6B V2 modell használata a beszéd szöveggé alakítására.",
   "required": [

@@ -1,6 +1,6 @@
 # canary-easy – konfigurációs útmutató
 
-**Futtatási környezet:** `parakeet-fix`  
+**Futtatási környezet:** `parakeet`  
 **Belépési pont:** `ASR/canary-easy.py`
 
 A szkript az NVIDIA Canary ASR modellt futtatja a `separated_audio_speech` mappában található hangfájlokon. A hosszabb felvételeket automatikusan darabolja, majd JSON formátumban menti a szöveget, időbélyegeket és – igény szerint – alternatív hipotéziseket.
