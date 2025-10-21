@@ -5,7 +5,7 @@ conda deactivate
 conda env remove -n f5-tts
 ```
 
-A Környezet építése
+Anakonda (nem minikonda) Környezet építése
 
 ```bash
 conda create -n f5-tts python=3.11 && conda activate f5-tts

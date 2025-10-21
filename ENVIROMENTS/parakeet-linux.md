@@ -10,7 +10,7 @@ sudo apt update
 sudo apt install build-essential
 ```
 
-A Környezet építése
+Anakonda (nem minikonda) Környezet építése
 
 ```bash
 conda create -n parakeet python=3.10 -y

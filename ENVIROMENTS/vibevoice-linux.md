@@ -5,7 +5,7 @@ conda deactivate
 conda env remove -n vibevoice
 ```
 
-A Környezet építése
+Anakonda (nem minikonda) Környezet építése
 
 ```bash
 git clone https://github.com/sarpba/VibeVoice.git
