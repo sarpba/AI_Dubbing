@@ -42,12 +42,12 @@
       "enabled": true,
       "halt_on_fail": true,
       "params": {
+        "allow_sensitive_content": true,
+        "context": "Soth Park series episode",
+        "debug": false,
         "input_language": "en",
         "output_language": "hu",
-        "context": "Soth Park series episode",
-        "stream": false,
-        "allow_sensitive_content": true,
-        "debug": false
+        "stream": false
       }
     },
     {
@@ -63,7 +63,7 @@
     },
     {
       "script": "TTS/vibevoice-tts.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "debug": false,
