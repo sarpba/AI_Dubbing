@@ -2,10 +2,10 @@ Esetleges korábbi telepítés törlése
 
 ```bash
 conda deactivate
-conda env remove -n parakeet
+conda env remove -n nemo
 ```
-
-```
+Rendszerfüggőségek
+```bash
 sudo apt update
 sudo apt install build-essential
 ```
@@ -13,8 +13,8 @@ sudo apt install build-essential
 Anakonda (nem minikonda) Környezet építése
 
 ```bash
-conda create -n parakeet python=3.10 -y
-conda activate parakeet
+conda create -n nemo python=3.10 -y
+conda activate nemo
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 pip install nemo_toolkit[asr]
 pip install librosa soundfile

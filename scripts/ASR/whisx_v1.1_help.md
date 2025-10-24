@@ -1,6 +1,6 @@
 # whisx2 – konfigurációs útmutató
 
-**Futtatási környezet:** `sync`  
+**Futtatási környezet:** `whisperx`  
 **API:** `huggingface`  
 **Belépési pont:** `ASR/whisx_v1.1.py`
 

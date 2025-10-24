@@ -1,6 +1,6 @@
 # e2e_diarize_speech – konfigurációs útmutató
 
-**Futtatási környezet:** `parakeet`  
+**Futtatási környezet:** `nemo`  
 **Belépési pont:** `DIARIZE/e2e_diarize_speech.py`
 
 Figyelem: a JSON is jelzi, hogy ez egy alfa állapotú eszköz. A szkript a NeMo Sortformer-alapú end-to-end diarizációs modelleket futtatja Hydra-konfigurációval, opcionális Optuna utófeldolgozás-optimalizálással. A paramétereket `kulcs=érték` formában kell átadni.

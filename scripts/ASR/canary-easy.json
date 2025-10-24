@@ -1,5 +1,5 @@
 {
-  "enviroment": "parakeet",
+  "enviroment": "nemo",
   "script": "ASR/canary-easy.py",
   "description": "A Canary ASR modell használata a beszéd szöveggé alakítására.",
   "required": [

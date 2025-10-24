@@ -1,6 +1,6 @@
 # separate_audio_easy_codex – konfigurációs útmutató
 
-**Futtatási környezet:** `sync`  
+**Futtatási környezet:** `demucs`  
 **Belépési pont:** `AV/separate_audio_easy.py`
 
 A szkript Demucs/MDX modellekkel szétválasztja a videóból kivont audiót beszédre és háttér-sávra. Kezeli a több modellből származó eredmények összefésülését, chunk-alapú feldolgozást és opcionális háttérkeverést.

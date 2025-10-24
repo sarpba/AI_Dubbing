@@ -1,6 +1,6 @@
 [
   {
-    "enviroment": "parakeet",
+    "enviroment": "nemo",
     "script": "ASR/canary-easy.py",
     "description": "A Canary ASR modell használata a beszéd szöveggé alakítására.",
     "required": [
@@ -98,7 +98,7 @@
     ]
   },
   {
-    "enviroment": "parakeet",
+    "enviroment": "nemo",
     "script": "ASR/parakeet-tdt-0.6b-v2.py",
     "description": "A Parakeet TDT 0.6B V2 modell használata a beszéd szöveggé alakítására.",
     "required": [
@@ -164,7 +164,7 @@
     ]
   },
   {
-    "enviroment": "parakeet",
+    "enviroment": "nemo",
     "script": "ASR/parakeet-tdt-0.6b-v3.py",
     "description": "A Parakeet TDT 0.6B V3 modell használata a beszéd szöveggé alakítására.",
     "required": [
@@ -230,49 +230,7 @@
     ]
   },
   {
-    "enviroment": "sync",
-    "api": "huggingface",
-    "script": "ASR/whisx.py",
-    "required": [
-      {
-        "name": "project_name",
-        "flags": [
-          "-p",
-          "--project-name"
-        ],
-        "type": "option",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "gpus",
-        "flags": [
-          "--gpus"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "hf_token",
-        "flags": [
-          "--hf_token"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "language",
-        "flags": [
-          "--language"
-        ],
-        "type": "option",
-        "default": null
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
+    "enviroment": "whisperx",
     "script": "ASR/whisx_v1.1.py",
     "api": "huggingface",
     "description": "WhisperX modell használata a beszéd szöveggé alakítására, több GPU támogatással, diarizációval és egyéni, Parakeet-stílusú szegmentálással.",
@@ -533,7 +491,7 @@
     ]
   },
   {
-    "enviroment": "sync",
+    "enviroment": "demucs",
     "script": "AV/separate_audio_easy.py",
     "description": "Az eredeti filból kivont audio filet beszédre és háttér zenére/sound effectekre bontja.",
     "required": [
@@ -637,7 +595,7 @@
     ]
   },
   {
-    "enviroment": "parakeet",
+    "enviroment": "nemo",
     "script": "DIARIZE/e2e_diarize_speech.py",
     "description": "Alpha verzió egyelóre ne használd! Beszélődiarizáció végrehajtása az End-to-End Diarization modell segítségével.",
     "required": [

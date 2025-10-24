@@ -1,6 +1,6 @@
 # parakeet-tdt-0.6b-v2 – konfigurációs útmutató
 
-**Futtatási környezet:** `parakeet`  
+**Futtatási környezet:** `nemo`  
 **Belépési pont:** `ASR/parakeet-tdt-0.6b-v2.py`
 
 A szkript az NVIDIA Parakeet TDT 0.6B V2 modellt futtatja, automatikus vagy kézi darabolással, és időbélyeges JSON átiratokat készít a `separated_audio_speech` mappában található hangokról.

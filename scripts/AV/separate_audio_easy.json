@@ -1,5 +1,5 @@
 {
-  "enviroment": "sync",
+  "enviroment": "demucs",
   "script": "AV/separate_audio_easy.py",
   "description": "Az eredeti filból kivont audio filet beszédre és háttér zenére/sound effectekre bontja.",
   "required": [

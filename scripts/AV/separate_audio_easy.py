@@ -384,6 +384,8 @@ def main() -> None:
     args = parser.parse_args()
     configure_debug_mode(args.debug)
 
+    overall_success = True
+
     device_str = args.device if torch.cuda.is_available() else "cpu"
     device = torch.device(device_str)
 
@@ -473,6 +475,7 @@ def main() -> None:
         else:
             print(f"Konvertálás WAV formátumba: {temp_audio_path}")
             if not extract_audio(str(audio_path), str(temp_audio_path)):
+                overall_success = False
                 continue
             was_converted = True
 
@@ -480,6 +483,7 @@ def main() -> None:
             waveform, sample_rate = torchaudio.load(str(temp_audio_path))
         except Exception:
             print(f"Hiba a hang fájl betöltése közben: {temp_audio_path}")
+            overall_success = False
             continue
 
         waveform = ensure_stereo(waveform)
@@ -493,8 +497,9 @@ def main() -> None:
             except Exception as exc:
                 print(f"Hiba a teljes audio mentése közben: {exc}")
 
+        success_this_file = False
         try:
-            success = process_file(
+            success_this_file = process_file(
                 base_name=base_name,
                 speech_output_dir=speech_output_dir,
                 background_output_dir=background_output_dir,
@@ -511,17 +516,24 @@ def main() -> None:
         except Exception:
             print(f"Hiba történt a szétválasztás közben: {audio_path}")
             traceback.print_exc()
-            success = False
+            success_this_file = False
 
         if was_converted and temp_audio_path.exists() and temp_audio_path != audio_path:
             temp_audio_path.unlink()
 
-        if not success:
+        if not success_this_file:
             print(f"A szétválasztás sikertelen volt a következő fájlnál: {filename_to_process}")
+            overall_success = False
 
     print("\n--- Feldolgozás befejezve ---")
-    print(f"A beszéd sávok a következő könyvtárba kerültek: {speech_output_dir}")
-    print(f"A háttérzaj sávok a következő könyvtárba kerültek: {background_output_dir}")
+    if overall_success:
+        print("Minden fájl sikeresen feldolgozva.")
+        print(f"A beszéd sávok a következő könyvtárba kerültek: {speech_output_dir}")
+        print(f"A háttérzaj sávok a következő könyvtárba kerültek: {background_output_dir}")
+    else:
+        print("A feldolgozás során hibák történtek. Kérlek, ellenőrizd a fenti üzeneteket.")
+
+    sys.exit(0 if overall_success else 1)
 
 
 if __name__ == "__main__":

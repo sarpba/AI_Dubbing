@@ -32,12 +32,22 @@
   },
   "LAST_WORKFLOW": [
     {
-      "script": "ASR/whisx2.py",
-      "enabled": false,
+      "script": "AV/extract_audio_easy_channels.py",
+      "enabled": true,
       "halt_on_fail": true,
-      "params": {
-        "language": "hu"
-      }
+      "params": {}
+    },
+    {
+      "script": "AV/separate_audio_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "ASR/whisx_v1.1.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
     },
     {
       "script": "TRANSLATE/translate.py",
