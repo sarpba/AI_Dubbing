@@ -17,7 +17,7 @@ conda create -n nemo python=3.10 -y
 conda activate nemo
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 pip install nemo_toolkit[asr]
-pip install librosa soundfile
+pip install librosa soundfile megatron megatron.core
 pip install cuda-python>=12.3
 conda install -c conda-forge libstdcxx-ng
 ```

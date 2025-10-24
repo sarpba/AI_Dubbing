@@ -867,7 +867,7 @@
     ]
   },
   {
-    "enviroment": "sync",
+    "enviroment": "f5-tts",
     "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
     "description": "Az idegen nyelvű szavakat kigyüjti a normalizáló canges_new.csv fileba.",
     "required": [

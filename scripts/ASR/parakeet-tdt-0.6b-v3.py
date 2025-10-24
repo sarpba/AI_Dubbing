@@ -41,7 +41,7 @@ try:
     print("NVIDIA NeMo, librosa, soundfile és OmegaConf sikeresen betöltve.")
 except ImportError as e:
     print(f"Hiba az importálás során: {e}")
-    print("Kérlek, bizonyosodj meg róla, hogy a 'parakeet-fix' conda környezet aktív és a szükséges csomagok telepítve vannak.")
+    print("Kérlek, bizonyosodj meg róla, hogy a 'nemo' conda környezet aktív és a szükséges csomagok telepítve vannak.")
     exit(1)
 
 SUPPORTED_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg", ".m4a")

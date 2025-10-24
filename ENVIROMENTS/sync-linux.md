@@ -8,7 +8,7 @@ conda env remove -n sync
 Anakonda (nem minikonda) Környezet építése
 
 ```bash
-conda  create -n sync python=3.10 && conda activate sync
+conda  create -n sync python=3.10 -y && conda activate sync
 conda install git
 git clone https://github.com/sarpba/AI_Dubbing.git
 cd AI_Dubbing_new

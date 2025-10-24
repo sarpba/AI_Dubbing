@@ -8,9 +8,11 @@ conda env remove -n f5-tts
 Anakonda (nem minikonda) Környezet építése
 
 ```bash
-conda create -n f5-tts python=3.11 && conda activate f5-tts
+conda create -n f5-tts python=3.11 -y && conda activate f5-tts
 conda install git
-pip install torch==2.3.0+cu118 torchaudio==2.3.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+#pip install torch==2.3.0+cu118 torchaudio==2.3.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+# Install pytorch with your CUDA version, e.g.
+pip install torch==2.4.0+cu124 torchaudio==2.4.0+cu124 --extra-index-url https://download.pytorch.org/whl/cu124
 pip install git+https://github.com/SWivid/F5-TTS.git
 pip install num2words Levenshtein nltk
 
@@ -28,6 +30,19 @@ Ha a phonemizer gondot jelez, pipről frissítheted:
 ```bash
 pip install --upgrade phonemizer
 ```
+huspell telepítése
+```bash
+sudo apt-get update
+sudo apt-get install -y libhunspell-dev hunspell
+# (optional dictionaries)
+sudo apt-get install -y hunspell-en-us hunspell-hu
+# back to your env
+conda activate f5-tts
+pip install --no-cache-dir hunspell
+```
+
+
+Az ezutáni rész elvileg nem szükséges.
 
 A Hunspell szótárakhoz másold a .dic/.aff fájlokat a normalisers/hun/hunspell/ mappába, vagy állítsd be a HUNSPELL_DICT_PATH változót:
 
