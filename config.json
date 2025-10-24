@@ -41,23 +41,36 @@
       "script": "AV/separate_audio_easy.py",
       "enabled": true,
       "halt_on_fail": true,
-      "params": {}
+      "params": {
+        "chunk_size": "5",
+        "debug": false,
+        "device": "cuda",
+        "keep_full_audio": false,
+        "non_speech_silence": true
+      }
     },
     {
-      "script": "ASR/whisx_v1.1.py",
+      "script": "ASR/parakeet-tdt-0.6b-v2.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
-      "script": "TRANSLATE/translate.py",
-      "enabled": false,
+      "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "debug": false,
-        "input_language": "hu",
-        "output_language": "en-gb"
+        "output_language": "HU",
+        "stream": false,
+        "allow_sensitive_content": true,
+        "debug": false
       }
+    },
+    {
+      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
     },
     {
       "type": "widget",
@@ -65,48 +78,35 @@
       "enabled": true
     },
     {
-      "script": "TTS/f5_tts_narrator.py",
+      "script": "TTS/f5_tts_easy_EQ.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
         "debug": false,
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
         "keep_best_over_tolerance": true,
-        "max_retries": "1",
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/eng/",
-        "narrator": "/home/sarpba/AI_Dubbing/narrator/eng",
-        "norm": "eng",
+        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
+        "norm": "hun",
         "normalize_ref_audio": false,
         "phonetic_ref": false,
         "remove_silence": false,
-        "save_failures": false
+        "save_failures": true
       }
     },
     {
-      "script": "AV/normalise_and_cut_json_easy.py",
+      "script": "AV/merge_chunks_with_background_easy.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
-      "script": "AV/merge_chunks_with_background_beta.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {
-        "background_volume": "1",
-        "debug": false,
-        "max_speedup": "0",
-        "narrator": true
-      }
-    },
-    {
       "script": "AV/merge_to_video_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "language": "hun"
       }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "magyar_nyelvu_narralt_video_keszites"
+  "LAST_WORKFLOW_TEMPLATE": "default"
 }

@@ -465,8 +465,16 @@ def main() -> None:
 
         audio_path = input_dir / filename_to_process
         base_name = os.path.splitext(filename_to_process)[0]
-        temp_audio_path = speech_output_dir / f"{base_name}_temp.wav"
 
+        expected_speech_path = speech_output_dir / f"{base_name}_speech.wav"
+        expected_background_path = background_output_dir / f"{base_name}_non_speech.wav"
+
+        if expected_speech_path.exists() and expected_background_path.exists():
+            print(f"\n--- Kihagyva: {filename_to_process} ---")
+            print("A célfájlok már léteznek, a feldolgozás kihagyva.")
+            continue  
+            
+        temp_audio_path = speech_output_dir / f"{base_name}_temp.wav"
         print(f"--- Feldolgozás: {audio_path} ---")
 
         if filename_to_process.lower().endswith(".wav"):
@@ -483,6 +491,7 @@ def main() -> None:
             waveform, sample_rate = torchaudio.load(str(temp_audio_path))
         except Exception:
             print(f"Hiba a hang fájl betöltése közben: {temp_audio_path}")
+            traceback.print_exc()
             overall_success = False
             continue
 
@@ -527,7 +536,7 @@ def main() -> None:
 
     print("\n--- Feldolgozás befejezve ---")
     if overall_success:
-        print("Minden fájl sikeresen feldolgozva.")
+        print("Minden fájl feldolgozása sikeresen befejeződött (a már létezőket kihagyva).")
         print(f"A beszéd sávok a következő könyvtárba kerültek: {speech_output_dir}")
         print(f"A háttérzaj sávok a következő könyvtárba kerültek: {background_output_dir}")
     else:
