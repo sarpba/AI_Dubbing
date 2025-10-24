@@ -3,6 +3,7 @@ workdir/*/
 **/__pycache__/
 .gradio/
 .old/
+narrator/*
 
 # Kizárt konfigurációs és adatfájlok
 keyholder.json
