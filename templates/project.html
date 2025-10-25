@@ -20,14 +20,26 @@
         .file-browser-summary {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 0.5rem;
             font-weight: 600;
+        }
+        .file-browser-label {
+            flex: 1 1 auto;
+            min-width: 0;
+            word-break: break-word;
         }
         .file-browser-item {
             display: flex;
             align-items: center;
             gap: 0.5rem;
             padding: 0.15rem 0;
+            flex-wrap: wrap;
+        }
+        .file-browser-link {
+            flex: 1 1 auto;
+            min-width: 0;
+            word-break: break-word;
         }
         details.file-browser-directory > summary {
             cursor: pointer;
@@ -35,6 +47,17 @@
         .file-browser-children {
             margin-left: 1rem;
             padding-left: 0.5rem;
+        }
+        .file-browser-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .file-browser-actions .btn {
+            padding: 0.2rem 0.5rem;
+            font-size: 0.75rem;
+            line-height: 1.2;
         }
         .script-api-badge {
             font-size: 0.75rem;
@@ -128,6 +151,16 @@
         tr.workflow-context-target > * {
             background-color: rgba(13, 110, 253, 0.08) !important;
         }
+        .json-preview {
+            max-height: 60vh;
+            overflow: auto;
+            background-color: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+        }
     </style>
     <script>
         const PROJECT_NAME = "{{ project.name }}";
@@ -161,6 +194,12 @@
         };
         const SECRET_PARAM_NAMES = {{ secret_param_names|tojson }};
         const SECRET_VALUE_PLACEHOLDER = '***';
+        const AUDIO_EXTENSIONS = new Set({{ audio_extensions|list|sort|tojson }});
+        const VIDEO_EXTENSIONS = new Set({{ video_extensions|list|sort|tojson }});
+        const JSON_EXTENSION = '.json';
+        let audioPreviewModal = null;
+        let videoPreviewModal = null;
+        let jsonPreviewModal = null;
 
         const workflowWidgets = [
             {
@@ -288,6 +327,17 @@
             return `/workdir/${encoded.join('/')}`;
         }
 
+        function getFileExtension(name) {
+            if (!name || typeof name !== 'string') {
+                return '';
+            }
+            const dotIndex = name.lastIndexOf('.');
+            if (dotIndex === -1) {
+                return '';
+            }
+            return name.substring(dotIndex).toLowerCase();
+        }
+
         function createFileTreeList(entries) {
             const list = document.createElement('ul');
             list.className = 'file-browser-tree list-unstyled mb-0';
@@ -300,7 +350,22 @@
 
                     const summary = document.createElement('summary');
                     summary.className = 'file-browser-summary';
-                    summary.textContent = entry.name || '(névtelen mappa)';
+                    const label = document.createElement('span');
+                    label.className = 'file-browser-label';
+                    label.textContent = entry.name || '(névtelen mappa)';
+                    summary.append(label);
+
+                    const actions = document.createElement('div');
+                    actions.className = 'file-browser-actions';
+                    const uploadBtn = document.createElement('button');
+                    uploadBtn.type = 'button';
+                    uploadBtn.className = 'btn btn-sm btn-outline-secondary file-upload-trigger';
+                    uploadBtn.dataset.path = entry.path || '';
+                    uploadBtn.title = 'Fájl feltöltése ebbe a mappába';
+                    uploadBtn.textContent = 'Feltöltés';
+                    actions.append(uploadBtn);
+
+                    summary.append(actions);
                     details.append(summary);
 
                     const children = document.createElement('div');
@@ -314,14 +379,58 @@
                 } else {
                     const fileRow = document.createElement('div');
                     fileRow.className = 'file-browser-item';
+                    fileRow.dataset.filePath = entry.path || '';
+                    fileRow.dataset.fileName = entry.name || '';
+                    const extension = getFileExtension(entry.name || '');
+                    fileRow.dataset.fileExtension = extension;
 
                     const link = document.createElement('a');
+                    link.className = 'file-browser-link';
                     link.href = buildWorkdirUrl(entry.path || '');
                     link.target = '_blank';
                     link.rel = 'noopener';
                     link.textContent = entry.name || '(névtelen fájl)';
 
                     fileRow.appendChild(link);
+
+                    const actions = document.createElement('div');
+                    actions.className = 'file-browser-actions';
+
+                    if (AUDIO_EXTENSIONS.has(extension)) {
+                        const audioBtn = document.createElement('button');
+                        audioBtn.type = 'button';
+                        audioBtn.className = 'btn btn-sm btn-outline-secondary file-audio-play-btn';
+                        audioBtn.title = 'Audió lejátszása';
+                        audioBtn.textContent = 'Lejátszás';
+                        actions.append(audioBtn);
+                    }
+
+                    if (VIDEO_EXTENSIONS.has(extension)) {
+                        const videoBtn = document.createElement('button');
+                        videoBtn.type = 'button';
+                        videoBtn.className = 'btn btn-sm btn-outline-secondary file-video-play-btn';
+                        videoBtn.title = 'Videó lejátszása';
+                        videoBtn.textContent = 'Videó';
+                        actions.append(videoBtn);
+                    }
+
+                    if (extension === JSON_EXTENSION) {
+                        const jsonBtn = document.createElement('button');
+                        jsonBtn.type = 'button';
+                        jsonBtn.className = 'btn btn-sm btn-outline-secondary file-json-view-btn';
+                        jsonBtn.title = 'JSON megnyitása';
+                        jsonBtn.textContent = 'Megnyitás';
+                        actions.append(jsonBtn);
+                    }
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.type = 'button';
+                    deleteBtn.className = 'btn btn-sm btn-outline-danger file-delete-btn';
+                    deleteBtn.title = 'Fájl törlése';
+                    deleteBtn.textContent = 'Törlés';
+                    actions.append(deleteBtn);
+
+                    fileRow.appendChild(actions);
                     item.appendChild(fileRow);
                 }
                 list.appendChild(item);
@@ -359,6 +468,289 @@
             }
         }
 
+        function cssEscape(value) {
+            if (window.CSS && typeof window.CSS.escape === 'function') {
+                return window.CSS.escape(value);
+            }
+            return (value || '').replace(/[^a-zA-Z0-9_\-]/g, (char) => `\\${char}`);
+        }
+
+        async function reloadFileBrowser(targetPath = '') {
+            const browserRoot = document.getElementById('projectFileBrowser');
+            if (!browserRoot) {
+                return;
+            }
+            const normalized = (targetPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+
+            if (!normalized) {
+                browserRoot.innerHTML = '<div class="small text-muted">Frissítés...</div>';
+                try {
+                    const url = `/api/project-tree/${encodeURIComponent(PROJECT_NAME)}?path=`;
+                    const response = await fetch(url);
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.error || 'Ismeretlen hiba');
+                    }
+                    const entries = result.entries || [];
+                    browserRoot.innerHTML = '';
+                    if (!entries.length) {
+                        const empty = document.createElement('div');
+                        empty.className = 'small text-muted';
+                        empty.textContent = 'A mappa üres.';
+                        browserRoot.appendChild(empty);
+                    } else {
+                        browserRoot.appendChild(createFileTreeList(entries));
+                    }
+                } catch (error) {
+                    console.error('Root refresh failed:', error);
+                    browserRoot.innerHTML = '<div class="text-danger small">Nem sikerült frissíteni a fájlok listáját.</div>';
+                }
+                return;
+            }
+
+            const selector = `details.file-browser-directory[data-path="${cssEscape(normalized)}"]`;
+            const details = browserRoot.querySelector(selector);
+            if (details) {
+                await refreshDirectory(details);
+                details.setAttribute('open', '');
+            } else {
+                await reloadFileBrowser('');
+            }
+        }
+
+        function openUploadDialog(targetPath = '') {
+            const uploadInput = document.getElementById('projectFileUploadInput');
+            if (!uploadInput) {
+                return;
+            }
+            uploadInput.dataset.targetPath = targetPath || '';
+            uploadInput.value = '';
+            uploadInput.click();
+        }
+
+        async function uploadFileToPath(targetPath, file) {
+            const formData = new FormData();
+            formData.append('projectName', PROJECT_NAME);
+            formData.append('targetPath', targetPath || '');
+            formData.append('file', file);
+
+            const response = await fetch('/api/project-file/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (error) {
+                // ignore JSON parse error, handled below
+            }
+
+            if (!response.ok || !result.success) {
+                throw new Error((result && result.error) || 'Nem sikerült feltölteni a fájlt.');
+            }
+            return result;
+        }
+
+        async function deleteProjectFile(filePath) {
+            const response = await fetch(`/api/project-file/${encodeURIComponent(PROJECT_NAME)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: filePath })
+            });
+
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (error) {
+                // ignore
+            }
+
+            if (!response.ok || !result.success) {
+                throw new Error((result && result.error) || 'Nem sikerült törölni a fájlt.');
+            }
+            return result;
+        }
+
+        function showAudioPreview(fileName, fileUrl) {
+            const modalElement = document.getElementById('audioPreviewModal');
+            if (!modalElement) {
+                window.open(fileUrl, '_blank');
+                return;
+            }
+            if (!audioPreviewModal) {
+                audioPreviewModal = new bootstrap.Modal(modalElement);
+            }
+            const titleElement = document.getElementById('audioPreviewTitle');
+            if (titleElement) {
+                titleElement.textContent = fileName || 'Audió lejátszása';
+            }
+            const audioElement = document.getElementById('audioPreviewPlayer');
+            if (audioElement) {
+                audioElement.src = fileUrl;
+                audioElement.load();
+                audioElement.play().catch(() => {/* autoplay can fail without user interaction */});
+            }
+            audioPreviewModal.show();
+        }
+
+        function showVideoPreview(fileName, fileUrl) {
+            const modalElement = document.getElementById('videoPreviewModal');
+            if (!modalElement) {
+                window.open(fileUrl, '_blank');
+                return;
+            }
+            if (!videoPreviewModal) {
+                videoPreviewModal = new bootstrap.Modal(modalElement);
+            }
+            const titleElement = document.getElementById('videoPreviewTitle');
+            if (titleElement) {
+                titleElement.textContent = fileName || 'Videó lejátszása';
+            }
+            const videoElement = document.getElementById('videoPreviewPlayer');
+            if (videoElement) {
+                videoElement.src = fileUrl;
+                videoElement.load();
+                videoElement.play().catch(() => {/* autoplay may be blocked */});
+            }
+            videoPreviewModal.show();
+        }
+
+        async function showJsonPreview(fileName, fileUrl) {
+            const modalElement = document.getElementById('jsonPreviewModal');
+            if (!modalElement) {
+                window.open(fileUrl, '_blank');
+                return;
+            }
+            if (!jsonPreviewModal) {
+                jsonPreviewModal = new bootstrap.Modal(modalElement);
+            }
+            const titleElement = document.getElementById('jsonPreviewTitle');
+            if (titleElement) {
+                titleElement.textContent = fileName || 'JSON fájl';
+            }
+            const contentElement = document.getElementById('jsonPreviewContent');
+            if (contentElement) {
+                contentElement.textContent = 'Betöltés...';
+            }
+            jsonPreviewModal.show();
+
+            try {
+                const response = await fetch(fileUrl, {
+                    headers: {
+                        'Accept': 'application/json, text/plain;q=0.9'
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const text = await response.text();
+                let formatted = text;
+                try {
+                    const parsed = JSON.parse(text);
+                    formatted = JSON.stringify(parsed, null, 2);
+                } catch (error) {
+                    // fallback to raw text
+                }
+                if (contentElement) {
+                    contentElement.textContent = formatted || 'Üres fájl.';
+                }
+            } catch (error) {
+                console.error('JSON preview failed:', error);
+                if (contentElement) {
+                    contentElement.textContent = `Nem sikerült betölteni a JSON fájlt.\n${error.message || error}`;
+                }
+            }
+        }
+
+        function initPreviewModals() {
+            const audioModalElement = document.getElementById('audioPreviewModal');
+            if (audioModalElement) {
+                audioPreviewModal = new bootstrap.Modal(audioModalElement);
+                audioModalElement.addEventListener('hidden.bs.modal', () => {
+                    const audioElement = document.getElementById('audioPreviewPlayer');
+                    if (audioElement) {
+                        audioElement.pause();
+                        audioElement.removeAttribute('src');
+                        audioElement.load();
+                    }
+                    const titleElement = document.getElementById('audioPreviewTitle');
+                    if (titleElement) {
+                        titleElement.textContent = '';
+                    }
+                });
+            }
+
+            const videoModalElement = document.getElementById('videoPreviewModal');
+            if (videoModalElement) {
+                videoPreviewModal = new bootstrap.Modal(videoModalElement);
+                videoModalElement.addEventListener('hidden.bs.modal', () => {
+                    const videoElement = document.getElementById('videoPreviewPlayer');
+                    if (videoElement) {
+                        videoElement.pause();
+                        videoElement.removeAttribute('src');
+                        videoElement.load();
+                    }
+                    const titleElement = document.getElementById('videoPreviewTitle');
+                    if (titleElement) {
+                        titleElement.textContent = '';
+                    }
+                });
+            }
+
+            const jsonModalElement = document.getElementById('jsonPreviewModal');
+            if (jsonModalElement) {
+                jsonPreviewModal = new bootstrap.Modal(jsonModalElement);
+                jsonModalElement.addEventListener('hidden.bs.modal', () => {
+                    const contentElement = document.getElementById('jsonPreviewContent');
+                    if (contentElement) {
+                        contentElement.textContent = '';
+                    }
+                    const titleElement = document.getElementById('jsonPreviewTitle');
+                    if (titleElement) {
+                        titleElement.textContent = '';
+                    }
+                });
+            }
+        }
+
+        function initProjectFileActions() {
+            const uploadInput = document.getElementById('projectFileUploadInput');
+            if (uploadInput) {
+                uploadInput.addEventListener('change', async (event) => {
+                    const files = Array.from(event.target.files || []);
+                    if (!files.length) {
+                        return;
+                    }
+                    const targetPath = uploadInput.dataset.targetPath || '';
+                    try {
+                        await uploadFileToPath(targetPath, files[0]);
+                        alert('Fájl sikeresen feltöltve.');
+                        await reloadFileBrowser(targetPath);
+                    } catch (error) {
+                        alert(error.message || 'Nem sikerült feltölteni a fájlt.');
+                    } finally {
+                        uploadInput.value = '';
+                        delete uploadInput.dataset.targetPath;
+                    }
+                });
+            }
+
+            const rootUploadBtn = document.getElementById('rootUploadBtn');
+            if (rootUploadBtn) {
+                rootUploadBtn.addEventListener('click', () => openUploadDialog(''));
+            }
+
+            const refreshBtn = document.getElementById('refreshFileBrowserBtn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', () => {
+                    reloadFileBrowser('');
+                });
+            }
+        }
+
         function initFileBrowser() {
             const browserRoot = document.getElementById('projectFileBrowser');
             if (!browserRoot) {
@@ -366,6 +758,84 @@
             }
 
             browserRoot.addEventListener('click', async (event) => {
+                const uploadButton = event.target.closest('.file-upload-trigger');
+                if (uploadButton && browserRoot.contains(uploadButton)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openUploadDialog(uploadButton.dataset.path || '');
+                    return;
+                }
+
+                const deleteButton = event.target.closest('.file-delete-btn');
+                if (deleteButton && browserRoot.contains(deleteButton)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const fileRow = deleteButton.closest('.file-browser-item');
+                    if (!fileRow) {
+                        return;
+                    }
+                    const filePath = fileRow.dataset.filePath || '';
+                    if (!filePath) {
+                        return;
+                    }
+                    const fileName = fileRow.dataset.fileName || filePath.split('/').pop();
+                    const confirmed = confirm(`Biztosan törlöd ezt a fájlt?\n${fileName}`);
+                    if (!confirmed) {
+                        return;
+                    }
+                    try {
+                        await deleteProjectFile(filePath);
+                        const parentPath = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
+                        alert('Fájl sikeresen törölve.');
+                        await reloadFileBrowser(parentPath);
+                    } catch (error) {
+                        alert(error.message || 'Nem sikerült törölni a fájlt.');
+                    }
+                    return;
+                }
+
+                const audioButton = event.target.closest('.file-audio-play-btn');
+                if (audioButton && browserRoot.contains(audioButton)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const fileRow = audioButton.closest('.file-browser-item');
+                    if (!fileRow) {
+                        return;
+                    }
+                    const fileName = fileRow.dataset.fileName || '';
+                    const filePath = fileRow.dataset.filePath || '';
+                    showAudioPreview(fileName, buildWorkdirUrl(filePath));
+                    return;
+                }
+
+                const videoButton = event.target.closest('.file-video-play-btn');
+                if (videoButton && browserRoot.contains(videoButton)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const fileRow = videoButton.closest('.file-browser-item');
+                    if (!fileRow) {
+                        return;
+                    }
+                    const fileName = fileRow.dataset.fileName || '';
+                    const filePath = fileRow.dataset.filePath || '';
+                    showVideoPreview(fileName, buildWorkdirUrl(filePath));
+                    return;
+                }
+
+                const jsonButton = event.target.closest('.file-json-view-btn');
+                if (jsonButton && browserRoot.contains(jsonButton)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const fileRow = jsonButton.closest('.file-browser-item');
+                    if (!fileRow) {
+                        return;
+                    }
+                    const fileName = fileRow.dataset.fileName || '';
+                    const filePath = fileRow.dataset.filePath || '';
+                    await showJsonPreview(fileName, buildWorkdirUrl(filePath));
+                    return;
+                }
+
                 const summary = event.target.closest('summary.file-browser-summary');
                 if (!summary || !browserRoot.contains(summary)) {
                     return;
@@ -373,6 +843,10 @@
 
                 const details = summary.closest('details.file-browser-directory');
                 if (!details) {
+                    return;
+                }
+
+                if (event.target.closest('.file-browser-actions')) {
                     return;
                 }
 
@@ -2655,6 +3129,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            initPreviewModals();
+            initProjectFileActions();
             initFileBrowser();
             initWorkflowModals();
             initWorkflowButtons();
@@ -2676,7 +3152,10 @@
                     {%- if entry.type == 'directory' %}
                         <details class="file-browser-directory" data-path="{{ entry.path }}">
                             <summary class="file-browser-summary">
-                                <span>{{ entry.name }}</span>
+                                <span class="file-browser-label">{{ entry.name }}</span>
+                                <div class="file-browser-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary file-upload-trigger" data-path="{{ entry.path }}" title="Fájl feltöltése ebbe a mappába">Feltöltés</button>
+                                </div>
                             </summary>
                             <div class="file-browser-children">
                                 {%- if entry.children %}
@@ -2685,10 +3164,26 @@
                             </div>
                         </details>
                     {%- else %}
-                        <div class="file-browser-item">
-                            <a href="{{ url_for('serve_workdir', filename=project.name + '/' + entry.path) }}" target="_blank" rel="noopener">
+                        {%- set extension = '' %}
+                        {%- if '.' in entry.name %}
+                            {%- set extension = '.' + entry.name.rsplit('.', 1)[1].lower() %}
+                        {%- endif %}
+                        <div class="file-browser-item" data-file-path="{{ entry.path }}" data-file-name="{{ entry.name }}" data-file-extension="{{ extension }}">
+                            <a class="file-browser-link" href="{{ url_for('serve_workdir', filename=project.name + '/' + entry.path) }}" target="_blank" rel="noopener">
                                 {{ entry.name }}
                             </a>
+                            <div class="file-browser-actions">
+                                {%- if extension in audio_extensions %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary file-audio-play-btn" title="Audió lejátszása">Lejátszás</button>
+                                {%- endif %}
+                                {%- if extension in video_extensions %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary file-video-play-btn" title="Videó lejátszása">Videó</button>
+                                {%- endif %}
+                                {%- if extension == '.json' %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary file-json-view-btn" title="JSON megnyitása">Megnyitás</button>
+                                {%- endif %}
+                                <button type="button" class="btn btn-sm btn-outline-danger file-delete-btn" title="Fájl törlése">Törlés</button>
+                            </div>
                         </div>
                     {%- endif %}
                 </li>
@@ -2829,6 +3324,11 @@
                 <small class="text-muted">A lista a workdir/{{ project.name }} könyvtár aktuális tartalmát mutatja.</small>
             </div>
             <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="rootUploadBtn">Fájl feltöltése a gyökérbe</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshFileBrowserBtn">Lista frissítése</button>
+                </div>
+                <input type="file" id="projectFileUploadInput" class="d-none">
                 {% if project_tree %}
                     <div class="file-browser" id="projectFileBrowser">
                         {{ render_file_tree(project_tree) }}
@@ -2840,6 +3340,49 @@
         </div>
 
         <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+    </div>
+
+    <!-- File Preview Modals -->
+    <div class="modal fade" id="audioPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="audioPreviewTitle">Audió lejátszása</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <audio id="audioPreviewPlayer" class="w-100" controls preload="metadata"></audio>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="videoPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="videoPreviewTitle">Videó lejátszása</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <video id="videoPreviewPlayer" class="w-100" controls preload="metadata" playsinline style="max-height: 70vh;"></video>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="jsonPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="jsonPreviewTitle">JSON fájl</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="jsonPreviewContent" class="json-preview"></pre>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Separate Audio Modal -->

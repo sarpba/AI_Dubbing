@@ -1397,6 +1397,100 @@ def get_project_directory_listing(project_name):
     return jsonify({'success': True, 'entries': entries})
 
 
+@app.route('/api/project-file/upload', methods=['POST'])
+def upload_project_file():
+    project_name = (request.form.get('projectName') or '').strip()
+    target_path_raw = (request.form.get('targetPath') or '').strip()
+    uploaded_file = request.files.get('file')
+
+    if not project_name:
+        return jsonify({'success': False, 'error': 'Hiányzó projektnév.'}), 400
+    if not uploaded_file or not uploaded_file.filename:
+        return jsonify({'success': False, 'error': 'Nem érkezett fájl a feltöltéshez.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    safe_filename = secure_filename(uploaded_file.filename)
+    if not safe_filename:
+        return jsonify({'success': False, 'error': 'A fájlnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    project_root = os.path.join(workdir_path, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+
+    if not os.path.isdir(project_root_abs):
+        return jsonify({'success': False, 'error': 'A projekt könyvtára nem található.'}), 404
+
+    normalized_target = target_path_raw.strip('/\\')
+    destination_dir = project_root_abs
+    if normalized_target:
+        destination_dir = os.path.abspath(os.path.join(project_root_abs, normalized_target))
+
+    if not is_subpath(destination_dir, project_root_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen célkönyvtár.'}), 400
+
+    try:
+        os.makedirs(destination_dir, exist_ok=True)
+    except OSError as exc:
+        logging.exception("Nem sikerült létrehozni a(z) %s könyvtárat: %s", destination_dir, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a célkönyvtárat.'}), 500
+
+    destination_path = os.path.join(destination_dir, safe_filename)
+    if os.path.exists(destination_path):
+        return jsonify({'success': False, 'error': 'Már létezik ilyen nevű fájl ebben a mappában.'}), 409
+
+    try:
+        uploaded_file.save(destination_path)
+    except OSError as exc:
+        logging.exception("Nem sikerült a fájl mentése ide: %s: %s", destination_path, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült menteni a feltöltött fájlt.'}), 500
+
+    relative_saved_path = os.path.relpath(destination_path, project_root_abs).replace('\\', '/')
+    return jsonify({
+        'success': True,
+        'message': 'Fájl sikeresen feltöltve.',
+        'path': relative_saved_path
+    })
+
+
+@app.route('/api/project-file/<project_name>', methods=['DELETE'])
+def delete_project_file(project_name):
+    payload = request.get_json(silent=True) or {}
+    target_path_raw = (payload.get('path') or '').strip()
+    if not target_path_raw:
+        return jsonify({'success': False, 'error': 'Hiányzó fájl elérési útvonal.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    project_root = os.path.join(workdir_path, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+
+    target_abs_path = os.path.abspath(os.path.join(project_root_abs, target_path_raw))
+    if not is_subpath(target_abs_path, project_root_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen fájl elérési útvonal.'}), 400
+
+    if not os.path.exists(target_abs_path):
+        return jsonify({'success': False, 'error': 'A megadott fájl nem létezik.'}), 404
+
+    if os.path.isdir(target_abs_path):
+        return jsonify({'success': False, 'error': 'Könyvtárak törlése nem engedélyezett.'}), 400
+
+    try:
+        os.remove(target_abs_path)
+    except OSError as exc:
+        logging.exception("Nem sikerült törölni a fájlt: %s: %s", target_abs_path, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült törölni a fájlt.'}), 500
+
+    return jsonify({'success': True, 'message': 'Fájl sikeresen törölve.'})
+
+
 @app.route('/review/<project_name>')
 def review_project(project_name):
     project_dir = os.path.join('workdir', secure_filename(project_name))
