@@ -22,7 +22,7 @@ A magyar szövegnormalizáló függőségei:
 Telepítsd a kötelező csomagot, illetve az opcionális fonemizálást és hunspell-támogatást:
 
 ```bash
-conda install -c conda-forge num2words phonemizer hunspell
+conda install -c conda-forge num2words phonemizer
 ```
 
 Ha a phonemizer gondot jelez, pipről frissítheted:

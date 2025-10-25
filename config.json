@@ -79,18 +79,35 @@
     },
     {
       "script": "TTS/f5_tts_easy_EQ.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "debug": false,
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
         "keep_best_over_tolerance": true,
+        "max_retries": "2",
         "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
         "norm": "hun",
         "normalize_ref_audio": false,
         "phonetic_ref": false,
         "remove_silence": false,
+        "save_failures": false
+      }
+    },
+    {
+      "script": "TTS/vibevoice-tts.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "norm": "hun",
+        "model_path": "Cseti/VibeVoice_7B_hun_v2",
+        "disable_prefill": false,
+        "normalize_ref_audio": false,
+        "overwrite": false,
         "save_failures": false,
+        "keep_best_over_tolerance": true,
+        "debug": false,
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
         "max_retries": "2"
       }
     },
