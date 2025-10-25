@@ -22,8 +22,7 @@
     "noice_splits": "6_noice_splits",
     "film_dubbing": "7_film_dubbing",
     "download": "8_Download",
-    "logs": "logs",
-    "failed_generations": "failed_generations"
+    "logs": "logs"
   },
   "LAST_USED_PARAMS": {
     "translation_context": "Foundation TV series",
@@ -104,7 +103,6 @@
         "disable_prefill": false,
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
         "keep_best_over_tolerance": false,
-        "max_retries": "2",
         "model_path": "/home/sarpba/VibeVoice/merged",
         "norm": "hun",
         "normalize_ref_audio": false,

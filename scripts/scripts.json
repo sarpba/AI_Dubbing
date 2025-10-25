@@ -491,6 +491,53 @@
     ]
   },
   {
+    "enviroment": "sync",
+    "script": "AV/normalise_and_cut_json_easy_v1.1.py",
+    "description": "A TTS-el generált audiókat az eredeti hangsáv alapján időben és hangerőben igazítja, a végeken automatikusan eltávolítja a hosszabb csendet FFmpeg silenceremove-val.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "delete_empty",
+        "flags": [
+          "--delete_empty"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "sync_loudness",
+        "flags": [
+          "--no-sync-loudness"
+        ],
+        "type": "flag",
+        "default": true
+      },
+      {
+        "name": "min_db",
+        "flags": [
+          "-db",
+          "--min_db"
+        ],
+        "type": "option",
+        "default": -40.0
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
     "enviroment": "demucs",
     "script": "AV/separate_audio_easy.py",
     "description": "Az eredeti filból kivont audio filet beszédre és háttér zenére/sound effectekre bontja.",

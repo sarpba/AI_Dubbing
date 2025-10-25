@@ -183,8 +183,13 @@ def is_subpath(child_path, parent_path):
         return False
 
 
-def collect_directory_entries(root_path: str, target_path: str) -> List[Dict[str, Any]]:
+def collect_directory_entries(
+    root_path: str,
+    target_path: str,
+    highlight_map: Optional[Dict[str, str]] = None
+) -> List[Dict[str, Any]]:
     entries: List[Dict[str, Any]] = []
+    highlight_map = highlight_map or {}
     try:
         for name in sorted(os.listdir(target_path)):
             if name.startswith('.'):
@@ -192,11 +197,15 @@ def collect_directory_entries(root_path: str, target_path: str) -> List[Dict[str
             full_path = os.path.join(target_path, name)
             rel_path = os.path.relpath(full_path, root_path).replace('\\', '/')
             if os.path.isdir(full_path):
-                entries.append({
+                entry = {
                     'name': name,
                     'type': 'directory',
                     'path': rel_path
-                })
+                }
+                highlight_class = highlight_map.get(rel_path)
+                if highlight_class:
+                    entry['highlight_class'] = highlight_class
+                entries.append(entry)
             else:
                 entries.append({
                     'name': name,
@@ -206,6 +215,61 @@ def collect_directory_entries(root_path: str, target_path: str) -> List[Dict[str
     except Exception as exc:
         logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", target_path, exc)
     return entries
+
+
+def compute_failed_generation_highlights(
+    project_dir: str,
+    config_snapshot: Dict[str, Any]
+) -> Dict[str, str]:
+    """
+    Térképet készít a failed_generations almappáihoz, amelyeket ki kell emelni.
+    Azokat a könyvtárakat jelöljük, amelyekhez létezik azonos bázisnevű fájl
+    a translated_splits mappában.
+    """
+    highlight_map: Dict[str, str] = {}
+    failed_root = os.path.join(project_dir, 'failed_generations')
+    translated_rel = config_snapshot.get('PROJECT_SUBDIRS', {}).get('translated_splits')
+    if not translated_rel:
+        return highlight_map
+
+    translated_root = os.path.join(project_dir, translated_rel)
+    if not os.path.isdir(failed_root) or not os.path.isdir(translated_root):
+        return highlight_map
+
+    translated_basenames: Set[str] = set()
+    try:
+        for name in os.listdir(translated_root):
+            translated_path = os.path.join(translated_root, name)
+            if os.path.isdir(translated_path):
+                continue
+            stem, _ = os.path.splitext(name)
+            if stem:
+                translated_basenames.add(stem)
+    except Exception as exc:
+        logging.warning(
+            "Nem sikerült beolvasni a translated_splits mappát (%s): %s",
+            translated_root,
+            exc
+        )
+        return highlight_map
+
+    try:
+        for name in os.listdir(failed_root):
+            failed_path = os.path.join(failed_root, name)
+            if not os.path.isdir(failed_path):
+                continue
+            if name not in translated_basenames:
+                continue
+            rel_path = os.path.relpath(failed_path, project_dir).replace('\\', '/')
+            highlight_map[rel_path] = 'fg-has-translated'
+    except Exception as exc:
+        logging.warning(
+            "Nem sikerült beolvasni a failed_generations mappát (%s): %s",
+            failed_root,
+            exc
+        )
+
+    return highlight_map
 
 
 def infer_autofill_kind(param_name: str) -> Optional[str]:
@@ -1263,6 +1327,8 @@ def show_project(project_name):
         }
     }
 
+    highlight_map = compute_failed_generation_highlights(project_dir, config)
+
     def group_files_by_extension(file_list):
         grouped = {}
         for filename in sorted(file_list):
@@ -1289,12 +1355,17 @@ def show_project(project_name):
                 full_path = os.path.join(current_path, name)
                 rel_path = os.path.join(relative_path, name) if relative_path else name
                 if os.path.isdir(full_path):
-                    entries.append({
+                    normalized_rel_path = rel_path.replace('\\', '/')
+                    entry = {
                         'name': name,
                         'type': 'directory',
-                        'path': rel_path.replace('\\', '/'),
+                        'path': normalized_rel_path,
                         'children': build_directory_tree(full_path, rel_path)
-                    })
+                    }
+                    highlight_class = highlight_map.get(normalized_rel_path)
+                    if highlight_class:
+                        entry['highlight_class'] = highlight_class
+                    entries.append(entry)
                 else:
                     entries.append({
                         'name': name,
@@ -1369,6 +1440,7 @@ def show_project(project_name):
                          video_mime_map=VIDEO_MIME_MAP,
                          can_review=can_review,
                          has_transcribable_audio=has_transcribable_audio,
+                         has_failed_generation_highlights=bool(highlight_map),
                          secret_param_names=sorted(SECRET_PARAM_NAMES))
 
 
@@ -1393,7 +1465,8 @@ def get_project_directory_listing(project_name):
     if not os.path.isdir(target_dir):
         return jsonify({'success': False, 'error': 'A megadott könyvtár nem található'}), 404
 
-    entries = collect_directory_entries(base_dir_abs, target_dir)
+    highlight_map = compute_failed_generation_highlights(base_dir_abs, config_snapshot)
+    entries = collect_directory_entries(base_dir_abs, target_dir, highlight_map)
     return jsonify({'success': True, 'entries': entries})
 
 
