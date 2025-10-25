@@ -379,6 +379,38 @@
             return JSON.parse(JSON.stringify(obj || {}));
         }
 
+        function getScriptParamDefaults(script) {
+            const defaults = new Map();
+            if (!script) {
+                return defaults;
+            }
+            (script.parameters || []).forEach(param => {
+                if (!param || !param.name || defaults.has(param.name)) {
+                    return;
+                }
+                if (Object.prototype.hasOwnProperty.call(param, 'default')) {
+                    const value = param.default;
+                    if (value !== undefined && value !== null) {
+                        defaults.set(param.name, value);
+                    }
+                }
+            });
+            const raw = script.raw || {};
+            ['required', 'optional'].forEach(key => {
+                const list = raw[key];
+                (list || []).forEach(param => {
+                    if (!param || !param.name || defaults.has(param.name)) {
+                        return;
+                    }
+                    const value = param.default;
+                    if (value !== undefined && value !== null) {
+                        defaults.set(param.name, value);
+                    }
+                });
+            });
+            return defaults;
+        }
+
         function buildWorkdirUrl(relativePath) {
             const segments = [PROJECT_NAME];
             if (relativePath) {
@@ -1065,19 +1097,29 @@
             if (!script || !script.parameters) {
                 return [];
             }
+            const defaults = getScriptParamDefaults(script);
             return script.parameters
                 .filter(param => param.required && param.type !== 'flag' && !param.autofill)
-                .map(param => param.name)
-                .filter(name => {
-                    const value = step.params ? step.params[name] : undefined;
-                    if (value === undefined || value === null) {
-                        return true;
+                .filter(param => {
+                    const value = step.params ? step.params[param.name] : undefined;
+                    let hasValue = value !== undefined && value !== null;
+                    if (hasValue && typeof value === 'string' && value.trim() === '') {
+                        hasValue = false;
                     }
-                    if (typeof value === 'string' && value.trim() === '') {
-                        return true;
+                    if (hasValue) {
+                        return false;
                     }
-                    return false;
-                });
+                    if (defaults.has(param.name)) {
+                        const defaultValue = defaults.get(param.name);
+                        if (defaultValue !== undefined && defaultValue !== null) {
+                            if (!(typeof defaultValue === 'string' && defaultValue.trim() === '')) {
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                })
+                .map(param => param.name);
         }
 
         function describeStepParameters(step, script, missing) {
@@ -2332,6 +2374,7 @@
             }
             container.innerHTML = '';
             const params = script.parameters || [];
+            const scriptDefaults = getScriptParamDefaults(script);
             if (!params.length) {
                 const placeholder = document.createElement('div');
                 placeholder.className = 'text-muted';
@@ -2342,6 +2385,12 @@
             }
             params.forEach(param => {
                 const group = document.createElement('div');
+                const rawValue = step.params ? step.params[param.name] : undefined;
+                const hasExplicitDefault = param && Object.prototype.hasOwnProperty.call(param, 'default');
+                let defaultValue = hasExplicitDefault ? param.default : undefined;
+                if ((defaultValue === undefined || defaultValue === null) && scriptDefaults.has(param.name)) {
+                    defaultValue = scriptDefaults.get(param.name);
+                }
                 if (param.autofill) {
                     group.className = 'border rounded p-2 bg-body-tertiary';
                     const label = document.createElement('div');
@@ -2365,7 +2414,15 @@
                     input.id = `workflow-param-${param.name}`;
                     input.dataset.param = param.name;
                     input.dataset.type = param.type;
-                    input.checked = Boolean(step.params && step.params[param.name]);
+                    let checkboxValue = rawValue;
+                    if (checkboxValue === undefined) {
+                        checkboxValue = defaultValue;
+                    }
+                    if (typeof checkboxValue === 'string') {
+                        input.checked = checkboxValue.trim().toLowerCase() === 'true';
+                    } else {
+                        input.checked = Boolean(checkboxValue);
+                    }
                     const label = document.createElement('label');
                     label.className = 'form-check-label';
                     label.setAttribute('for', input.id);
@@ -2383,7 +2440,6 @@
                     input.id = `workflow-param-${param.name}`;
                     input.dataset.param = param.name;
                     input.dataset.type = param.type;
-                    const rawValue = step.params ? step.params[param.name] : undefined;
                     let helper = null;
                     let clearBtn = null;
                     if (param.secret) {
@@ -2437,7 +2493,15 @@
                         });
                     } else {
                         input.type = 'text';
-                        input.value = rawValue !== undefined && rawValue !== null ? rawValue : '';
+                        let resolvedValue = rawValue;
+                        if (resolvedValue === undefined || resolvedValue === null) {
+                            resolvedValue = defaultValue;
+                        }
+                        if (resolvedValue === undefined || resolvedValue === null) {
+                            input.value = '';
+                        } else {
+                            input.value = String(resolvedValue);
+                        }
                     }
                     group.append(input);
                     if (helper) {

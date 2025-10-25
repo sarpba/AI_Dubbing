@@ -395,13 +395,15 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 continue
             param_type = param.get('type', 'option')
             flags = param.get('flags') or []
+            default_value = param.get('default')
             parameters.append({
                 'name': name,
                 'type': param_type,
                 'flags': flags,
                 'required': required,
                 'autofill': infer_autofill_kind(name),
-                'secret': name in SECRET_PARAM_NAMES
+                'secret': name in SECRET_PARAM_NAMES,
+                'default': default_value
             })
 
     append_params(raw_entry.get('required'), True)
@@ -793,6 +795,11 @@ def determine_parameter_value(
         key_mapping = SCRIPT_PARAM_KEYHOLDER.get(script_meta['id'], {}).get(name)
         if key_mapping:
             value = get_keyholder_value(context['keyholder'], key_mapping)
+
+    if value is None and 'default' in param_meta:
+        default_value = param_meta.get('default')
+        if default_value is not None:
+            value = default_value
 
     if param_meta['type'] == 'flag':
         return coerce_bool(value)
