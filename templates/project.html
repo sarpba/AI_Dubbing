@@ -2391,6 +2391,8 @@
                 if ((defaultValue === undefined || defaultValue === null) && scriptDefaults.has(param.name)) {
                     defaultValue = scriptDefaults.get(param.name);
                 }
+                const hasDefault = defaultValue !== undefined && defaultValue !== null && !(typeof defaultValue === 'string' && defaultValue.trim() === '');
+                const defaultString = hasDefault ? String(defaultValue) : '';
                 if (param.autofill) {
                     group.className = 'border rounded p-2 bg-body-tertiary';
                     const label = document.createElement('div');
@@ -2414,20 +2416,51 @@
                     input.id = `workflow-param-${param.name}`;
                     input.dataset.param = param.name;
                     input.dataset.type = param.type;
-                    let checkboxValue = rawValue;
-                    if (checkboxValue === undefined) {
-                        checkboxValue = defaultValue;
-                    }
-                    if (typeof checkboxValue === 'string') {
-                        input.checked = checkboxValue.trim().toLowerCase() === 'true';
+                    const normalizeFlag = value => {
+                        if (value === undefined || value === null) {
+                            return undefined;
+                        }
+                        if (typeof value === 'string') {
+                            const trimmed = value.trim().toLowerCase();
+                            if (trimmed === 'true') {
+                                return true;
+                            }
+                            if (trimmed === 'false') {
+                                return false;
+                            }
+                            if (trimmed === '1') {
+                                return true;
+                            }
+                            if (trimmed === '0') {
+                                return false;
+                            }
+                            return trimmed.length > 0;
+                        }
+                        return Boolean(value);
+                    };
+                    const normalizedRaw = normalizeFlag(rawValue);
+                    const defaultFlag = hasDefault ? normalizeFlag(defaultValue) : undefined;
+                    if (normalizedRaw !== undefined) {
+                        input.checked = normalizedRaw;
                     } else {
-                        input.checked = Boolean(checkboxValue);
+                        input.checked = false;
+                    }
+                    if (defaultFlag === undefined) {
+                        input.dataset.defaultValue = 'none';
+                    } else {
+                        input.dataset.defaultValue = defaultFlag ? 'true' : 'false';
                     }
                     const label = document.createElement('label');
                     label.className = 'form-check-label';
                     label.setAttribute('for', input.id);
                     label.textContent = param.name;
                     group.append(input, label);
+                    if (defaultFlag !== undefined) {
+                        const defaultInfo = document.createElement('div');
+                        defaultInfo.className = 'form-text';
+                        defaultInfo.textContent = `Alapértelmezett: ${defaultFlag ? 'bekapcsolva' : 'kikapcsolva'}`;
+                        group.append(defaultInfo);
+                    }
                 } else {
                     group.className = 'form-group';
                     const label = document.createElement('label');
@@ -2493,14 +2526,13 @@
                         });
                     } else {
                         input.type = 'text';
-                        let resolvedValue = rawValue;
-                        if (resolvedValue === undefined || resolvedValue === null) {
-                            resolvedValue = defaultValue;
-                        }
-                        if (resolvedValue === undefined || resolvedValue === null) {
-                            input.value = '';
+                        if (rawValue !== undefined && rawValue !== null) {
+                            input.value = String(rawValue);
                         } else {
-                            input.value = String(resolvedValue);
+                            input.value = '';
+                            if (hasDefault) {
+                                input.placeholder = defaultString;
+                            }
                         }
                     }
                     group.append(input);
@@ -2544,7 +2576,21 @@
                 const name = input.dataset.param;
                 const type = input.dataset.type;
                 if (type === 'flag') {
-                    newParams[name] = input.checked;
+                    const defaultAttr = input.dataset.defaultValue || 'none';
+                    let defaultValue;
+                    if (defaultAttr === 'true') {
+                        defaultValue = true;
+                    } else if (defaultAttr === 'false') {
+                        defaultValue = false;
+                    } else {
+                        defaultValue = undefined;
+                    }
+                    const checked = input.checked;
+                    if (defaultValue !== undefined && checked === defaultValue) {
+                        delete newParams[name];
+                    } else {
+                        newParams[name] = checked;
+                    }
                 } else {
                     const isSecret = input.dataset.secret === 'true';
                     const rawValue = input.value;
