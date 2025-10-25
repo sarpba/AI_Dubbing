@@ -7,6 +7,55 @@
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="{{ url_for('static', filename='vendor/marked/marked.min.js') }}"></script>
+    <script>
+        (function() {
+            const root = document.documentElement;
+            const storageKey = 'theme';
+            const systemMedia = window.matchMedia('(prefers-color-scheme: dark)');
+
+            const getStoredPreference = () => localStorage.getItem(storageKey) || 'auto';
+
+            const resolveTheme = preference => {
+                if (preference === 'light' || preference === 'dark') {
+                    return preference;
+                }
+                return systemMedia.matches ? 'dark' : 'light';
+            };
+
+            const applyTheme = preference => {
+                const effectiveTheme = resolveTheme(preference);
+                root.setAttribute('data-bs-theme', effectiveTheme);
+                root.dataset.themePreference = preference;
+            };
+
+            const handleSystemChange = () => {
+                const preference = root.dataset.themePreference || getStoredPreference();
+                if (preference === 'auto') {
+                    applyTheme('auto');
+                }
+            };
+
+            if (typeof systemMedia.addEventListener === 'function') {
+                systemMedia.addEventListener('change', handleSystemChange);
+            } else if (typeof systemMedia.addListener === 'function') {
+                systemMedia.addListener(handleSystemChange);
+            }
+
+            window.toggleTheme = function() {
+                const currentPreference = root.dataset.themePreference || getStoredPreference();
+                let nextPreference = 'auto';
+                if (currentPreference === 'auto') {
+                    nextPreference = 'light';
+                } else if (currentPreference === 'light') {
+                    nextPreference = 'dark';
+                }
+                localStorage.setItem(storageKey, nextPreference);
+                applyTheme(nextPreference);
+            };
+
+            applyTheme(getStoredPreference());
+        })();
+    </script>
     <style>
         .file-browser-tree {
             list-style: none;
@@ -288,21 +337,6 @@
                 template_id: currentTemplateId,
                 workflow_state: collectWorkflowState()
             };
-        }
-
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-            let newTheme = 'light';
-            if (currentTheme === 'light' || (currentTheme === 'auto' && !systemDark)) {
-                newTheme = 'dark';
-            } else {
-                newTheme = 'auto';
-            }
-
-            document.documentElement.setAttribute('data-bs-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
         }
 
         function cloneSteps(steps) {
@@ -1572,16 +1606,17 @@
                 const isWidget = step.type === 'widget';
                 const script = !isWidget ? findScriptById(step.script) : null;
                 const row = document.createElement('tr');
+                row.classList.add('workflow-row');
                 row.dataset.stepIndex = String(index);
                 if (isWidget) {
-                    row.classList.add('table-info');
+                    row.classList.add('workflow-row-widget');
                 }
                 if (step.enabled === false) {
-                    row.classList.add('table-light', 'text-muted');
+                    row.classList.add('workflow-row-disabled', 'text-muted');
                 }
                 const missing = (!isWidget && step.enabled !== false) ? getMissingParams(step, script) : [];
                 if (missing.length) {
-                    row.classList.add('table-warning');
+                    row.classList.add('workflow-row-missing');
                 }
 
                 const enabledCell = document.createElement('td');
@@ -1701,12 +1736,12 @@
                 const envCell = document.createElement('td');
                 if (isWidget) {
                     const widgetBadge = document.createElement('span');
-                    widgetBadge.className = 'badge bg-light text-dark border';
+                    widgetBadge.className = 'badge workflow-env-badge';
                     widgetBadge.textContent = 'Widget';
                     envCell.append(widgetBadge);
                 } else if (script && script.environment) {
                     const envBadge = document.createElement('span');
-                    envBadge.className = 'badge bg-light text-dark border';
+                    envBadge.className = 'badge workflow-env-badge';
                     envBadge.textContent = script.environment;
                     envCell.append(envBadge);
                 } else {
@@ -3227,7 +3262,7 @@
                     </div>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-sm align-middle" id="workflowStepsTable">
+                    <table class="table table-sm align-middle workflow-table" id="workflowStepsTable">
                         <thead>
                             <tr>
                                 <th scope="col" style="width: 70px;">Aktív</th>
