@@ -33,7 +33,6 @@
         <h1>Aktív projekt: {{project_name}}</h1>
         <div>
             <a href="{{url_for('show_project', project_name=project_name)}}" class="btn btn-secondary me-2">Vissza a projekthez</a>
-            <button id="translationBtn" class="btn btn-primary">Fordítás</button>
         </div>
     </div>
 
@@ -58,6 +57,22 @@
                 Nem található audio fájl a felülvizsgálathoz.
             </div>
         {%endif%}
+    </div>
+
+    <div class="container-fluid mb-5 px-4">
+        <div class="card text-start">
+            <div class="card-body">
+                <h2 class="h4">Segítség a felület használatához</h2>
+                <p class="text-muted mb-3">Az alábbi összefoglaló segít eligazodni a felülvizsgálati nézet funkciói között.</p>
+                <ul class="mb-0">
+                    <li><strong>Lejátszás:</strong> A felső <em>Lejátszás</em> gombbal indítható vagy állítható meg az audió. A Wavesurfer idővonal görgethető és nagyítható.</li>
+                    <li><strong>Szegmens kiválasztása:</strong> A színes sávokra kattintva a hozzátartozó hangrészletet jelölheted ki. Jobb gombbal felugró menü érhető el szegmens beszúrására vagy törlésére.</li>
+                    <li><strong>Szöveg szerkesztése:</strong> Az eredeti és fordított szöveg mezőire kattintva azonnal megáll a lejátszás, és a mező mérete a teljes tartalomhoz igazodik. A módosítások a mező elhagyásakor mentésre kerülnek.</li>
+                    <li><strong>Billentyűparancs:</strong> Enter lenyomása szerkesztés közben lezárja a mezőt és megakadályozza az új sor felvitelét.</li>
+                    <li><strong>Hullámforma:</strong> A hullámforma feletti idővonalon a szegmensek automatikusan újrarendeződnek az átméretezés és görgetés után, biztosítva az áttekinthető elrendezést.</li>
+                </ul>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='vendor/wavesurfer/wavesurfer.min.js') }}"></script>
@@ -487,7 +502,16 @@
                         }
                     });
                     
-                    textarea.addEventListener('click', () => wavesurfer.pause());
+                    textarea.addEventListener('focus', function() {
+                        autoResizeTextarea(this);
+                        updateTimelineContainerHeight();
+                    });
+
+                    textarea.addEventListener('click', function() {
+                        wavesurfer.pause();
+                        autoResizeTextarea(this);
+                        updateTimelineContainerHeight();
+                    });
                     // Double-click esemény eltávolítva - event delegation használjuk helyette
                 });
                 
@@ -706,7 +730,7 @@
             }
             
             // Event delegation a context menühöz
-            segmentsTimelineContainer.addEventListener('dblclick', function(event) {
+            segmentsTimelineContainer.addEventListener('contextmenu', function(event) {
                 const segmentContainer = event.target.closest('.timeline-segment-container');
                 if (segmentContainer && segmentContainer.dataset.segmentIndex) {
                     event.preventDefault();
