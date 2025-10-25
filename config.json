@@ -22,7 +22,8 @@
     "noice_splits": "6_noice_splits",
     "film_dubbing": "7_film_dubbing",
     "download": "8_Download",
-    "logs": "logs"
+    "logs": "logs",
+    "failed_generations": "failed_generations"
   },
   "LAST_USED_PARAMS": {
     "translation_context": "Foundation TV series",
@@ -99,16 +100,16 @@
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "norm": "hun",
-        "model_path": "Cseti/VibeVoice_7B_hun_v2",
+        "debug": false,
         "disable_prefill": false,
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
+        "keep_best_over_tolerance": false,
+        "max_retries": "2",
+        "model_path": "/home/sarpba/VibeVoice/merged",
+        "norm": "hun",
         "normalize_ref_audio": false,
         "overwrite": false,
-        "save_failures": false,
-        "keep_best_over_tolerance": true,
-        "debug": false,
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "max_retries": "2"
+        "save_failures": true
       }
     },
     {
