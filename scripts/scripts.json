@@ -1517,6 +1517,14 @@
         "default": 0.95
       },
       {
+        "name": "target_sample_rate",
+        "flags": [
+          "--target_sample_rate"
+        ],
+        "type": "option",
+        "default": 16000
+      },
+      {
         "name": "speaker_name",
         "flags": [
           "--speaker_name"

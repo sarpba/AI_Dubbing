@@ -1489,7 +1489,18 @@ def get_project_directory_listing(project_name):
 
     highlight_map = compute_failed_generation_highlights(base_dir_abs, config_snapshot)
     entries = collect_directory_entries(base_dir_abs, target_dir, highlight_map)
-    return jsonify({'success': True, 'entries': entries})
+    if target_dir == base_dir_abs:
+        current_path_key = ''
+    else:
+        current_path_key = os.path.relpath(target_dir, base_dir_abs).replace('\\', '/')
+    current_highlight = highlight_map.get(current_path_key)
+
+    return jsonify({
+        'success': True,
+        'entries': entries,
+        'current_highlight': current_highlight,
+        'has_highlights': bool(highlight_map)
+    })
 
 
 @app.route('/api/project-file/upload', methods=['POST'])

@@ -20,6 +20,7 @@ A szkript a VibeVoice TTS modellt és opcionálisan LoRA adaptereket használ, h
 - `eq_config` (`--eq_config`, option, alapértelmezés: `scripts/TTS/EQ.json` ha létezik): EQ görbét tartalmazó JSON, amellyel a referencia audiót korrigáljuk.
 - `normalize_ref_audio` (`--normalize_ref_audio`, flag, alapértelmezés: `false`): A referencia mintát a `ref_audio_peak` szintre normálja.
 - `ref_audio_peak` (`--ref_audio_peak`, option, alapértelmezés: `0.95`): A normalizálási cél csúcsértéke 0–1 tartományban.
+- `target_sample_rate` (`--target_sample_rate`, option, alapértelmezés: `16000`): A referencia audiót erre a mintavételi frekvenciára reszámplálja a TTS előtt; 0 vagy negatív értékkel kikapcsolható.
 - `speaker_name` (`--speaker_name`, option, alapértelmezés: `Speaker 1`): A VibeVoice által elvárt „Speaker X:” formátumhoz használt címke. A szöveg elejére automatikusan rákerül, ha hiányzik.
 - `max_retries` (`--max_retries`, option, alapértelmezés: `5`): Whisper alapú ellenőrzés esetén ennyiszer próbálkozik újragenerálással.
 - `tolerance_factor` (`--tolerance_factor`, option, alapértelmezés: `1.0`) és `min_tolerance` (`--min_tolerance`, option, alapértelmezés: `2`): A Levenshtein-távolság megengedett mértékét szabályozzák (szó-mennyiség * faktor, minimum érték).

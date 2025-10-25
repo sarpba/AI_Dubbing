@@ -232,12 +232,14 @@
         .json-preview {
             max-height: 60vh;
             overflow: auto;
-            background-color: #f8f9fa;
+            background-color: var(--bs-tertiary-bg);
             border-radius: 0.5rem;
             padding: 1rem;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             font-size: 0.9rem;
             white-space: pre-wrap;
+            color: var(--bs-body-color);
+            border: 1px solid var(--bs-border-color);
         }
     </style>
     <script>
@@ -521,6 +523,42 @@
             return list;
         }
 
+        function updateDirectoryHighlight(detailsElement, highlightClass) {
+            if (!detailsElement) {
+                return;
+            }
+            const previous = detailsElement.dataset.highlight || '';
+            if (previous) {
+                previous.split(/\s+/).forEach(cls => {
+                    if (cls) {
+                        detailsElement.classList.remove(cls);
+                    }
+                });
+            }
+            if (highlightClass && highlightClass.trim()) {
+                highlightClass.split(/\s+/).forEach(cls => {
+                    if (cls) {
+                        detailsElement.classList.add(cls);
+                    }
+                });
+                detailsElement.dataset.highlight = highlightClass;
+            } else {
+                delete detailsElement.dataset.highlight;
+            }
+        }
+
+        function updateFailedLegend(visible) {
+            const legend = document.getElementById('failedGenerationLegend');
+            if (!legend) {
+                return;
+            }
+            if (visible) {
+                legend.classList.remove('d-none');
+            } else {
+                legend.classList.add('d-none');
+            }
+        }
+
         async function refreshDirectory(detailsElement) {
             const childrenContainer = detailsElement.querySelector('.file-browser-children');
             if (!childrenContainer) {
@@ -536,6 +574,10 @@
                     throw new Error(result.error || 'Ismeretlen hiba');
                 }
                 const entries = result.entries || [];
+                updateDirectoryHighlight(detailsElement, result.current_highlight || '');
+                if (Object.prototype.hasOwnProperty.call(result, 'has_highlights')) {
+                    updateFailedLegend(Boolean(result.has_highlights));
+                }
                 childrenContainer.innerHTML = '';
                 if (!entries.length) {
                     const empty = document.createElement('div');
@@ -583,6 +625,9 @@
                         browserRoot.appendChild(empty);
                     } else {
                         browserRoot.appendChild(createFileTreeList(entries));
+                    }
+                    if (Object.prototype.hasOwnProperty.call(result, 'has_highlights')) {
+                        updateFailedLegend(Boolean(result.has_highlights));
                     }
                 } catch (error) {
                     console.error('Root refresh failed:', error);
@@ -3471,12 +3516,10 @@
                     <button type="button" class="btn btn-outline-primary btn-sm" id="rootUploadBtn">Fájl feltöltése a gyökérbe</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshFileBrowserBtn">Lista frissítése</button>
                 </div>
-                {% if has_failed_generation_highlights %}
-                    <div class="file-browser-legend small">
-                        <span class="file-browser-legend-swatch" aria-hidden="true"></span>
-                        <span class="text-muted">Jelölt almappák: találtunk egyező fordított szegmenst a {{ config['PROJECT_SUBDIRS']['translated_splits'] }} mappában.</span>
-                    </div>
-                {% endif %}
+                <div id="failedGenerationLegend" class="file-browser-legend small{% if not has_failed_generation_highlights %} d-none{% endif %}">
+                    <span class="file-browser-legend-swatch" aria-hidden="true"></span>
+                    <span class="text-muted">Jelölt almappák: találtunk egyező fordított szegmenst a {{ config['PROJECT_SUBDIRS']['translated_splits'] }} mappában.</span>
+                </div>
                 <input type="file" id="projectFileUploadInput" class="d-none">
                 {% if project_tree %}
                     <div class="file-browser" id="projectFileBrowser">

@@ -108,6 +108,34 @@ def normalize_peak(audio: np.ndarray, target_peak: float) -> np.ndarray:
     return audio * (target_peak / current_peak)
 
 
+def resample_audio(audio: np.ndarray, source_rate: int, target_rate: int) -> np.ndarray:
+    if target_rate <= 0 or source_rate <= 0 or target_rate == source_rate:
+        return audio
+    if audio.size == 0:
+        return audio
+
+    duration_seconds = audio.shape[0] / float(source_rate)
+    if duration_seconds == 0.0:
+        return audio
+    target_length = max(1, int(round(duration_seconds * target_rate)))
+    if target_length == audio.shape[0]:
+        return audio
+
+    source_times = np.linspace(0.0, duration_seconds, num=audio.shape[0], endpoint=False, dtype=np.float64)
+    target_times = np.linspace(0.0, duration_seconds, num=target_length, endpoint=False, dtype=np.float64)
+    output_dtype = audio.dtype if np.issubdtype(audio.dtype, np.floating) else np.float32
+    audio_float = audio.astype(np.float64, copy=False)
+
+    if audio.ndim == 1:
+        resampled = np.interp(target_times, source_times, audio_float)
+        return resampled.astype(output_dtype, copy=False)
+
+    resampled = np.empty((target_length, audio.shape[1]), dtype=np.float64)
+    for channel_idx in range(audio.shape[1]):
+        resampled[:, channel_idx] = np.interp(target_times, source_times, audio_float[:, channel_idx])
+    return resampled.astype(output_dtype, copy=False)
+
+
 def load_eq_curve_config(config_path: Optional[str]) -> Optional[Dict[str, object]]:
     if not config_path:
         return None
@@ -469,6 +497,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Normalizált referencia audió cél csúcsértéke (0.0-1.0).",
     )
     parser.add_argument(
+        "--target_sample_rate",
+        type=int,
+        default=16000,
+        help="Referencia audió újramintavételezés cél frekvenciája Hz-ben (0 vagy negatív érték esetén változatlan).",
+    )
+    parser.add_argument(
         "--speaker_name",
         type=str,
         default="Speaker 1",
@@ -771,11 +805,15 @@ def process_segment(
     ref_chunk = apply_eq_curve_to_audio(ref_chunk, sample_rate, eq_config)
     if args.normalize_ref_audio:
         ref_chunk = normalize_peak(ref_chunk.copy(), args.ref_audio_peak)
+    ref_sample_rate = sample_rate
+    if args.target_sample_rate > 0 and args.target_sample_rate != sample_rate:
+        ref_chunk = resample_audio(ref_chunk, sample_rate, args.target_sample_rate)
+        ref_sample_rate = args.target_sample_rate
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_ref_file:
         temp_ref_path = tmp_ref_file.name
     try:
-        sf.write(temp_ref_path, ref_chunk, sample_rate)
+        sf.write(temp_ref_path, ref_chunk, ref_sample_rate)
 
         inputs = prepare_inputs(
             processor=processor,
