@@ -454,6 +454,9 @@
                     fileRow.dataset.fileName = entry.name || '';
                     const extension = getFileExtension(entry.name || '');
                     fileRow.dataset.fileExtension = extension;
+                    if (entry.enable_failed_move) {
+                        fileRow.dataset.enableFailedMove = 'true';
+                    }
 
                     const link = document.createElement('a');
                     link.className = 'file-browser-link';
@@ -500,6 +503,15 @@
                     deleteBtn.title = 'Fájl törlése';
                     deleteBtn.textContent = 'Törlés';
                     actions.append(deleteBtn);
+
+                    if (entry.enable_failed_move && extension === '.wav') {
+                        const moveBtn = document.createElement('button');
+                        moveBtn.type = 'button';
+                        moveBtn.className = 'btn btn-sm btn-outline-primary file-move-to-translated-btn';
+                        moveBtn.title = 'Áthelyezés a fordított szegmensek közé';
+                        moveBtn.textContent = 'Áthelyezés';
+                        actions.append(moveBtn);
+                    }
 
                     fileRow.appendChild(actions);
                     item.appendChild(fileRow);
@@ -641,6 +653,31 @@
 
             if (!response.ok || !result.success) {
                 throw new Error((result && result.error) || 'Nem sikerült törölni a fájlt.');
+            }
+            return result;
+        }
+
+        async function moveFailedGenerationFileRequest(filePath) {
+            const response = await fetch('/api/project-file/move-failed', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    projectName: PROJECT_NAME,
+                    sourcePath: filePath
+                })
+            });
+
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (error) {
+                // ignore
+            }
+
+            if (!response.ok || !result.success) {
+                throw new Error((result && result.error) || 'Nem sikerült áthelyezni a fájlt.');
             }
             return result;
         }
@@ -861,6 +898,37 @@
                         await reloadFileBrowser(parentPath);
                     } catch (error) {
                         alert(error.message || 'Nem sikerült törölni a fájlt.');
+                    }
+                    return;
+                }
+
+                const moveButton = event.target.closest('.file-move-to-translated-btn');
+                if (moveButton && browserRoot.contains(moveButton)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const fileRow = moveButton.closest('.file-browser-item');
+                    if (!fileRow) {
+                        return;
+                    }
+                    const filePath = fileRow.dataset.filePath || '';
+                    if (!filePath) {
+                        return;
+                    }
+                    const fileName = fileRow.dataset.fileName || filePath.split('/').pop();
+                    const confirmed = confirm(`Áthelyezed ezt a fájlt a fordított szegmensek közé?\n${fileName}`);
+                    if (!confirmed) {
+                        return;
+                    }
+                    moveButton.disabled = true;
+                    try {
+                        await moveFailedGenerationFileRequest(filePath);
+                        const parentPath = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
+                        alert('Fájl sikeresen áthelyezve.');
+                        await reloadFileBrowser(parentPath);
+                    } catch (error) {
+                        alert(error.message || 'Nem sikerült áthelyezni a fájlt.');
+                    } finally {
+                        moveButton.disabled = false;
                     }
                     return;
                 }
@@ -3240,7 +3308,7 @@
                         {%- if '.' in entry.name %}
                             {%- set extension = '.' + entry.name.rsplit('.', 1)[1].lower() %}
                         {%- endif %}
-                        <div class="file-browser-item" data-file-path="{{ entry.path }}" data-file-name="{{ entry.name }}" data-file-extension="{{ extension }}">
+                        <div class="file-browser-item" data-file-path="{{ entry.path }}" data-file-name="{{ entry.name }}" data-file-extension="{{ extension }}"{% if entry.enable_failed_move %} data-enable-failed-move="true"{% endif %}>
                             <a class="file-browser-link" href="{{ url_for('serve_workdir', filename=project.name + '/' + entry.path) }}" target="_blank" rel="noopener">
                                 {{ entry.name }}
                             </a>
@@ -3255,6 +3323,9 @@
                                     <button type="button" class="btn btn-sm btn-outline-secondary file-json-view-btn" title="JSON megnyitása">Megnyitás</button>
                                 {%- endif %}
                                 <button type="button" class="btn btn-sm btn-outline-danger file-delete-btn" title="Fájl törlése">Törlés</button>
+                                {%- if entry.enable_failed_move and extension == '.wav' %}
+                                    <button type="button" class="btn btn-sm btn-outline-primary file-move-to-translated-btn" title="Áthelyezés a fordított szegmensek közé">Áthelyezés</button>
+                                {%- endif %}
                             </div>
                         </div>
                     {%- endif %}

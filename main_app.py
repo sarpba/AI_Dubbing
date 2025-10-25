@@ -12,6 +12,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+import shutil
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -207,11 +208,14 @@ def collect_directory_entries(
                     entry['highlight_class'] = highlight_class
                 entries.append(entry)
             else:
-                entries.append({
+                file_entry = {
                     'name': name,
                     'type': 'file',
                     'path': rel_path
-                })
+                }
+                if should_enable_failed_move(rel_path, highlight_map):
+                    file_entry['enable_failed_move'] = True
+                entries.append(file_entry)
     except Exception as exc:
         logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", target_path, exc)
     return entries
@@ -270,6 +274,20 @@ def compute_failed_generation_highlights(
         )
 
     return highlight_map
+
+
+def should_enable_failed_move(rel_path: str, highlight_map: Dict[str, str]) -> bool:
+    if not rel_path:
+        return False
+    if not rel_path.startswith('failed_generations/'):
+        return False
+    parent_path = rel_path.rsplit('/', 1)[0] if '/' in rel_path else ''
+    if not parent_path:
+        return False
+    if highlight_map.get(parent_path) == 'fg-has-translated':
+        return False
+    _, ext = os.path.splitext(rel_path)
+    return ext.lower() == '.wav'
 
 
 def infer_autofill_kind(param_name: str) -> Optional[str]:
@@ -1367,11 +1385,15 @@ def show_project(project_name):
                         entry['highlight_class'] = highlight_class
                     entries.append(entry)
                 else:
-                    entries.append({
+                    normalized_file_path = rel_path.replace('\\', '/')
+                    file_entry = {
                         'name': name,
                         'type': 'file',
-                        'path': rel_path.replace('\\', '/')
-                    })
+                        'path': normalized_file_path
+                    }
+                    if should_enable_failed_move(normalized_file_path, highlight_map):
+                        file_entry['enable_failed_move'] = True
+                    entries.append(file_entry)
         except Exception as exc:
             logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", current_path, exc)
         return entries
@@ -1526,6 +1548,92 @@ def upload_project_file():
         'success': True,
         'message': 'Fájl sikeresen feltöltve.',
         'path': relative_saved_path
+    })
+
+
+@app.route('/api/project-file/move-failed', methods=['POST'])
+def move_failed_generation_file():
+    payload = request.get_json(silent=True) or {}
+    project_name = (payload.get('projectName') or '').strip()
+    source_path = (payload.get('sourcePath') or '').strip()
+
+    if not project_name:
+        return jsonify({'success': False, 'error': 'Hiányzó projektnév.'}), 400
+    if not source_path:
+        return jsonify({'success': False, 'error': 'Hiányzó fájl elérési útvonal.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    project_root = os.path.join(workdir_path, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+
+    if not os.path.isdir(project_root_abs):
+        return jsonify({'success': False, 'error': 'A projekt könyvtára nem található.'}), 404
+
+    source_abs = os.path.abspath(os.path.join(project_root_abs, source_path))
+    if not is_subpath(source_abs, project_root_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen forrás elérési útvonal.'}), 400
+    if not os.path.isfile(source_abs):
+        return jsonify({'success': False, 'error': 'A megadott fájl nem található.'}), 404
+
+    relative_source = os.path.relpath(source_abs, project_root_abs).replace('\\', '/')
+    if not relative_source.startswith('failed_generations/'):
+        return jsonify({'success': False, 'error': 'Csak failed_generations könyvtárból áthelyezhető.'}), 400
+
+    highlight_map = compute_failed_generation_highlights(project_root_abs, config_snapshot)
+    parent_path = relative_source.rsplit('/', 1)[0] if '/' in relative_source else ''
+    if highlight_map.get(parent_path) == 'fg-has-translated':
+        return jsonify({'success': False, 'error': 'Ez a mappa már rendelkezik fordított szegmenssel.'}), 400
+
+    _, ext = os.path.splitext(source_abs)
+    if ext.lower() != '.wav':
+        return jsonify({'success': False, 'error': 'Csak WAV fájlok helyezhetők át.'}), 400
+
+    translated_rel = config_snapshot.get('PROJECT_SUBDIRS', {}).get('translated_splits')
+    if not translated_rel:
+        return jsonify({'success': False, 'error': 'A translated_splits könyvtár nincs konfigurálva.'}), 500
+
+    translated_dir_abs = os.path.abspath(os.path.join(project_root_abs, translated_rel))
+    if not is_subpath(translated_dir_abs, project_root_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen célkönyvtár konfiguráció.'}), 500
+
+    try:
+        os.makedirs(translated_dir_abs, exist_ok=True)
+    except OSError as exc:
+        logging.exception("Nem sikerült létrehozni a célkönyvtárat: %s", translated_dir_abs, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a célkönyvtárat.'}), 500
+
+    filename = os.path.basename(source_abs)
+    stem, extension = os.path.splitext(filename)
+    attempt_index = stem.find('_attempt_')
+    if attempt_index != -1:
+        stem = stem[:attempt_index]
+    if not stem:
+        return jsonify({'success': False, 'error': 'A fájlnév nem értelmezhető az áthelyezéshez.'}), 400
+
+    destination_name = f"{stem}{extension}"
+    destination_abs = os.path.abspath(os.path.join(translated_dir_abs, destination_name))
+    if not is_subpath(destination_abs, translated_dir_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen célfájl hely.'}), 500
+
+    if os.path.exists(destination_abs):
+        return jsonify({'success': False, 'error': 'Már létezik ilyen nevű fájl a translated_splits mappában.'}), 409
+
+    try:
+        shutil.move(source_abs, destination_abs)
+    except OSError as exc:
+        logging.exception("Nem sikerült áthelyezni a fájlt %s -> %s: %s", source_abs, destination_abs, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült áthelyezni a fájlt.'}), 500
+
+    relative_destination = os.path.relpath(destination_abs, project_root_abs).replace('\\', '/')
+    return jsonify({
+        'success': True,
+        'message': 'Fájl sikeresen áthelyezve.',
+        'destination_path': relative_destination
     })
 
 
