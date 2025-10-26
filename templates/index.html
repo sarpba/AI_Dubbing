@@ -6,6 +6,20 @@
     <title>AI Dubbing Szerkesztő</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if theme_colors %}
+    <style>
+        :root {
+            {% for name, value in theme_colors.light.items() %}
+            --{{ name }}: {{ value }};
+            {% endfor %}
+        }
+        [data-bs-theme="dark"] {
+            {% for name, value in theme_colors.dark.items() %}
+            --{{ name }}: {{ value }};
+            {% endfor %}
+        }
+    </style>
+    {% endif %}
     <script>
         (function() {
             const root = document.documentElement;
@@ -57,11 +71,19 @@
     </script>
 </head>
 <body>
-    <button class="theme-toggle" onclick="toggleTheme()">
+    <div class="theme-controls">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Téma váltása">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
             <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
         </svg>
-    </button>
+        </button>
+        <a class="theme-editor-button" href="{{ url_for('template_editor') }}" aria-label="Sablonszínek szerkesztése">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 0a5.53 5.53 0 0 0-5.5 5.5c0 1.23.507 2.557 1.377 3.566a.5.5 0 0 1 .123.332l-.067 1.297a.75.75 0 0 0 1.086.707l1.216-.608a.75.75 0 0 1 .335-.08h1.43A5.53 5.53 0 0 0 13.5 5.5 5.53 5.53 0 0 0 8 0Zm0 1a4.53 4.53 0 0 1 4.5 4.5A4.53 4.53 0 0 1 8 10H6.57a1.75 1.75 0 0 0-.782.186l-1.217.609.068-1.298a1.5 1.5 0 0 0-.369-.996A4.53 4.53 0 0 1 3.5 5.5 4.53 4.53 0 0 1 8 1Z"/>
+                <path d="M10.5 5.5a.5.5 0 0 1-.5.5h-.5v.5a.5.5 0 0 1-1 0V6H8a.5.5 0 0 1 0-1h.5v-.5a.5.5 0 0 1 1 0V5h.5a.5.5 0 0 1 .5.5Z"/>
+            </svg>
+        </a>
+    </div>
 
     <div class="container mt-4">
         <h1 class="mb-4">AI Dubbing Szerkesztő</h1>

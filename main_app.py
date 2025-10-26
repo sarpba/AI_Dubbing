@@ -21,6 +21,7 @@ logging.basicConfig(level=logging.INFO)
 
 config_lock = threading.Lock()
 workflow_lock = threading.Lock()
+theme_config_lock = threading.Lock()
 workflow_jobs = {}
 workflow_threads = {}
 workflow_events = {}
@@ -61,6 +62,42 @@ SCRIPTS_CACHE_LOCK = threading.Lock()
 CONDA_INFO_CACHE: Optional[dict] = None
 CONDA_INFO_LOCK = threading.Lock()
 WORKFLOWS_DIR = Path(app.root_path) / 'workflows'
+THEME_CONFIG_PATH = Path(app.root_path) / 'config' / 'theme_colors.json'
+THEME_COLOR_KEYS = [
+    'primary-color',
+    'secondary-color',
+    'success-color',
+    'background-color',
+    'text-color',
+    'card-bg',
+    'border-color',
+    'waveform-bg',
+    'timeline-segment-bg',
+]
+DEFAULT_THEME_COLORS = {
+    'light': {
+        'primary-color': '#0d6efd',
+        'secondary-color': '#6c757d',
+        'success-color': '#198754',
+        'background-color': '#ffffff',
+        'text-color': '#212529',
+        'card-bg': '#f8f9fa',
+        'border-color': '#dee2e6',
+        'waveform-bg': '#f0f0f0',
+        'timeline-segment-bg': 'rgba(230, 230, 250, 0.8)',
+    },
+    'dark': {
+        'primary-color': '#0dcaf0',
+        'secondary-color': '#6c757d',
+        'success-color': '#198754',
+        'background-color': '#212529',
+        'text-color': '#f8f9fa',
+        'card-bg': '#2d3339',
+        'border-color': '#495057',
+        'waveform-bg': '#343a40',
+        'timeline-segment-bg': 'rgba(100, 100, 150, 0.8)',
+    },
+}
 
 SCRIPT_KEY_REQUIREMENTS = {
     'translate_chatgpt_srt_easy_codex.py': {'chatgpt'},
@@ -91,6 +128,62 @@ ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue'}
 
 class WorkflowValidationError(Exception):
     """Egy workflow lépés konfigurációja érvénytelen."""
+
+
+def _normalize_theme_colors(data: Optional[Dict[str, Dict[str, Any]]]) -> Dict[str, Dict[str, str]]:
+    normalized: Dict[str, Dict[str, str]] = {}
+    for mode, defaults in DEFAULT_THEME_COLORS.items():
+        normalized[mode] = {}
+        mode_values = data.get(mode) if isinstance(data, dict) else {}
+        mode_values = mode_values if isinstance(mode_values, dict) else {}
+        for key, default_value in defaults.items():
+            value = mode_values.get(key)
+            if isinstance(value, str):
+                value = value.strip() or default_value
+            else:
+                value = default_value
+            normalized[mode][key] = value
+    return normalized
+
+
+def load_theme_colors() -> Dict[str, Dict[str, str]]:
+    with theme_config_lock:
+        if THEME_CONFIG_PATH.exists():
+            try:
+                with open(THEME_CONFIG_PATH, 'r', encoding='utf-8') as file:
+                    raw_data = json.load(file)
+            except (OSError, json.JSONDecodeError) as exc:
+                logging.warning("Nem sikerült beolvasni a témaszíneket: %s", exc)
+                raw_data = None
+        else:
+            raw_data = None
+        return _normalize_theme_colors(raw_data)
+
+
+def save_theme_colors(data: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, str]]:
+    normalized = _normalize_theme_colors(data)
+    with theme_config_lock:
+        try:
+            THEME_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with open(THEME_CONFIG_PATH, 'w', encoding='utf-8') as file:
+                json.dump(normalized, file, ensure_ascii=False, indent=2)
+        except OSError as exc:
+            logging.error("Nem sikerült elmenteni a témaszíneket: %s", exc)
+            raise
+    return normalized
+
+
+@app.context_processor
+def inject_theme_colors():
+    try:
+        colors = load_theme_colors()
+    except Exception as exc:
+        logging.error("Nem sikerült betölteni a témaszíneket: %s", exc)
+        colors = DEFAULT_THEME_COLORS
+    return {
+        'theme_colors': colors,
+        'default_theme_colors': DEFAULT_THEME_COLORS,
+    }
 
 
 def is_secret_param(name: str) -> bool:
@@ -1331,6 +1424,11 @@ def index():
                    if os.path.isdir(os.path.join('workdir', d))]
     return render_template('index.html', projects=projects)
 
+
+@app.route('/template-editor')
+def template_editor():
+    return render_template('template_editor.html')
+
 @app.route('/project/<project_name>')
 def show_project(project_name):
     # Projekt ellenőrzése
@@ -2529,6 +2627,34 @@ def save_workflow_template_api():
         return jsonify({'success': False, 'error': str(exc)}), 400
 
     return jsonify({'success': True, 'template': saved})
+
+
+@app.route('/api/theme-colors', methods=['GET', 'POST'])
+def theme_colors_api():
+    if request.method == 'GET':
+        return jsonify({'success': True, 'colors': load_theme_colors()})
+
+    if not request.is_json:
+        return jsonify({'success': False, 'error': 'Hiányzó JSON payload.'}), 400
+
+    payload = request.get_json(silent=True) or {}
+    light_values = payload.get('light')
+    dark_values = payload.get('dark')
+
+    if not isinstance(light_values, dict) or not isinstance(dark_values, dict):
+        return jsonify({'success': False, 'error': 'Érvénytelen témabeállítások.'}), 400
+
+    normalized_input: Dict[str, Dict[str, Any]] = {
+        'light': {key: value for key, value in light_values.items() if key in THEME_COLOR_KEYS},
+        'dark': {key: value for key, value in dark_values.items() if key in THEME_COLOR_KEYS},
+    }
+
+    try:
+        saved = save_theme_colors(normalized_input)
+    except OSError:
+        return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a témaszíneket.'}), 500
+
+    return jsonify({'success': True, 'colors': saved})
 
 @app.route('/run-translation', methods=['POST'])
 def run_translation():

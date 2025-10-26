@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="hu" data-bs-theme="auto">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Színsablon szerkesztő | AI Dubbing</title>
+    <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if theme_colors %}
+    <style id="themeVariables">
+        :root {
+            {% for name, value in theme_colors.light.items() %}
+            --{{ name }}: {{ value }};
+            {% endfor %}
+        }
+        [data-bs-theme="dark"] {
+            {% for name, value in theme_colors.dark.items() %}
+            --{{ name }}: {{ value }};
+            {% endfor %}
+        }
+    </style>
+    {% endif %}
+    <script>
+        (function() {
+            const root = document.documentElement;
+            const storageKey = 'theme';
+            const systemMedia = window.matchMedia('(prefers-color-scheme: dark)');
+
+            const getStoredPreference = () => localStorage.getItem(storageKey) || 'auto';
+
+            const resolveTheme = preference => {
+                if (preference === 'light' || preference === 'dark') {
+                    return preference;
+                }
+                return systemMedia.matches ? 'dark' : 'light';
+            };
+
+            const applyTheme = preference => {
+                const effectiveTheme = resolveTheme(preference);
+                root.setAttribute('data-bs-theme', effectiveTheme);
+                root.dataset.themePreference = preference;
+            };
+
+            const handleSystemChange = () => {
+                const preference = root.dataset.themePreference || getStoredPreference();
+                if (preference === 'auto') {
+                    applyTheme('auto');
+                }
+            };
+
+            if (typeof systemMedia.addEventListener === 'function') {
+                systemMedia.addEventListener('change', handleSystemChange);
+            } else if (typeof systemMedia.addListener === 'function') {
+                systemMedia.addListener(handleSystemChange);
+            }
+
+            window.toggleTheme = function() {
+                const currentPreference = root.dataset.themePreference || getStoredPreference();
+                let nextPreference = 'auto';
+                if (currentPreference === 'auto') {
+                    nextPreference = 'light';
+                } else if (currentPreference === 'light') {
+                    nextPreference = 'dark';
+                }
+                localStorage.setItem(storageKey, nextPreference);
+                applyTheme(nextPreference);
+            };
+
+            applyTheme(getStoredPreference());
+        })();
+    </script>
+</head>
+<body>
+    <div class="theme-controls">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Téma váltása">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div class="container mt-4 theme-editor">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div>
+                <h1 class="mb-1">Színsablon szerkesztő</h1>
+                <p class="text-muted mb-0">Állítsd be külön a világos és a sötét téma színeit, majd mentsd a változtatásokat.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Vissza a főoldalra</a>
+                <button type="button" class="btn btn-outline-primary" id="restoreSavedBtn">Mentett értékek visszatöltése</button>
+                <button type="button" class="btn btn-outline-danger" id="restoreDefaultBtn">Alapértelmezett színek</button>
+            </div>
+        </div>
+
+        <div id="themeStatus" class="mb-3"></div>
+
+        {% set color_order = [
+            'primary-color',
+            'secondary-color',
+            'success-color',
+            'background-color',
+            'text-color',
+            'card-bg',
+            'border-color',
+            'waveform-bg',
+            'timeline-segment-bg'
+        ] %}
+        {% set color_labels = {
+            'primary-color': 'Elsődleges kiemelőszín',
+            'secondary-color': 'Másodlagos kiemelőszín',
+            'success-color': 'Siker szín (pozitív állapotok)',
+            'background-color': 'Alap háttérszín',
+            'text-color': 'Alap szövegszín',
+            'card-bg': 'Kártyák háttérszíne',
+            'border-color': 'Alap keretszín',
+            'waveform-bg': 'Hullámforma háttér',
+            'timeline-segment-bg': 'Idővonal szegmensek'
+        } %}
+
+        <form id="themeEditorForm" class="row g-4">
+            <div class="col-12 col-lg-6">
+                <div class="card theme-editor-card h-100">
+                    <div class="card-header">
+                        <h2 class="h5 mb-0">Világos mód</h2>
+                    </div>
+                    <div class="card-body">
+                        {% for key in color_order %}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="light-{{ key }}">{{ color_labels[key] }}</label>
+                            <div class="input-group">
+                                <span class="input-group-text color-preview" data-preview-for="light-{{ key }}"></span>
+                                <input
+                                    type="text"
+                                    class="form-control theme-editor-input"
+                                    id="light-{{ key }}"
+                                    name="light.{{ key }}"
+                                    value="{{ theme_colors.light[key] }}"
+                                    data-mode="light"
+                                    data-key="{{ key }}"
+                                >
+                            </div>
+                            <div class="form-text">Alapértelmezett: <code>{{ default_theme_colors.light[key] }}</code></div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-lg-6">
+                <div class="card theme-editor-card h-100">
+                    <div class="card-header">
+                        <h2 class="h5 mb-0">Sötét mód</h2>
+                    </div>
+                    <div class="card-body">
+                        {% for key in color_order %}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold" for="dark-{{ key }}">{{ color_labels[key] }}</label>
+                            <div class="input-group">
+                                <span class="input-group-text color-preview" data-preview-for="dark-{{ key }}"></span>
+                                <input
+                                    type="text"
+                                    class="form-control theme-editor-input"
+                                    id="dark-{{ key }}"
+                                    name="dark.{{ key }}"
+                                    value="{{ theme_colors.dark[key] }}"
+                                    data-mode="dark"
+                                    data-key="{{ key }}"
+                                >
+                            </div>
+                            <div class="form-text">Alapértelmezett: <code>{{ default_theme_colors.dark[key] }}</code></div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body d-flex flex-column flex-md-row justify-content-md-between align-items-md-center gap-3">
+                        <div class="text-muted small">
+                            Mentés után a beállítások azonnal érvénybe lépnek minden oldalon.
+                        </div>
+                        <button type="submit" class="btn btn-success btn-lg px-4">Változtatások mentése</button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('themeEditorForm');
+            const statusEl = document.getElementById('themeStatus');
+            const inputs = Array.from(document.querySelectorAll('.theme-editor-input'));
+            const styleEl = document.getElementById('themeVariables');
+            const restoreSavedBtn = document.getElementById('restoreSavedBtn');
+            const restoreDefaultBtn = document.getElementById('restoreDefaultBtn');
+            const apiUrl = "{{ url_for('theme_colors_api') }}";
+
+            const initialColors = {{ theme_colors | tojson }};
+            const defaultColors = {{ default_theme_colors | tojson }};
+            let lastSavedColors = cloneColors(initialColors);
+
+            function cloneColors(source) {
+                return JSON.parse(JSON.stringify(source));
+            }
+
+            function showStatus(message, type = 'success') {
+                statusEl.innerHTML = '<div class="alert alert-' + type + ' mb-0" role="alert">' + message + '</div>';
+            }
+
+            function clearStatus() {
+                statusEl.innerHTML = '';
+            }
+
+            function getInputValue(input) {
+                const value = input.value.trim();
+                const mode = input.dataset.mode;
+                const key = input.dataset.key;
+                if (value) {
+                    return value;
+                }
+                return defaultColors[mode][key] || '';
+            }
+
+            function buildColorsFromInputs() {
+                const colors = { light: {}, dark: {} };
+                inputs.forEach(input => {
+                    const mode = input.dataset.mode;
+                    const key = input.dataset.key;
+                    colors[mode][key] = getInputValue(input);
+                });
+                return colors;
+            }
+
+            function updatePreviews() {
+                inputs.forEach(input => {
+                    const preview = document.querySelector('[data-preview-for="' + input.id + '"]');
+                    if (preview) {
+                        preview.style.background = getInputValue(input) || 'transparent';
+                    }
+                });
+            }
+
+            function updateStyle(colors) {
+                if (!styleEl) {
+                    return;
+                }
+                const lines = [
+                    ':root {',
+                    ...Object.entries(colors.light).map(([key, value]) => '    --' + key + ': ' + value + ';'),
+                    '}',
+                    '[data-bs-theme="dark"] {',
+                    ...Object.entries(colors.dark).map(([key, value]) => '    --' + key + ': ' + value + ';'),
+                    '}'
+                ];
+                styleEl.textContent = lines.join('\\n');
+            }
+
+            function applyColors(colors) {
+                inputs.forEach(input => {
+                    const mode = input.dataset.mode;
+                    const key = input.dataset.key;
+                    if (colors[mode] && typeof colors[mode][key] !== 'undefined') {
+                        input.value = colors[mode][key];
+                    }
+                });
+                updatePreviews();
+                updateStyle(buildColorsFromInputs());
+            }
+
+            async function loadFromServer() {
+                try {
+                    const response = await fetch(apiUrl);
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.error || 'Nem sikerült betölteni a mentett színeket.');
+                    }
+                    lastSavedColors = cloneColors(result.colors);
+                    applyColors(result.colors);
+                    clearStatus();
+                } catch (error) {
+                    applyColors(initialColors);
+                    showStatus(error.message || 'Nem sikerült betölteni a mentett színeket. Az induló értékek maradnak érvényben.', 'warning');
+                }
+            }
+
+            inputs.forEach(input => {
+                input.addEventListener('input', () => {
+                    updatePreviews();
+                    updateStyle(buildColorsFromInputs());
+                });
+            });
+
+            form.addEventListener('submit', async event => {
+                event.preventDefault();
+                clearStatus();
+                const colors = buildColorsFromInputs();
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(colors)
+                    });
+                    const result = await response.json();
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.error || 'Nem sikerült elmenteni a témaszíneket.');
+                    }
+                    lastSavedColors = cloneColors(result.colors);
+                    applyColors(result.colors);
+                    showStatus('Sikeres mentés! Az új színek már érvényben vannak.', 'success');
+                } catch (error) {
+                    showStatus(error.message || 'Nem sikerült elmenteni a témaszíneket.', 'danger');
+                }
+            });
+
+            restoreSavedBtn.addEventListener('click', () => {
+                applyColors(lastSavedColors);
+                showStatus('Visszatöltve a legutóbb mentett értékek.', 'info');
+            });
+
+            restoreDefaultBtn.addEventListener('click', () => {
+                applyColors(defaultColors);
+                showStatus('Alapértelmezett színek visszaállítva. Mentsd a változtatásokat a véglegesítéshez.', 'info');
+            });
+
+            updatePreviews();
+            updateStyle(buildColorsFromInputs());
+            loadFromServer();
+        });
+    </script>
+</body>
+</html>

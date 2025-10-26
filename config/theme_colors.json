@@ -1,0 +1,24 @@
+{
+  "light": {
+    "primary-color": "#0d6efd",
+    "secondary-color": "#6c757d",
+    "success-color": "#198754",
+    "background-color": "#ffffff",
+    "text-color": "#212529",
+    "card-bg": "#f8f9fa",
+    "border-color": "#dee2e6",
+    "waveform-bg": "#f0f0f0",
+    "timeline-segment-bg": "rgba(230, 230, 250, 0.8)"
+  },
+  "dark": {
+    "primary-color": "#0d6efd",
+    "secondary-color": "#6c757d",
+    "success-color": "#198754",
+    "background-color": "#212529",
+    "text-color": "#f8f9fa",
+    "card-bg": "#2d3339",
+    "border-color": "#495057",
+    "waveform-bg": "#343a40",
+    "timeline-segment-bg": "rgba(100, 100, 150, 0.8)"
+  }
+}

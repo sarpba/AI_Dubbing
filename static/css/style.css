@@ -379,13 +379,33 @@ body {
   height: 40px; /* Standard height for controls */
 }
 
+.theme-editor .color-preview {
+  width: 3rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-color);
+  background-color: transparent;
+}
 
-/* Theme toggle button */
-.theme-toggle {
+.theme-editor-card .form-text code {
+  font-size: 0.85em;
+}
+
+
+/* Theme toggle & editor controls */
+.theme-controls {
   position: fixed;
   bottom: 20px;
   right: 20px;
   z-index: 1050;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.theme-toggle,
+.theme-editor-button {
   width: 50px;
   height: 50px;
   border-radius: 50%;
@@ -400,14 +420,26 @@ body {
   cursor: pointer;
 }
 
-.theme-toggle:hover {
+.theme-editor-button {
+  text-decoration: none;
+}
+
+.theme-toggle:hover,
+.theme-editor-button:hover {
   transform: scale(1.1);
   background-color: var(--primary-color);
   opacity: 0.9;
 }
 
-.theme-toggle:active {
+.theme-toggle:active,
+.theme-editor-button:active {
   transform: scale(0.95);
+}
+
+.theme-toggle:focus-visible,
+.theme-editor-button:focus-visible {
+  outline: 3px solid rgba(13, 202, 240, 0.5);
+  outline-offset: 3px;
 }
 
 /* Animations */
@@ -474,9 +506,14 @@ body {
     padding-top: 60px;
   }
   
-  .theme-toggle {
+  .theme-controls {
     top: 10px;
+    bottom: auto;
     right: 10px;
+  }
+
+  .theme-toggle,
+  .theme-editor-button {
     width: 40px;
     height: 40px;
   }
