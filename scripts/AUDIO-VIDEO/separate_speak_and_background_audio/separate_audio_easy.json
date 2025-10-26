@@ -1,0 +1,82 @@
+{
+  "enviroment": "demucs",
+  "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
+  "description": "Az eredeti filból kivont audio filet beszédre és háttér zenére/sound effectekre bontja.",
+  "required": [
+    {
+      "name": "project",
+      "flags": [
+        "-p",
+        "--project"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "device",
+      "flags": [
+        "--device"
+      ],
+      "type": "option",
+      "default": "cuda"
+    },
+    {
+      "name": "models",
+      "flags": [
+        "--models"
+      ],
+      "type": "option",
+      "default": "htdemucs,mdx_extra"
+    },
+    {
+      "name": "chunk_size",
+      "flags": [
+        "--chunk_size"
+      ],
+      "type": "option",
+      "default": 5.0
+    },
+    {
+      "name": "chunk_overlap",
+      "flags": [
+        "--chunk_overlap"
+      ],
+      "type": "option",
+      "default": 10.0
+    },
+    {
+      "name": "non_speech_silence",
+      "flags": [
+        "--non_speech_silence"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "background_blend",
+      "flags": [
+        "--background_blend"
+      ],
+      "type": "option",
+      "default": 0.5
+    },
+    {
+      "name": "keep_full_audio",
+      "flags": [
+        "--keep_full_audio"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "enviroment": "sync",
+  "script": "AUDIO-VIDEO/pitch_analizer/pitch_analizer.py",
+  "description": "Narrátor és translated_splits audiók hangmagasságának összehasonlítása megadott toleranciával.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "narrator",
+      "flags": [
+        "--narrator"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "tolerance",
+      "flags": [
+        "--tolerance"
+      ],
+      "type": "option",
+      "default": 20.0
+    },
+    {
+      "name": "min_frequency",
+      "flags": [
+        "--min-frequency"
+      ],
+      "type": "option",
+      "default": 60.0
+    },
+    {
+      "name": "max_frequency",
+      "flags": [
+        "--max-frequency"
+      ],
+      "type": "option",
+      "default": 400.0
+    },
+    {
+      "name": "delete_outside",
+      "flags": [
+        "--delete-outside"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

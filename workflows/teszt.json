@@ -2,38 +2,25 @@
   "name": "Teszt",
   "steps": [
     {
-      "script": "TTS/vibevoice-tts.py",
+      "script": "TTS/vibevoice-narrator/vibevoice-tts_narrator.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "debug": false,
-        "disable_prefill": false,
-        "keep_best_over_tolerance": true,
-        "model_path": "Cseti/VibeVoice_7B_hun_v2",
-        "norm": "hun",
-        "normalize_ref_audio": false,
-        "overwrite": true,
-        "save_failures": true
+        "norm": "eng",
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "model_path": "aoi-ot/VibeVoice-Large",
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
+        "max_retries": "1",
+        "keep_best_over_tolerance": true
       }
     },
     {
-      "script": "AV/normalise_and_cut_json_easy.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "AV/merge_chunks_with_background_easy.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "AV/merge_to_video_easy.py",
-      "enabled": false,
+      "script": "AUDIO-VIDEO/pitch_analizer/pitch_analizer.py",
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "language": "hun"
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "delete_outside": true
       }
     }
   ],

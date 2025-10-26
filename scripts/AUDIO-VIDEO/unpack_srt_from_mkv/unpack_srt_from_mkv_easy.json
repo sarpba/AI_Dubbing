@@ -1,0 +1,22 @@
+{
+  "enviroment": "sync",
+  "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
+  "description": "A feltöltött videoba ágyazott feliratokat kinyeri srt fileokként.",
+  "required": [
+    {
+      "name": "project_name",
+      "type": "positional",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

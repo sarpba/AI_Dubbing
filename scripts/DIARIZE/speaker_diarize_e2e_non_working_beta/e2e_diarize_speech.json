@@ -1,0 +1,165 @@
+{
+  "enviroment": "nemo",
+  "script": "DIARIZE/speaker_diarize_e2e_non_working_beta/e2e_diarize_speech.py",
+  "description": "Alpha verzió egyelóre ne használd! Beszélődiarizáció végrehajtása az End-to-End Diarization modell segítségével.",
+  "required": [
+    {
+      "name": "model_path",
+      "type": "config_option",
+      "default": null
+    },
+    {
+      "name": "dataset_manifest",
+      "type": "config_option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "presort_manifest",
+      "type": "config_option",
+      "default": true
+    },
+    {
+      "name": "postprocessing_yaml",
+      "type": "config_option",
+      "default": null
+    },
+    {
+      "name": "no_der",
+      "type": "config_option",
+      "default": false
+    },
+    {
+      "name": "out_rttm_dir",
+      "type": "config_option",
+      "default": null
+    },
+    {
+      "name": "save_preds_tensors",
+      "type": "config_option",
+      "default": false
+    },
+    {
+      "name": "session_len_sec",
+      "type": "config_option",
+      "default": -1
+    },
+    {
+      "name": "batch_size",
+      "type": "config_option",
+      "default": 1
+    },
+    {
+      "name": "num_workers",
+      "type": "config_option",
+      "default": 0
+    },
+    {
+      "name": "random_seed",
+      "type": "config_option",
+      "default": null
+    },
+    {
+      "name": "bypass_postprocessing",
+      "type": "config_option",
+      "default": true
+    },
+    {
+      "name": "log",
+      "type": "config_option",
+      "default": false
+    },
+    {
+      "name": "use_lhotse",
+      "type": "config_option",
+      "default": true
+    },
+    {
+      "name": "batch_duration",
+      "type": "config_option",
+      "default": 33000
+    },
+    {
+      "name": "collar",
+      "type": "config_option",
+      "default": 0.25
+    },
+    {
+      "name": "ignore_overlap",
+      "type": "config_option",
+      "default": false
+    },
+    {
+      "name": "spkcache_len",
+      "type": "config_option",
+      "default": 188
+    },
+    {
+      "name": "spkcache_refresh_rate",
+      "type": "config_option",
+      "default": 144
+    },
+    {
+      "name": "fifo_len",
+      "type": "config_option",
+      "default": 188
+    },
+    {
+      "name": "chunk_len",
+      "type": "config_option",
+      "default": 6
+    },
+    {
+      "name": "chunk_left_context",
+      "type": "config_option",
+      "default": 1
+    },
+    {
+      "name": "chunk_right_context",
+      "type": "config_option",
+      "default": 7
+    },
+    {
+      "name": "cuda",
+      "type": "config_option",
+      "default": null
+    },
+    {
+      "name": "matmul_precision",
+      "type": "config_option",
+      "default": "highest"
+    },
+    {
+      "name": "launch_pp_optim",
+      "type": "config_option",
+      "default": false
+    },
+    {
+      "name": "optuna_study_name",
+      "type": "config_option",
+      "default": "optim_postprocessing"
+    },
+    {
+      "name": "optuna_temp_dir",
+      "type": "config_option",
+      "default": "/tmp/optuna"
+    },
+    {
+      "name": "optuna_storage",
+      "type": "config_option",
+      "default": "sqlite:///optim_postprocessing.db"
+    },
+    {
+      "name": "optuna_log_file",
+      "type": "config_option",
+      "default": "optim_postprocessing.log"
+    },
+    {
+      "name": "optuna_n_trials",
+      "type": "config_option",
+      "default": 100000
+    }
+  ],
+  "notes": "This script uses Hydra/OmegaConf; parameters are provided via key=value CLI overrides."
+}

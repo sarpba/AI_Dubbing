@@ -1,0 +1,66 @@
+{
+  "enviroment": "nemo",
+  "script": "ASR/paraket-eng/parakeet-tdt-0.6b-v2.py",
+  "description": "A Parakeet TDT 0.6B V2 modell használata a beszéd szöveggé alakítására.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "no_auto_chunk",
+      "flags": [
+        "--no-auto-chunk"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "chunk",
+      "flags": [
+        "--chunk"
+      ],
+      "type": "option",
+      "default": 30
+    },
+    {
+      "name": "max_pause",
+      "flags": [
+        "--max-pause"
+      ],
+      "type": "option",
+      "default": 0.6
+    },
+    {
+      "name": "timestamp_padding",
+      "flags": [
+        "--timestamp-padding"
+      ],
+      "type": "option",
+      "default": 0.2
+    },
+    {
+      "name": "max_segment_duration",
+      "flags": [
+        "--max-segment-duration"
+      ],
+      "type": "option",
+      "default": 11.5
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

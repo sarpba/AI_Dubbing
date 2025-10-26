@@ -1,7 +1,7 @@
 [
   {
     "enviroment": "nemo",
-    "script": "ASR/canary-easy.py",
+    "script": "ASR/canary-non_working_beta/canary-easy.py",
     "description": "A Canary ASR modell használata a beszéd szöveggé alakítására.",
     "required": [
       {
@@ -99,7 +99,7 @@
   },
   {
     "enviroment": "nemo",
-    "script": "ASR/parakeet-tdt-0.6b-v2.py",
+    "script": "ASR/paraket-eng/parakeet-tdt-0.6b-v2.py",
     "description": "A Parakeet TDT 0.6B V2 modell használata a beszéd szöveggé alakítására.",
     "required": [
       {
@@ -165,7 +165,7 @@
   },
   {
     "enviroment": "nemo",
-    "script": "ASR/parakeet-tdt-0.6b-v3.py",
+    "script": "ASR/paraket-multilang/parakeet-tdt-0.6b-v3.py",
     "description": "A Parakeet TDT 0.6B V3 modell használata a beszéd szöveggé alakítására.",
     "required": [
       {
@@ -231,7 +231,7 @@
   },
   {
     "enviroment": "whisperx",
-    "script": "ASR/whisx_v1.1.py",
+    "script": "ASR/whisperx/whisx_v1.1.py",
     "api": "huggingface",
     "description": "WhisperX modell használata a beszéd szöveggé alakítására, több GPU támogatással, diarizációval és egyéni, Parakeet-stílusú szegmentálással.",
     "required": [
@@ -298,7 +298,248 @@
   },
   {
     "enviroment": "sync",
-    "script": "AV/Pitch_analizer/pitch_analizer.py",
+    "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
+    "description": "Az audio sávokat kinyeri a videó fájlokból, külön csatornákra bontva, vagy egy stereo csatornára muxolva.",
+    "required": [
+      {
+        "name": "project_dir_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "keep_channels",
+        "flags": [
+          "--keep_channels"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "AUDIO-VIDEO/merge_chunks_with_background/merge_chunks_with_background_easy.py",
+    "description": "A korábban generált szinkron darabokat összemuxolja a háttér audióval.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "narrator",
+        "flags": [
+          "-narrator",
+          "--narrator"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "background_volume",
+        "flags": [
+          "--background-volume"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "AUDIO-VIDEO/merge_chunks_with_background_narrator_version/merge_chunks_with_background_beta.py",
+    "description": "A korábban generált szinkron darabokat időrendben, egymás után illeszti és rákeveri a háttér audiót.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "narrator",
+        "flags": [
+          "-narrator",
+          "--narrator"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "background_volume",
+        "flags": [
+          "--background-volume"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "max_speedup",
+        "flags": [
+          "--max-speedup"
+        ],
+        "type": "option",
+        "default": 10
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "AUDIO-VIDEO/merge_dub_to_video/merge_to_video_easy.py",
+    "description": "A korábban létrehozott szinkron audiót összemuxolja a forrás videóval. Valamint ha volt felirat, feltöltve, vagy az eredeti videóból kinyerve, akkor azt is beágyazza a videóba.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      },
+      {
+        "name": "language",
+        "flags": [
+          "-lang",
+          "--language"
+        ],
+        "type": "option",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "AUDIO-VIDEO/normalize_and_cut_tts_files/normalise_and_cut_json_easy_v1.1.py",
+    "description": "A TTS-el generált audiókat az eredeti hangsáv alapján időben és hangerőben igazítja, a végeken automatikusan eltávolítja a hosszabb csendet FFmpeg silenceremove-val.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "delete_empty",
+        "flags": [
+          "--delete_empty"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "sync_loudness",
+        "flags": [
+          "--no-sync-loudness"
+        ],
+        "type": "flag",
+        "default": true
+      },
+      {
+        "name": "min_db",
+        "flags": [
+          "-db",
+          "--min_db"
+        ],
+        "type": "option",
+        "default": -40.0
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "AUDIO-VIDEO/normalize_and_cut_tts_files_old_version/normalise_and_cut_json_easy.py",
+    "description": "A TTS-el generált audiok hangerejét az eredeti audio hangerejéhez igazítja, valamint a beszédszegmensek alapján levágja a generált szinkron darabok elejét a pontosabb szinkron érdekében.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "delete_empty",
+        "flags": [
+          "--delete_empty"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "sync_loudness",
+        "flags": [
+          "--no-sync-loudness"
+        ],
+        "type": "flag",
+        "default": true
+      },
+      {
+        "name": "min_db",
+        "flags": [
+          "-db",
+          "--min_db"
+        ],
+        "type": "option",
+        "default": -40.0
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "AUDIO-VIDEO/pitch_analizer/pitch_analizer.py",
     "description": "Narrátor és translated_splits audiók hangmagasságának összehasonlítása megadott toleranciával.",
     "required": [
       {
@@ -363,249 +604,8 @@
     ]
   },
   {
-    "enviroment": "sync",
-    "script": "AV/extract_audio_easy_channels.py",
-    "description": "Az audio sávokat kinyeri a videó fájlokból, külön csatornákra bontva, vagy egy stereo csatornára muxolva.",
-    "required": [
-      {
-        "name": "project_dir_name",
-        "type": "positional",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "keep_channels",
-        "flags": [
-          "--keep_channels"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
-    "script": "AV/merge_chunks_with_background_beta.py",
-    "description": "A korábban generált szinkron darabokat időrendben, egymás után illeszti és rákeveri a háttér audiót.",
-    "required": [
-      {
-        "name": "project_name",
-        "type": "positional",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "narrator",
-        "flags": [
-          "-narrator",
-          "--narrator"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "background_volume",
-        "flags": [
-          "--background-volume"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "max_speedup",
-        "flags": [
-          "--max-speedup"
-        ],
-        "type": "option",
-        "default": 10
-      },
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
-    "script": "AV/merge_chunks_with_background_easy.py",
-    "description": "A korábban generált szinkron darabokat összemuxolja a háttér audióval.",
-    "required": [
-      {
-        "name": "project_name",
-        "type": "positional",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "narrator",
-        "flags": [
-          "-narrator",
-          "--narrator"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "background_volume",
-        "flags": [
-          "--background-volume"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
-    "script": "AV/merge_to_video_easy.py",
-    "description": "A korábban létrehozott szinkron audiót összemuxolja a forrás videóval. Valamint ha volt felirat, feltöltve, vagy az eredeti videóból kinyerve, akkor azt is beágyazza a videóba.",
-    "required": [
-      {
-        "name": "project_name",
-        "type": "positional",
-        "default": null
-      },
-      {
-        "name": "language",
-        "flags": [
-          "-lang",
-          "--language"
-        ],
-        "type": "option",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
-    "script": "AV/normalise_and_cut_json_easy.py",
-    "description": "A TTS-el generált audiok hangerejét az eredeti audio hangerejéhez igazítja, valamint a beszédszegmensek alapján levágja a generált szinkron darabok elejét a pontosabb szinkron érdekében.",
-    "required": [
-      {
-        "name": "project_name",
-        "type": "positional",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "delete_empty",
-        "flags": [
-          "--delete_empty"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "sync_loudness",
-        "flags": [
-          "--no-sync-loudness"
-        ],
-        "type": "flag",
-        "default": true
-      },
-      {
-        "name": "min_db",
-        "flags": [
-          "-db",
-          "--min_db"
-        ],
-        "type": "option",
-        "default": -40.0
-      },
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
-    "script": "AV/normalise_and_cut_json_easy_v1.1.py",
-    "description": "A TTS-el generált audiókat az eredeti hangsáv alapján időben és hangerőben igazítja, a végeken automatikusan eltávolítja a hosszabb csendet FFmpeg silenceremove-val.",
-    "required": [
-      {
-        "name": "project_name",
-        "type": "positional",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "delete_empty",
-        "flags": [
-          "--delete_empty"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "sync_loudness",
-        "flags": [
-          "--no-sync-loudness"
-        ],
-        "type": "flag",
-        "default": true
-      },
-      {
-        "name": "min_db",
-        "flags": [
-          "-db",
-          "--min_db"
-        ],
-        "type": "option",
-        "default": -40.0
-      },
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
-  },
-  {
     "enviroment": "demucs",
-    "script": "AV/separate_audio_easy.py",
+    "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
     "description": "Az eredeti filból kivont audio filet beszédre és háttér zenére/sound effectekre bontja.",
     "required": [
       {
@@ -687,7 +687,7 @@
   },
   {
     "enviroment": "sync",
-    "script": "AV/unpack_srt_from_mkv_easy.py",
+    "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
     "description": "A feltöltött videoba ágyazott feliratokat kinyeri srt fileokként.",
     "required": [
       {
@@ -709,7 +709,7 @@
   },
   {
     "enviroment": "nemo",
-    "script": "DIARIZE/e2e_diarize_speech.py",
+    "script": "DIARIZE/speaker_diarize_e2e_non_working_beta/e2e_diarize_speech.py",
     "description": "Alpha verzió egyelóre ne használd! Beszélődiarizáció végrehajtása az End-to-End Diarization modell segítségével.",
     "required": [
       {
@@ -875,7 +875,7 @@
   {
     "enviroment": "sync",
     "api": "huggingface",
-    "script": "DIARIZE/split_segments_by_speaker.py",
+    "script": "DIARIZE/speaker_diarize_pyannote/split_segments_by_speaker.py",
     "description": "A beszéd szegmenseket beszélőnként szétválasztja.",
     "required": [
       {
@@ -1007,62 +1007,8 @@
   },
   {
     "enviroment": "sync",
-    "api": "deepl",
-    "script": "TRANSLATE/translate.py",
-    "description": "Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.",
-    "required": [
-      {
-        "name": "project_name",
-        "flags": [
-          "-p",
-          "--project-name"
-        ],
-        "type": "option",
-        "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "auth_key",
-        "flags": [
-          "-auth_key",
-          "--auth-key"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "input_language",
-        "flags": [
-          "-input_language",
-          "--input-language"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "output_language",
-        "flags": [
-          "-output_language",
-          "--output-language"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
-  },
-  {
-    "enviroment": "sync",
     "api": "chatgpt",
-    "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
+    "script": "TRANSLATE/chatgpt_with_srt/translate_chatgpt_srt_easy.py",
     "description": "A beolvasott időzített transcripciót a rendelkezésre álló feliratot felhasználva lefordítja a kívánt nyelvre a ChatGPT segítségével.",
     "required": [
       {
@@ -1143,27 +1089,16 @@
     ]
   },
   {
-    "enviroment": "f5-tts",
-    "script": "TTS/f5_tts_easy_EQ.py",
-    "description": "A finomhangolt F5-TTS segítségével létrehozza a szinkron darabokat.",
+    "enviroment": "sync",
+    "api": "deepl",
+    "script": "TRANSLATE/deepl/deepl_translate.py",
+    "description": "Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.",
     "required": [
       {
         "name": "project_name",
-        "type": "positional",
-        "default": null
-      },
-      {
-        "name": "norm",
         "flags": [
-          "--norm"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "model_dir",
-        "flags": [
-          "--model_dir"
+          "-p",
+          "--project-name"
         ],
         "type": "option",
         "default": null
@@ -1171,132 +1106,31 @@
     ],
     "optional": [
       {
-        "name": "speed",
+        "name": "auth_key",
         "flags": [
-          "--speed"
-        ],
-        "type": "option",
-        "default": 1.0
-      },
-      {
-        "name": "nfe_step",
-        "flags": [
-          "--nfe_step"
-        ],
-        "type": "option",
-        "default": 32
-      },
-      {
-        "name": "remove_silence",
-        "flags": [
-          "--remove_silence"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "phonetic_ref",
-        "flags": [
-          "--phonetic-ref"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "normalize_ref_audio",
-        "flags": [
-          "--normalize-ref-audio"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "eq_config",
-        "flags": [
-          "--eq-config"
+          "-auth_key",
+          "--auth-key"
         ],
         "type": "option",
         "default": null
       },
       {
-        "name": "ref_audio_peak",
+        "name": "input_language",
         "flags": [
-          "--ref-audio-peak"
-        ],
-        "type": "option",
-        "default": 0.95
-      },
-      {
-        "name": "max_workers",
-        "flags": [
-          "--max_workers"
+          "-input_language",
+          "--input-language"
         ],
         "type": "option",
         "default": null
       },
       {
-        "name": "seed",
+        "name": "output_language",
         "flags": [
-          "--seed"
+          "-output_language",
+          "--output-language"
         ],
         "type": "option",
-        "default": -1
-      },
-      {
-        "name": "max_retries",
-        "flags": [
-          "--max-retries"
-        ],
-        "type": "option",
-        "default": 5
-      },
-      {
-        "name": "tolerance_factor",
-        "flags": [
-          "--tolerance-factor"
-        ],
-        "type": "option",
-        "default": 1.0
-      },
-      {
-        "name": "min_tolerance",
-        "flags": [
-          "--min-tolerance"
-        ],
-        "type": "option",
-        "default": 2
-      },
-      {
-        "name": "whisper_model",
-        "flags": [
-          "--whisper-model"
-        ],
-        "type": "option",
-        "default": "openai/whisper-large-v3"
-      },
-      {
-        "name": "beam_size",
-        "flags": [
-          "--beam-size"
-        ],
-        "type": "option",
-        "default": 5
-      },
-      {
-        "name": "save_failures",
-        "flags": [
-          "--save-failures"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "keep_best_over_tolerance",
-        "flags": [
-          "--keep-best-over-tolerance"
-        ],
-        "type": "flag",
-        "default": false
+        "default": null
       },
       {
         "name": "debug",
@@ -1310,7 +1144,7 @@
   },
   {
     "enviroment": "f5-tts",
-    "script": "TTS/f5_tts_narrator.py",
+    "script": "TTS/f5-tts-narrator/f5_tts_narrator.py",
     "description": "Narrátor referencia alapján generálja az összes szinkron szegmenst F5-TTS-sel.",
     "required": [
       {
@@ -1483,9 +1317,9 @@
     ]
   },
   {
-    "enviroment": "vibevoice",
-    "script": "TTS/vibevoice-tts.py",
-    "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból.",
+    "enviroment": "f5-tts",
+    "script": "TTS/f5-tts/f5_tts_easy_EQ.py",
+    "description": "A finomhangolt F5-TTS segítségével létrehozza a szinkron darabokat.",
     "required": [
       {
         "name": "project_name",
@@ -1499,16 +1333,6 @@
         ],
         "type": "option",
         "default": null
-      }
-    ],
-    "optional": [
-      {
-        "name": "model_path",
-        "flags": [
-          "--model_path"
-        ],
-        "type": "option",
-        "default": "microsoft/VibeVoice-1.5b"
       },
       {
         "name": "model_dir",
@@ -1517,126 +1341,72 @@
         ],
         "type": "option",
         "default": null
-      },
+      }
+    ],
+    "optional": [
       {
-        "name": "checkpoint_path",
+        "name": "speed",
         "flags": [
-          "--checkpoint_path"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "device",
-        "flags": [
-          "--device"
-        ],
-        "type": "option",
-        "default": "auto"
-      },
-      {
-        "name": "cfg_scale",
-        "flags": [
-          "--cfg_scale"
-        ],
-        "type": "option",
-        "default": 1.3
-      },
-      {
-        "name": "disable_prefill",
-        "flags": [
-          "--disable_prefill"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "ddpm_steps",
-        "flags": [
-          "--ddpm_steps"
-        ],
-        "type": "option",
-        "default": 10
-      },
-      {
-        "name": "eq_config",
-        "flags": [
-          "--eq_config"
-        ],
-        "type": "option",
-        "default": null
-      },
-      {
-        "name": "normalize_ref_audio",
-        "flags": [
-          "--normalize_ref_audio"
-        ],
-        "type": "flag",
-        "default": false
-      },
-      {
-        "name": "ref_audio_peak",
-        "flags": [
-          "--ref_audio_peak"
-        ],
-        "type": "option",
-        "default": 0.95
-      },
-      {
-        "name": "target_sample_rate",
-        "flags": [
-          "--target_sample_rate"
-        ],
-        "type": "option",
-        "default": 16000
-      },
-      {
-        "name": "speaker_name",
-        "flags": [
-          "--speaker_name"
-        ],
-        "type": "option",
-        "default": "Speaker 1"
-      },
-      {
-        "name": "max_retries",
-        "flags": [
-          "--max_retries"
-        ],
-        "type": "option",
-        "default": 5
-      },
-      {
-        "name": "tolerance_factor",
-        "flags": [
-          "--tolerance_factor"
+          "--speed"
         ],
         "type": "option",
         "default": 1.0
       },
       {
-        "name": "min_tolerance",
+        "name": "nfe_step",
         "flags": [
-          "--min_tolerance"
+          "--nfe_step"
         ],
         "type": "option",
-        "default": 2
+        "default": 32
       },
       {
-        "name": "whisper_model",
+        "name": "remove_silence",
         "flags": [
-          "--whisper_model"
+          "--remove_silence"
         ],
-        "type": "option",
-        "default": "openai/whisper-large-v3"
+        "type": "flag",
+        "default": false
       },
       {
-        "name": "beam_size",
+        "name": "phonetic_ref",
         "flags": [
-          "--beam_size"
+          "--phonetic-ref"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "normalize_ref_audio",
+        "flags": [
+          "--normalize-ref-audio"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "eq_config",
+        "flags": [
+          "--eq-config"
         ],
         "type": "option",
-        "default": 5
+        "default": null
+      },
+      {
+        "name": "ref_audio_peak",
+        "flags": [
+          "--ref-audio-peak"
+        ],
+        "type": "option",
+        "default": 0.95
+      },
+      {
+        "name": "max_workers",
+        "flags": [
+          "--max_workers"
+        ],
+        "type": "option",
+        "default": null
       },
       {
         "name": "seed",
@@ -1647,25 +1417,49 @@
         "default": -1
       },
       {
-        "name": "max_segments",
+        "name": "max_retries",
         "flags": [
-          "--max_segments"
+          "--max-retries"
         ],
         "type": "option",
-        "default": null
+        "default": 5
       },
       {
-        "name": "overwrite",
+        "name": "tolerance_factor",
         "flags": [
-          "--overwrite"
+          "--tolerance-factor"
         ],
-        "type": "flag",
-        "default": false
+        "type": "option",
+        "default": 1.0
+      },
+      {
+        "name": "min_tolerance",
+        "flags": [
+          "--min-tolerance"
+        ],
+        "type": "option",
+        "default": 2
+      },
+      {
+        "name": "whisper_model",
+        "flags": [
+          "--whisper-model"
+        ],
+        "type": "option",
+        "default": "openai/whisper-large-v3"
+      },
+      {
+        "name": "beam_size",
+        "flags": [
+          "--beam-size"
+        ],
+        "type": "option",
+        "default": 5
       },
       {
         "name": "save_failures",
         "flags": [
-          "--save_failures"
+          "--save-failures"
         ],
         "type": "flag",
         "default": false
@@ -1673,18 +1467,10 @@
       {
         "name": "keep_best_over_tolerance",
         "flags": [
-          "--keep_best_over_tolerance"
+          "--keep-best-over-tolerance"
         ],
         "type": "flag",
         "default": false
-      },
-      {
-        "name": "max_workers",
-        "flags": [
-          "--max_workers"
-        ],
-        "type": "option",
-        "default": null
       },
       {
         "name": "debug",
@@ -1698,7 +1484,7 @@
   },
   {
     "enviroment": "vibevoice",
-    "script": "TTS/vibevoice-tts_narrator.py",
+    "script": "TTS/vibevoice-narrator/vibevoice-tts_narrator.py",
     "description": "A VibeVoice modellt használja a fordított szegmensek szintetizálására, miközben a narrátor hangját egy külön könyvtárban lévő, egyetlen WAV fájlból veszi.",
     "required": [
       {
@@ -1920,8 +1706,222 @@
   },
   {
     "enviroment": "vibevoice",
-    "script": "TTS/vibevoice-tts_v1.1.py",
+    "script": "TTS/vibevoice/vibevoice-tts_v1.1.py",
     "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból, továbbfejlesztett több-GPU kezeléssel.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      },
+      {
+        "name": "norm",
+        "flags": [
+          "--norm"
+        ],
+        "type": "option",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "model_path",
+        "flags": [
+          "--model_path"
+        ],
+        "type": "option",
+        "default": "microsoft/VibeVoice-1.5b"
+      },
+      {
+        "name": "model_dir",
+        "flags": [
+          "--model_dir"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "checkpoint_path",
+        "flags": [
+          "--checkpoint_path"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "device",
+        "flags": [
+          "--device"
+        ],
+        "type": "option",
+        "default": "auto"
+      },
+      {
+        "name": "cfg_scale",
+        "flags": [
+          "--cfg_scale"
+        ],
+        "type": "option",
+        "default": 1.3
+      },
+      {
+        "name": "disable_prefill",
+        "flags": [
+          "--disable_prefill"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "ddpm_steps",
+        "flags": [
+          "--ddpm_steps"
+        ],
+        "type": "option",
+        "default": 10
+      },
+      {
+        "name": "eq_config",
+        "flags": [
+          "--eq_config"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "normalize_ref_audio",
+        "flags": [
+          "--normalize_ref_audio"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "ref_audio_peak",
+        "flags": [
+          "--ref_audio_peak"
+        ],
+        "type": "option",
+        "default": 0.95
+      },
+      {
+        "name": "target_sample_rate",
+        "flags": [
+          "--target_sample_rate"
+        ],
+        "type": "option",
+        "default": 16000
+      },
+      {
+        "name": "speaker_name",
+        "flags": [
+          "--speaker_name"
+        ],
+        "type": "option",
+        "default": "Speaker 1"
+      },
+      {
+        "name": "max_retries",
+        "flags": [
+          "--max_retries"
+        ],
+        "type": "option",
+        "default": 5
+      },
+      {
+        "name": "tolerance_factor",
+        "flags": [
+          "--tolerance_factor"
+        ],
+        "type": "option",
+        "default": 1.0
+      },
+      {
+        "name": "min_tolerance",
+        "flags": [
+          "--min_tolerance"
+        ],
+        "type": "option",
+        "default": 2
+      },
+      {
+        "name": "whisper_model",
+        "flags": [
+          "--whisper_model"
+        ],
+        "type": "option",
+        "default": "openai/whisper-large-v3"
+      },
+      {
+        "name": "beam_size",
+        "flags": [
+          "--beam_size"
+        ],
+        "type": "option",
+        "default": 5
+      },
+      {
+        "name": "seed",
+        "flags": [
+          "--seed"
+        ],
+        "type": "option",
+        "default": -1
+      },
+      {
+        "name": "max_segments",
+        "flags": [
+          "--max_segments"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "overwrite",
+        "flags": [
+          "--overwrite"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "save_failures",
+        "flags": [
+          "--save_failures"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "keep_best_over_tolerance",
+        "flags": [
+          "--keep_best_over_tolerance"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "max_workers",
+        "flags": [
+          "--max_workers"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "vibevoice",
+    "script": "TTS/vibevoice_old/vibevoice-tts.py",
+    "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból.",
     "required": [
       {
         "name": "project_name",

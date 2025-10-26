@@ -1,0 +1,47 @@
+{
+  "enviroment": "sync",
+  "script": "AUDIO-VIDEO/normalize_and_cut_tts_files_old_version/normalise_and_cut_json_easy.py",
+  "description": "A TTS-el generált audiok hangerejét az eredeti audio hangerejéhez igazítja, valamint a beszédszegmensek alapján levágja a generált szinkron darabok elejét a pontosabb szinkron érdekében.",
+  "required": [
+    {
+      "name": "project_name",
+      "type": "positional",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "delete_empty",
+      "flags": [
+        "--delete_empty"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "sync_loudness",
+      "flags": [
+        "--no-sync-loudness"
+      ],
+      "type": "flag",
+      "default": true
+    },
+    {
+      "name": "min_db",
+      "flags": [
+        "-db",
+        "--min_db"
+      ],
+      "type": "option",
+      "default": -40.0
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

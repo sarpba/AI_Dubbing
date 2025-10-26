@@ -32,104 +32,27 @@
   },
   "LAST_WORKFLOW": [
     {
-      "script": "AV/extract_audio_easy_channels.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "AV/separate_audio_easy.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "non_speech_silence": true
-      }
-    },
-    {
-      "script": "ASR/parakeet-tdt-0.6b-v2.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "TRANSLATE/translate_chatgpt_srt_easy.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "allow_sensitive_content": true,
-        "debug": false,
-        "output_language": "HU",
-        "stream": false
-      }
-    },
-    {
-      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "type": "widget",
-      "widget": "reviewContinue",
-      "enabled": true
-    },
-    {
-      "script": "TTS/vibevoice-tts_v1.1.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "max_retries": "2",
-        "model_path": "/home/sarpba/VibeVoice/merged_large_3200_bf16",
-        "norm": "hun",
-        "save_failures": true
-      }
-    },
-    {
-      "script": "TTS/vibevoice-tts_narrator.py",
+      "script": "TTS/vibevoice-narrator/vibevoice-tts_narrator.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "keep_best_over_tolerance": true,
-        "max_retries": "1",
-        "model_path": "aoi-ot/VibeVoice-Large",
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
         "norm": "eng",
-        "seed": "42"
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "model_path": "aoi-ot/VibeVoice-Large",
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
+        "max_retries": "1",
+        "keep_best_over_tolerance": true
       }
     },
     {
-      "script": "AV/Pitch_analizer/pitch_analizer.py",
+      "script": "AUDIO-VIDEO/pitch_analizer/pitch_analizer.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator"
-      }
-    },
-    {
-      "script": "AV/normalise_and_cut_json_easy_v1.1.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "AV/merge_chunks_with_background_beta.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "background_volume": "1",
-        "max_speedup": "0",
-        "narrator": true
-      }
-    },
-    {
-      "script": "AV/merge_to_video_easy.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "language": "hun"
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "delete_outside": true
       }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "default"
+  "LAST_WORKFLOW_TEMPLATE": "teszt"
 }

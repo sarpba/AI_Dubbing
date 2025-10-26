@@ -1,0 +1,39 @@
+{
+  "enviroment": "sync",
+  "script": "AUDIO-VIDEO/merge_chunks_with_background/merge_chunks_with_background_easy.py",
+  "description": "A korábban generált szinkron darabokat összemuxolja a háttér audióval.",
+  "required": [
+    {
+      "name": "project_name",
+      "type": "positional",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "narrator",
+      "flags": [
+        "-narrator",
+        "--narrator"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "background_volume",
+      "flags": [
+        "--background-volume"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

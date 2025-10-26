@@ -2,34 +2,31 @@
   "name": "Magyar nyelvű narrált videó készítés",
   "steps": [
     {
-      "script": "AV/extract_audio_easy_channels.py",
+      "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
-      "script": "AV/separate_audio_easy.py",
+      "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "ASR/paraket-eng/parakeet-tdt-0.6b-v2.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "TRANSLATE/deepl/deepl_translate.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "chunk_size": "5",
-        "debug": false,
-        "device": "cuda",
-        "keep_full_audio": false,
-        "non_speech_silence": true
+        "input_language": "eng",
+        "output_language": "hun"
       }
-    },
-    {
-      "script": "ASR/parakeet-tdt-0.6b-v2.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {}
-    },
-    {
-      "script": "TRANSLATE/translate.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {}
     },
     {
       "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
@@ -43,35 +40,32 @@
       "enabled": true
     },
     {
-      "script": "TTS/f5_tts_narrator.py",
+      "script": "TTS/f5-tts-narrator/f5_tts_narrator.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "debug": true,
-        "keep_best_over_tolerance": true,
-        "max_retries": "1",
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
         "norm": "hun",
-        "normalize_ref_audio": false,
-        "phonetic_ref": false,
-        "remove_silence": false,
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
         "save_failures": true
       }
     },
     {
-      "script": "AV/merge_chunks_with_background_beta.py",
+      "script": "AUDIO-VIDEO/normalize_and_cut_tts_files/normalise_and_cut_json_easy_v1.1.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/merge_chunks_with_background_narrator_version/merge_chunks_with_background_beta.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "background_volume": "80",
-        "debug": false,
-        "max_speedup": "15",
-        "narrator": true
+        "background_volume": "75"
       }
     },
     {
-      "script": "AV/merge_to_video_easy.py",
+      "script": "AUDIO-VIDEO/merge_dub_to_video/merge_to_video_easy.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
