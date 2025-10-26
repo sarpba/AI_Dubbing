@@ -298,6 +298,56 @@
   },
   {
     "enviroment": "sync",
+    "script": "AUDIO-VIDEO/audio_copy_helper/audio-copy-helper.py",
+    "description": "Az upload mappába érkező audió fájlokat 44,1 kHz-es WAV formátumba alakítja, majd a kiválasztott projekt mappákba másolja őket.",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "extracted_audio",
+        "flags": [
+          "--extracted_audio"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "separated_audio_background",
+        "flags": [
+          "--separated_audio_background"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "separated_audio_speech",
+        "flags": [
+          "--separated_audio_speech"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
     "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
     "description": "Az audio sávokat kinyeri a videó fájlokból, külön csatornákra bontva, vagy egy stereo csatornára muxolva.",
     "required": [

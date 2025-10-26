@@ -1,6 +1,6 @@
 {
   "enviroment": "sync",
-  "script": "audio-video/uudio_copy_helper/audio-copy-helper.py",
+  "script": "AUDIO-VIDEO/audio_copy_helper/audio-copy-helper.py",
   "description": "Az upload mappába érkező audió fájlokat 44,1 kHz-es WAV formátumba alakítja, majd a kiválasztott projekt mappákba másolja őket.",
   "required": [
     {
