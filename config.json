@@ -32,25 +32,40 @@
   },
   "LAST_WORKFLOW": [
     {
+      "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
       "script": "TTS/vibevoice-narrator/vibevoice-tts_narrator.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "norm": "eng",
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
-        "model_path": "aoi-ot/VibeVoice-Large",
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
+        "keep_best_over_tolerance": true,
         "max_retries": "1",
-        "keep_best_over_tolerance": true
+        "model_path": "aoi-ot/VibeVoice-Large",
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "norm": "eng"
       }
     },
     {
       "script": "AUDIO-VIDEO/pitch_analizer/pitch_analizer.py",
       "enabled": true,
-      "halt_on_fail": true,
+      "halt_on_fail": false,
       "params": {
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
-        "delete_outside": true
+        "delete_outside": true,
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator"
+      }
+    },
+    {
+      "type": "widget",
+      "widget": "cycleWidget",
+      "enabled": true,
+      "params": {
+        "repeat_count": 2,
+        "step_back": 2
       }
     }
   ],

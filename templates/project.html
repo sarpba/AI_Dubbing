@@ -160,6 +160,12 @@
             color: #b8860b;
             font-weight: 600;
         }
+        .cycle-counter-display {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 0.75rem;
+            color: var(--bs-primary, #0d6efd);
+        }
         .markdown-content {
             font-size: 0.95rem;
             line-height: 1.5;
@@ -268,10 +274,15 @@
         let workflowParamsModal = null;
         let workflowSaveModal = null;
         let pendingWorkflowPayload = null;
+        let pendingWorkflowContext = null;
         let availableScripts = [];
         let defaultWorkflow = [];
         let workflowSteps = [];
         let selectedStepIndex = null;
+        let selectedStepType = null;
+        let selectedWidgetConfig = null;
+        let currentRunContext = null;
+        let cycleState = null;
         let workflowTemplates = [];
         let currentTemplateId = null;
         let workflowInitialized = false;
@@ -302,6 +313,36 @@
                 description: 'Felülvizsgálati nézet megnyitása és kézi folytatás.',
                 continueLabel: 'Continue',
                 reviewLabel: 'Review'
+            },
+            {
+                id: 'cycleWidget',
+                name: 'Ciklus',
+                description: 'Korábbi lépések többszöri futtatása a workflow-ban.',
+                continueLabel: 'Ciklus futtatása',
+                reviewLabel: 'Review',
+                parameters: [
+                    {
+                        name: 'repeat_count',
+                        label: 'Ismétlések száma',
+                        type: 'number',
+                        min: 1,
+                        step: 1,
+                        default: 1,
+                        required: true,
+                        helper: 'Hányszor ismétlődjön a kijelölt lépéssor.'
+                    },
+                    {
+                        name: 'step_back',
+                        label: 'Visszalépés lépéseinek száma',
+                        type: 'number',
+                        min: 1,
+                        step: 1,
+                        default: 1,
+                        required: true,
+                        helper: 'A widget előtti hány futtatható lépést ismételjen a ciklus.'
+                    }
+                ],
+                help: 'A ciklus widget a megadott számú, aktív szkript lépést ismétli a widget előtt, a megadott alkalommal.'
             }
         ];
 
@@ -330,6 +371,17 @@
                 if (step.enabled === undefined) {
                     step.enabled = true;
                 }
+                if (!step.params || typeof step.params !== 'object') {
+                    step.params = {};
+                }
+                const widgetMeta = findWidgetById(step.widget);
+                if (widgetMeta && Array.isArray(widgetMeta.parameters)) {
+                    widgetMeta.parameters.forEach(param => {
+                        if (param && param.name && step.params[param.name] === undefined && param.default !== undefined) {
+                            step.params[param.name] = param.default;
+                        }
+                    });
+                }
             } else {
                 step.type = 'script';
                 if (step.enabled === undefined) {
@@ -349,12 +401,26 @@
             return steps || [];
         }
 
-        function collectScriptStepsForRun(startIndex = 0) {
-            const stepsForRun = [];
+        function buildRunStepFromWorkflowStep(step) {
+            return {
+                script: step.script,
+                enabled: true,
+                halt_on_fail: step.halt_on_fail !== false,
+                params: cloneObject(step.params)
+            };
+        }
+
+        function collectWorkflowSegment(startIndex = 0) {
+            const segment = {
+                startIndex,
+                steps: [],
+                widgetIndex: null
+            };
             for (let i = startIndex; i < workflowSteps.length; i++) {
                 const step = workflowSteps[i];
                 if (step.type === 'widget') {
                     if (step.enabled !== false) {
+                        segment.widgetIndex = i;
                         break;
                     }
                     continue;
@@ -362,23 +428,80 @@
                 if (step.enabled === false) {
                     continue;
                 }
-                stepsForRun.push({
-                    script: step.script,
-                    enabled: true,
-                    halt_on_fail: step.halt_on_fail !== false,
-                    params: cloneObject(step.params)
-                });
+                segment.steps.push(buildRunStepFromWorkflowStep(step));
             }
-            return stepsForRun;
+            return segment;
+        }
+
+        function collectScriptStepsForRun(startIndex = 0) {
+            return collectWorkflowSegment(startIndex).steps;
         }
 
         function collectWorkflowState() {
             return cloneSteps(workflowSteps);
         }
 
-        function buildRunPayload(startIndex = 0) {
+        function collectScriptStepsBefore(index, requiredCount) {
+            const collected = [];
+            let count = 0;
+            for (let i = index - 1; i >= 0 && count < requiredCount; i--) {
+                const step = workflowSteps[i];
+                if (!step || step.type === 'widget') {
+                    continue;
+                }
+                if (step.enabled === false) {
+                    continue;
+                }
+                collected.push(step);
+                count++;
+            }
+            collected.reverse();
             return {
-                steps: collectScriptStepsForRun(startIndex),
+                steps: collected,
+                collectedCount: count,
+                requiredCount
+            };
+        }
+
+        function validateStepCollection(stepCollection) {
+            const errors = [];
+            const missingSummary = [];
+            let hasRunnableStep = false;
+            (stepCollection || []).forEach(step => {
+                if (!step || step.type === 'widget') {
+                    return;
+                }
+                if (step.enabled === false) {
+                    return;
+                }
+                hasRunnableStep = true;
+                const script = findScriptById(step.script);
+                if (!script) {
+                    errors.push(`Ismeretlen szkript: ${step.script}`);
+                    return;
+                }
+                const missing = getMissingParams(step, script);
+                if (missing.length) {
+                    missingSummary.push({ script, missing });
+                }
+            });
+            return {
+                valid: hasRunnableStep && errors.length === 0 && missingSummary.length === 0,
+                hasRunnableStep,
+                errors,
+                missingSummary
+            };
+        }
+
+        function buildRunPayload(startIndex = 0, segmentInfo = null) {
+            const segment = segmentInfo || collectWorkflowSegment(startIndex);
+            return {
+                steps: segment.steps.map(step => ({
+                    script: step.script,
+                    enabled: true,
+                    halt_on_fail: step.halt_on_fail !== false,
+                    params: cloneObject(step.params)
+                })),
                 template_id: currentTemplateId,
                 workflow_state: collectWorkflowState()
             };
@@ -1204,6 +1327,27 @@
             return summary.length ? summary.join(', ') : 'Nincs megadott paraméter';
         }
 
+        function describeWidgetParameters(widget, step) {
+            if (!widget || !Array.isArray(widget.parameters) || !widget.parameters.length) {
+                return '';
+            }
+            const params = step && step.params ? step.params : {};
+            const summary = [];
+            widget.parameters.forEach(param => {
+                if (!param || !param.name) {
+                    return;
+                }
+                const label = param.label || param.name;
+                const hasOwnValue = Object.prototype.hasOwnProperty.call(params, param.name);
+                let value = hasOwnValue ? params[param.name] : param.default;
+                if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+                    return;
+                }
+                summary.push(`${label}: ${value}`);
+            });
+            return summary.join(' • ');
+        }
+
         function updateMissingBadge() {
             const badge = document.getElementById('workflowMissingBadge');
             if (!badge) return;
@@ -1768,6 +1912,8 @@
                 workflowParamsModal = new bootstrap.Modal(paramsModalElement);
                 paramsModalElement.addEventListener('hidden.bs.modal', () => {
                     selectedStepIndex = null;
+                    selectedStepType = null;
+                    selectedWidgetConfig = null;
                     const alertBox = document.getElementById('workflowParamsAlert');
                     if (alertBox) {
                         alertBox.classList.add('d-none');
@@ -1895,6 +2041,7 @@
                 normalizeWorkflowStep(step);
                 const isWidget = step.type === 'widget';
                 const script = !isWidget ? findScriptById(step.script) : null;
+                const widget = isWidget ? findWidgetById(step.widget) : null;
                 const row = document.createElement('tr');
                 row.classList.add('workflow-row');
                 row.dataset.stepIndex = String(index);
@@ -1926,7 +2073,6 @@
 
                 const infoCell = document.createElement('td');
                 if (isWidget) {
-                    const widget = findWidgetById(step.widget);
                     const title = document.createElement('div');
                     title.className = 'fw-semibold';
                     title.textContent = widget ? widget.name : 'Speciális widget';
@@ -1965,6 +2111,16 @@
 
                     buttonRow.append(reviewBtn, continueBtn);
                     infoCell.append(buttonRow);
+
+                    if (widget && Array.isArray(widget.parameters) && widget.parameters.length) {
+                        const summary = describeWidgetParameters(widget, step);
+                        if (summary) {
+                            const summaryDiv = document.createElement('div');
+                            summaryDiv.className = 'small text-muted mt-2';
+                            summaryDiv.textContent = summary;
+                            infoCell.append(summaryDiv);
+                        }
+                    }
                 } else {
                     const titleWrap = document.createElement('div');
                     const titleRow = document.createElement('div');
@@ -2070,6 +2226,13 @@
                     editBtn.textContent = 'Paraméterek';
                     editBtn.addEventListener('click', () => openWorkflowParams(index));
                     actionsCell.append(editBtn);
+                } else if (widget && Array.isArray(widget.parameters) && widget.parameters.length) {
+                    const editBtn = document.createElement('button');
+                    editBtn.type = 'button';
+                    editBtn.className = 'btn btn-sm btn-outline-primary me-2';
+                    editBtn.textContent = 'Paraméterek';
+                    editBtn.addEventListener('click', () => openWorkflowWidgetParams(index));
+                    actionsCell.append(editBtn);
                 }
 
                 const upBtn = document.createElement('button');
@@ -2097,6 +2260,14 @@
 
                 tbody.append(row);
             });
+
+            if (cycleState) {
+                const widgetIndex = cycleState.widgetIndex;
+                const currentIteration = cycleState.activeIteration !== null
+                    ? cycleState.activeIteration
+                    : Math.max(0, cycleState.nextIteration - 1);
+                updateCycleDisplay(widgetIndex, currentIteration, cycleState.totalIterations);
+            }
 
             updateMissingBadge();
 
@@ -2308,10 +2479,19 @@
                 alert(`Ismeretlen widget: ${widgetId}`);
                 return;
             }
+            const defaultParams = {};
+            if (Array.isArray(widget.parameters)) {
+                widget.parameters.forEach(param => {
+                    if (param && param.name && param.default !== undefined) {
+                        defaultParams[param.name] = param.default;
+                    }
+                });
+            }
             const newStep = {
                 type: 'widget',
                 widget: widget.id,
-                enabled: true
+                enabled: true,
+                params: defaultParams
             };
             let targetIndex = parseInt(insertIndex, 10);
             if (Number.isNaN(targetIndex)) {
@@ -2336,6 +2516,11 @@
                 updateInfoBox('info', 'Ez a widget le van tiltva.');
                 return;
             }
+            const widget = findWidgetById(widgetStep.widget);
+            if (widget && widget.id === 'cycleWidget') {
+                await startCycleSequence(widgetIndex, { auto: false });
+                return;
+            }
             const validation = validateWorkflowSegment(widgetIndex + 1);
             if (!validation.hasRunnableStep) {
                 updateInfoBox('info', 'Nincs további futtatható lépés.');
@@ -2351,18 +2536,24 @@
                 return;
             }
 
-            const payload = buildRunPayload(widgetIndex + 1);
-            if (!payload.steps.length) {
+            const segment = collectWorkflowSegment(widgetIndex + 1);
+            if (!segment.steps.length) {
                 updateInfoBox('info', 'Nincs további futtatható lépés.');
                 return;
             }
+            const payload = buildRunPayload(widgetIndex + 1, segment);
+            const context = {
+                type: 'segment',
+                startIndex: widgetIndex + 1,
+                widgetIndex: segment.widgetIndex
+            };
 
             try {
-                const ready = await ensureWorkflowKeys(payload);
+                const ready = await ensureWorkflowKeys(payload, context);
                 if (!ready) {
                     return;
                 }
-                await executeWorkflow(payload);
+                await executeWorkflow(payload, context);
             } catch (error) {
                 console.error('Widget folytatási hiba:', error);
                 alert('Nem sikerült folytatni a workflow-t: ' + error.message);
@@ -2397,12 +2588,17 @@
             if (!step) {
                 return;
             }
+            if (step.type === 'widget') {
+                return;
+            }
             const script = findScriptById(step.script);
             if (!script) {
                 alert(`Ismeretlen szkript: ${step.script}`);
                 return;
             }
             selectedStepIndex = index;
+            selectedStepType = 'script';
+            selectedWidgetConfig = null;
             const titleEl = document.getElementById('workflowParamsTitle');
             if (titleEl) {
                 titleEl.textContent = `${script.display_name || script.script} – paraméterek`;
@@ -2413,12 +2609,42 @@
             }
         }
 
-        function updateWorkflowParamsHelp(script) {
+        function openWorkflowWidgetParams(index) {
+            const step = workflowSteps[index];
+            if (!step || step.type !== 'widget') {
+                return;
+            }
+            const widget = findWidgetById(step.widget);
+            if (!widget) {
+                alert(`Ismeretlen widget: ${step.widget}`);
+                return;
+            }
+            selectedStepIndex = index;
+            selectedStepType = 'widget';
+            selectedWidgetConfig = widget;
+            const titleEl = document.getElementById('workflowParamsTitle');
+            if (titleEl) {
+                titleEl.textContent = `${widget.name} – beállítások`;
+            }
+            renderWidgetParamsForm(widget, step);
+            if (workflowParamsModal) {
+                workflowParamsModal.show();
+            }
+        }
+
+        function updateWorkflowParamsHelp(source) {
             const helpBox = document.getElementById('workflowParamsHelp');
             if (!helpBox) {
                 return;
             }
-            const helpText = (script && typeof script.help_markdown === 'string') ? script.help_markdown.trim() : '';
+            let helpText = '';
+            let isMarkdown = false;
+            if (source && typeof source.help_markdown === 'string') {
+                helpText = source.help_markdown.trim();
+                isMarkdown = true;
+            } else if (source && typeof source.help === 'string') {
+                helpText = source.help.trim();
+            }
             if (!helpText) {
                 helpBox.classList.add('d-none');
                 helpBox.innerHTML = '';
@@ -2431,26 +2657,32 @@
             title.textContent = 'Segédlet';
             const block = document.createElement('div');
             block.className = 'small bg-body-tertiary p-3 border rounded';
-            let renderedHtml = '';
-            const markedRef = window.marked;
-            if (markedRef) {
-                if (typeof markedRef === 'function') {
-                    try {
-                        renderedHtml = markedRef(helpText);
-                    } catch (err) {
-                        console.warn('Markdown render hiba (function):', err);
-                    }
-                } else if (typeof markedRef.parse === 'function') {
-                    try {
-                        renderedHtml = markedRef.parse(helpText);
-                    } catch (err) {
-                        console.warn('Markdown render hiba (parse):', err);
+            if (isMarkdown) {
+                let renderedHtml = '';
+                const markedRef = window.marked;
+                if (markedRef) {
+                    if (typeof markedRef === 'function') {
+                        try {
+                            renderedHtml = markedRef(helpText);
+                        } catch (err) {
+                            console.warn('Markdown render hiba (function):', err);
+                        }
+                    } else if (typeof markedRef.parse === 'function') {
+                        try {
+                            renderedHtml = markedRef.parse(helpText);
+                        } catch (err) {
+                            console.warn('Markdown render hiba (parse):', err);
+                        }
                     }
                 }
-            }
-            if (renderedHtml) {
-                block.classList.add('markdown-content');
-                block.innerHTML = renderedHtml;
+                if (renderedHtml) {
+                    block.classList.add('markdown-content');
+                    block.innerHTML = renderedHtml;
+                } else {
+                    block.style.whiteSpace = 'pre-wrap';
+                    block.style.fontFamily = 'var(--bs-body-font-family, inherit)';
+                    block.textContent = helpText;
+                }
             } else {
                 block.style.whiteSpace = 'pre-wrap';
                 block.style.fontFamily = 'var(--bs-body-font-family, inherit)';
@@ -2654,11 +2886,99 @@
             updateWorkflowParamsHelp(script);
         }
 
+        function renderWidgetParamsForm(widget, step) {
+            const container = document.getElementById('workflowParamsContainer');
+            const alertBox = document.getElementById('workflowParamsAlert');
+            if (alertBox) {
+                alertBox.classList.add('d-none');
+                alertBox.textContent = '';
+            }
+            if (!container) {
+                updateWorkflowParamsHelp(widget);
+                return;
+            }
+            container.innerHTML = '';
+            const parameters = Array.isArray(widget && widget.parameters) ? widget.parameters : [];
+            if (!parameters.length) {
+                const placeholder = document.createElement('div');
+                placeholder.className = 'text-muted';
+                placeholder.textContent = 'Ehhez a widgethez nem szükséges beállítás.';
+                container.append(placeholder);
+                updateWorkflowParamsHelp(widget);
+                return;
+            }
+            parameters.forEach(param => {
+                if (!param || !param.name) {
+                    return;
+                }
+                const group = document.createElement('div');
+                group.className = 'mb-3';
+                const label = document.createElement('label');
+                label.className = 'form-label';
+                label.setAttribute('for', `widgetParam_${param.name}`);
+                label.textContent = param.label || param.name;
+                group.append(label);
+
+                const input = document.createElement('input');
+                input.id = `widgetParam_${param.name}`;
+                input.className = 'form-control';
+                input.dataset.param = param.name;
+                input.dataset.type = param.type || 'text';
+                input.dataset.widget = 'true';
+                if (param.type === 'number') {
+                    input.type = 'number';
+                    if (param.min !== undefined) {
+                        input.min = String(param.min);
+                    }
+                    if (param.max !== undefined) {
+                        input.max = String(param.max);
+                    }
+                    if (param.step !== undefined) {
+                        input.step = String(param.step);
+                    } else {
+                        input.step = '1';
+                    }
+                } else {
+                    input.type = 'text';
+                }
+                if (param.required) {
+                    input.required = true;
+                }
+                const params = step && step.params ? step.params : {};
+                const hasOwnValue = Object.prototype.hasOwnProperty.call(params, param.name);
+                const value = hasOwnValue ? params[param.name] : param.default;
+                if (value !== undefined && value !== null) {
+                    input.value = String(value);
+                } else {
+                    input.value = '';
+                }
+                group.append(input);
+                if (param.helper) {
+                    const helper = document.createElement('div');
+                    helper.className = 'form-text';
+                    helper.textContent = param.helper;
+                    group.append(helper);
+                }
+                container.append(group);
+            });
+            updateWorkflowParamsHelp(widget);
+        }
+
         function saveWorkflowParams() {
             if (selectedStepIndex === null) {
                 return;
             }
             const step = workflowSteps[selectedStepIndex];
+            if (!step) {
+                return;
+            }
+            if (selectedStepType === 'widget') {
+                saveWidgetParams(step, selectedWidgetConfig || findWidgetById(step.widget));
+                return;
+            }
+            if (step.type === 'widget') {
+                return;
+            }
             const script = findScriptById(step.script);
             if (!script) {
                 return;
@@ -2732,10 +3052,78 @@
             renderWorkflowSteps();
         }
 
-        function validateWorkflowSegment(startIndex = 0) {
+        function saveWidgetParams(step, widget) {
+            const container = document.getElementById('workflowParamsContainer');
+            const alertBox = document.getElementById('workflowParamsAlert');
+            if (!container) {
+                return;
+            }
+            const parameters = Array.isArray(widget && widget.parameters) ? widget.parameters : [];
+            if (!parameters.length) {
+                step.params = {};
+                if (workflowParamsModal) {
+                    workflowParamsModal.hide();
+                }
+                renderWorkflowSteps();
+                return;
+            }
+            const newParams = {};
             const errors = [];
-            const missingSummary = [];
-            let hasRunnableStep = false;
+            parameters.forEach(param => {
+                if (!param || !param.name) {
+                    return;
+                }
+                const input = container.querySelector(`[data-param="${param.name}"]`);
+                if (!input) {
+                    return;
+                }
+                const rawValue = input.value ?? '';
+                const trimmed = rawValue.trim();
+                if (!trimmed) {
+                    if (param.required) {
+                        errors.push(param.label || param.name);
+                        return;
+                    }
+                    if (param.default !== undefined) {
+                        newParams[param.name] = param.default;
+                    }
+                    return;
+                }
+                if ((param.type || 'text') === 'number') {
+                    if (!/^[-+]?\d+$/.test(trimmed)) {
+                        errors.push(`${param.label || param.name} (érvénytelen szám)`);
+                        return;
+                    }
+                    const numericValue = Number.parseInt(trimmed, 10);
+                    if (param.min !== undefined && numericValue < param.min) {
+                        errors.push(`${param.label || param.name} (min. ${param.min})`);
+                        return;
+                    }
+                    if (param.max !== undefined && numericValue > param.max) {
+                        errors.push(`${param.label || param.name} (max. ${param.max})`);
+                        return;
+                    }
+                    newParams[param.name] = numericValue;
+                } else {
+                    newParams[param.name] = trimmed;
+                }
+            });
+            if (errors.length) {
+                if (alertBox) {
+                    alertBox.textContent = `Ellenőrizd a következő mezőket: ${errors.join(', ')}`;
+                    alertBox.classList.remove('d-none');
+                }
+                return;
+            }
+            step.params = newParams;
+            if (workflowParamsModal) {
+                workflowParamsModal.hide();
+            }
+            renderWorkflowSteps();
+        }
+
+        function validateWorkflowSegment(startIndex = 0) {
+            const stepsToValidate = [];
             for (let i = startIndex; i < workflowSteps.length; i++) {
                 const step = workflowSteps[i];
                 if (step.type === 'widget') {
@@ -2747,23 +3135,294 @@
                 if (step.enabled === false) {
                     continue;
                 }
-                hasRunnableStep = true;
-                const script = findScriptById(step.script);
-                if (!script) {
-                    errors.push(`Ismeretlen szkript: ${step.script}`);
-                    continue;
-                }
-                const missing = getMissingParams(step, script);
-                if (missing.length) {
-                    missingSummary.push({ script, missing });
-                }
+                stepsToValidate.push(step);
             }
-            return {
-                valid: hasRunnableStep && errors.length === 0 && missingSummary.length === 0,
-                hasRunnableStep,
-                errors,
-                missingSummary
+            return validateStepCollection(stepsToValidate);
+        }
+
+        async function startSegmentRun(startIndex = 0) {
+            const segment = collectWorkflowSegment(startIndex);
+            if (!segment.steps.length) {
+                updateInfoBox('info', startIndex === 0
+                    ? 'Nincs futtatható lépés az első widget előtt. Használd a Continue gombot.'
+                    : 'Nincs további futtatható lépés a workflow-ban.');
+                return false;
+            }
+            const payload = buildRunPayload(startIndex, segment);
+            const context = {
+                type: 'segment',
+                startIndex,
+                widgetIndex: segment.widgetIndex
             };
+            try {
+                const ready = await ensureWorkflowKeys(payload, context);
+                if (!ready) {
+                    return false;
+                }
+                await executeWorkflow(payload, context);
+                return true;
+            } catch (error) {
+                console.error('Workflow indítási hiba:', error);
+                alert('Workflow indítása sikertelen: ' + error.message);
+                return false;
+            }
+        }
+
+        function updateCycleDisplay(widgetIndex, iteration, total) {
+            const row = document.querySelector(`tr[data-step-index="${widgetIndex}"]`);
+            if (!row) {
+                return;
+            }
+            const infoCell = row.querySelector('td:nth-child(2)');
+            if (!infoCell) {
+                return;
+            }
+            let display = infoCell.querySelector('.cycle-counter-display');
+            if (!display) {
+                display = document.createElement('div');
+                display.className = 'cycle-counter-display';
+                infoCell.append(display);
+            }
+            const safeIteration = Math.max(0, iteration);
+            display.textContent = safeIteration === 0
+                ? 'Ciklus előkészítése...'
+                : `Ciklus: ${safeIteration}/${total}`;
+        }
+
+        function clearCycleDisplay(widgetIndex) {
+            const row = document.querySelector(`tr[data-step-index="${widgetIndex}"]`);
+            if (!row) {
+                return;
+            }
+            const infoCell = row.querySelector('td:nth-child(2)');
+            if (!infoCell) {
+                return;
+            }
+            const display = infoCell.querySelector('.cycle-counter-display');
+            if (display) {
+                display.remove();
+            }
+        }
+
+        function prepareCycleState(widgetIndex) {
+            const widgetStep = workflowSteps[widgetIndex];
+            if (!widgetStep || widgetStep.type !== 'widget') {
+                return null;
+            }
+            const widget = findWidgetById(widgetStep.widget);
+            if (!widget || widget.id !== 'cycleWidget') {
+                return null;
+            }
+            const params = widgetStep.params || {};
+            const repeatRaw = params.repeat_count;
+            const stepBackRaw = params.step_back;
+            const repeatCount = Number.parseInt(String(repeatRaw ?? ''), 10);
+            const stepBackCount = Number.parseInt(String(stepBackRaw ?? ''), 10);
+            if (!Number.isInteger(repeatCount) || repeatCount < 1) {
+                updateInfoBox('warning', 'A ciklus ismétlésszámának legalább 1-nek kell lennie.');
+                return null;
+            }
+            if (!Number.isInteger(stepBackCount) || stepBackCount < 1) {
+                updateInfoBox('warning', 'A ciklus visszalépési értékének legalább 1-nek kell lennie.');
+                return null;
+            }
+            const {
+                steps: cycleSteps,
+                collectedCount
+            } = collectScriptStepsBefore(widgetIndex, stepBackCount);
+            if (!cycleSteps.length) {
+                updateInfoBox('info', 'Nincs futtatható lépés a widget előtt a ciklushoz.');
+                return null;
+            }
+            if (collectedCount < stepBackCount) {
+                updateInfoBox('warning', 'Nincs elegendő aktív lépés a widget előtt a megadott ciklushoz.');
+                return null;
+            }
+            const validation = validateStepCollection(cycleSteps);
+            if (!validation.hasRunnableStep) {
+                updateInfoBox('info', 'Nincs futtatható lépés a widget előtt a ciklushoz.');
+                return null;
+            }
+            if (!validation.valid) {
+                const messages = [...validation.errors];
+                validation.missingSummary.forEach(item => {
+                    messages.push(`${item.script.display_name || item.script.script}: hiányzó paraméterek – ${item.missing.join(', ')}`);
+                });
+                updateInfoBox('warning', messages.join(' | '));
+                updateMissingBadge();
+                return null;
+            }
+            const runSteps = cycleSteps.map(step => buildRunStepFromWorkflowStep(step));
+            return {
+                widgetStep,
+                widget,
+                repeatCount,
+                stepBackCount,
+                runSteps
+            };
+        }
+
+        async function startCycleSequence(widgetIndex, { auto = false } = {}) {
+            if (cycleState) {
+                return;
+            }
+            const state = prepareCycleState(widgetIndex);
+            if (!state) {
+                return;
+            }
+            cycleState = {
+                widgetIndex,
+                totalIterations: state.repeatCount,
+                nextIteration: 1,
+                runSteps: state.runSteps,
+                stepBackCount: state.stepBackCount,
+                autoTriggered: auto,
+                active: false,
+                activeIteration: null
+            };
+            updateCycleDisplay(widgetIndex, 0, state.repeatCount);
+            updateInfoBox('secondary', `Ciklus indítása ${state.repeatCount} ismétléssel.`);
+            try {
+                await launchNextCycleIteration();
+            } catch (error) {
+                console.error('Ciklus indítási hiba:', error);
+                updateInfoBox('danger', 'Nem sikerült elindítani a ciklust: ' + error.message);
+                clearCycleDisplay(widgetIndex);
+                cycleState = null;
+            }
+        }
+
+        async function startCycleIterationExecution(payload, context) {
+            if (!cycleState || cycleState.widgetIndex !== context.widgetIndex) {
+                await executeWorkflow(payload, context);
+                return;
+            }
+            cycleState.active = true;
+            cycleState.activeIteration = context.iteration;
+            updateCycleDisplay(context.widgetIndex, context.iteration, context.totalIterations);
+            try {
+                await executeWorkflow(payload, context);
+                cycleState.nextIteration = Math.max(cycleState.nextIteration, context.iteration + 1);
+            } catch (error) {
+                cycleState.active = false;
+                cycleState.activeIteration = null;
+                throw error;
+            }
+        }
+
+        async function launchNextCycleIteration() {
+            if (!cycleState) {
+                return;
+            }
+            if (cycleState.active) {
+                return;
+            }
+            if (cycleState.nextIteration > cycleState.totalIterations) {
+                finalizeCycleSequence(true);
+                return;
+            }
+            const iteration = cycleState.nextIteration;
+            const payload = {
+                steps: cycleState.runSteps.map(step => ({
+                    script: step.script,
+                    enabled: true,
+                    halt_on_fail: step.halt_on_fail !== false,
+                    params: cloneObject(step.params)
+                })),
+                template_id: currentTemplateId,
+                workflow_state: collectWorkflowState()
+            };
+            const context = {
+                type: 'cycle',
+                widgetIndex: cycleState.widgetIndex,
+                iteration,
+                totalIterations: cycleState.totalIterations
+            };
+            const ready = await ensureWorkflowKeys(payload, context);
+            if (!ready) {
+                return;
+            }
+            await startCycleIterationExecution(payload, context);
+        }
+
+        function finalizeCycleSequence(success) {
+            if (!cycleState) {
+                return;
+            }
+            const widgetIndex = cycleState.widgetIndex;
+            clearCycleDisplay(widgetIndex);
+            cycleState = null;
+            if (success) {
+                updateInfoBox('success', 'Ciklus futása befejeződött. Folytatás a következő lépésekkel.');
+                setTimeout(() => {
+                    startSegmentRun(widgetIndex + 1);
+                }, 0);
+            } else {
+                updateInfoBox('danger', 'A ciklus futása megszakadt.');
+            }
+        }
+
+        function autoTriggerWidget(widgetIndex) {
+            const widgetStep = workflowSteps[widgetIndex];
+            if (!widgetStep || widgetStep.type !== 'widget') {
+                return;
+            }
+            const widget = findWidgetById(widgetStep.widget);
+            if (!widget || widgetStep.enabled === false) {
+                return;
+            }
+            if (widget.id === 'cycleWidget') {
+                startCycleSequence(widgetIndex, { auto: true }).catch(error => {
+                    console.error('Automatikus ciklus hiba:', error);
+                });
+            } else {
+                updateInfoBox('info', `${widget.name} widgethez értünk. Használd a Continue gombot a folytatáshoz.`);
+            }
+        }
+
+        function handleRunContextJobUpdate(job) {
+            if (!job || !currentRunContext || currentRunContext.jobId !== job.job_id) {
+                return;
+            }
+            if (currentRunContext.completionHandled) {
+                return;
+            }
+            if (job.status === 'completed') {
+                currentRunContext.completionHandled = true;
+                if (currentRunContext.type === 'segment') {
+                    const context = currentRunContext;
+                    currentRunContext = null;
+                    if (context.widgetIndex !== null && context.widgetIndex !== undefined) {
+                        autoTriggerWidget(context.widgetIndex);
+                    } else {
+                        updateInfoBox('success', 'A workflow szakasz sikeresen lefutott.');
+                    }
+                } else if (currentRunContext.type === 'cycle') {
+                    currentRunContext.completionHandled = true;
+                    currentRunContext = null;
+                    if (cycleState) {
+                        cycleState.active = false;
+                        cycleState.activeIteration = null;
+                        setTimeout(() => {
+                            launchNextCycleIteration().catch(error => {
+                                console.error('Ciklus folytatás hiba:', error);
+                                updateInfoBox('danger', 'Nem sikerült a ciklus következő futásának indítása.');
+                                finalizeCycleSequence(false);
+                            });
+                        }, 0);
+                    }
+                } else {
+                    currentRunContext = null;
+                }
+            } else if (job.status === 'failed' || job.status === 'cancelled') {
+                currentRunContext.completionHandled = true;
+                if (cycleState) {
+                    cycleState.active = false;
+                    cycleState.activeIteration = null;
+                    finalizeCycleSequence(false);
+                }
+                currentRunContext = null;
+            }
         }
 
         async function handleStartWorkflow() {
@@ -2785,24 +3444,30 @@
                 return;
             }
 
-            const payload = buildRunPayload(0);
-            if (!payload.steps.length) {
+            const segment = collectWorkflowSegment(0);
+            if (!segment.steps.length) {
                 updateInfoBox('info', 'Nincs futtatható lépés az első widget előtt. Használd a Continue gombot a folytatáshoz.');
                 return;
             }
+            const payload = buildRunPayload(0, segment);
+            const context = {
+                type: 'segment',
+                startIndex: 0,
+                widgetIndex: segment.widgetIndex
+            };
             try {
-                const ready = await ensureWorkflowKeys(payload);
+                const ready = await ensureWorkflowKeys(payload, context);
                 if (!ready) {
                     return;
                 }
-                await executeWorkflow(payload);
+                await executeWorkflow(payload, context);
             } catch (error) {
                 console.error('Workflow indítási hiba:', error);
                 alert('Workflow indítása sikertelen: ' + error.message);
             }
         }
 
-        async function ensureWorkflowKeys(payload) {
+        async function ensureWorkflowKeys(payload, context = null) {
             const response = await fetch(`/api/workflow-key-status/${encodeURIComponent(PROJECT_NAME)}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2815,11 +3480,13 @@
             const missing = Object.entries(result.keys || {}).filter(([, info]) => info.required && !info.present);
             if (!missing.length) {
                 pendingWorkflowPayload = null;
+                pendingWorkflowContext = null;
                 return true;
             }
             const missingList = missing.map(([key, info]) => ({ key, label: info.label || key }));
             prepareWorkflowKeyModal(missingList);
             pendingWorkflowPayload = payload;
+            pendingWorkflowContext = context || null;
             if (workflowKeysModal) {
                 workflowKeysModal.show();
             } else {
@@ -2921,11 +3588,20 @@
                     throw new Error(result.error || 'Nem sikerült menteni az API kulcsokat.');
                 }
                 const payloadToRun = pendingWorkflowPayload;
+                const contextToRun = pendingWorkflowContext;
                 pendingWorkflowPayload = null;
+                pendingWorkflowContext = null;
                 if (workflowKeysModal) {
                     workflowKeysModal.hide();
                 }
-                await executeWorkflow(payloadToRun);
+                if (!payloadToRun) {
+                    return;
+                }
+                if (contextToRun && contextToRun.type === 'cycle') {
+                    await startCycleIterationExecution(payloadToRun, contextToRun);
+                } else {
+                    await executeWorkflow(payloadToRun, contextToRun || null);
+                }
             } catch (error) {
                 alert('API kulcs mentése sikertelen: ' + error.message);
             } finally {
@@ -2938,7 +3614,7 @@
             }
         }
 
-        async function executeWorkflow(payload) {
+        async function executeWorkflow(payload, context = null) {
             const statusText = document.getElementById('workflowStatusText');
             const startButton = document.getElementById('startWorkflowBtn');
             const spinner = document.getElementById('workflowSpinner');
@@ -2947,6 +3623,16 @@
             const stopLabel = document.getElementById('stopWorkflowLabel');
             const logContent = document.getElementById('workflowLogContent');
             const logLink = document.getElementById('workflowLogLink');
+
+            if (context) {
+                currentRunContext = {
+                    ...context,
+                    jobId: null,
+                    completionHandled: false
+                };
+            } else {
+                currentRunContext = null;
+            }
 
             currentWorkflowJobId = null;
             stopLogPolling(true);
@@ -2991,6 +3677,15 @@
                 if (!response.ok || !result.success) {
                     throw new Error(result.error || 'Ismeretlen hiba a workflow indításakor.');
                 }
+                if (context) {
+                    currentRunContext = {
+                        ...context,
+                        jobId: result.job_id,
+                        completionHandled: false
+                    };
+                } else {
+                    currentRunContext = null;
+                }
                 if (statusText) {
                     statusText.textContent = 'Workflow elindult, állapot frissítése folyamatban...';
                 }
@@ -3013,6 +3708,7 @@
                 }
                 updateInfoBox('danger', `Workflow indítása sikertelen: ${error.message}`);
                 updateLogStatus('A log a workflow indítása után jelenik meg.', 'muted');
+                currentRunContext = null;
             }
         }
 
@@ -3197,6 +3893,8 @@
             } else if (isActive) {
                 updateLogStatus('A workflow fut – a log folyamatosan frissül.', 'info');
             }
+
+            handleRunContextJobUpdate(job);
         }
 
         function setWorkflowBadge(status) {

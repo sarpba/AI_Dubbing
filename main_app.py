@@ -123,7 +123,7 @@ PROJECT_AUTOFILL_OVERRIDES = {
 SECRET_PARAM_NAMES = {'auth_key', 'hf_token'}
 ENCODED_SECRET_PREFIX = 'base64:'
 SECRET_VALUE_PLACEHOLDER = '***'
-ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue'}
+ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue', 'cycleWidget'}
 
 
 class WorkflowValidationError(Exception):
@@ -725,6 +725,42 @@ def coerce_bool(value: Any) -> bool:
     return False
 
 
+def normalize_cycle_widget_params(raw_params: Dict[str, Any]) -> Dict[str, int]:
+    if raw_params is None:
+        params = {}
+    elif isinstance(raw_params, dict):
+        params = raw_params
+    else:
+        raise WorkflowValidationError("A ciklus widget paraméterei hibás formátumúak.")
+
+    def parse_positive_int(value: Any, field_label: str) -> int:
+        if value is None:
+            candidate = ''
+        else:
+            candidate = str(value).strip()
+        if candidate == '':
+            candidate = '1'
+        try:
+            numeric = int(candidate)
+        except (TypeError, ValueError):
+            raise WorkflowValidationError(
+                f"A ciklus widget {field_label} paramétere csak pozitív egész szám lehet."
+            ) from None
+        if numeric < 1:
+            raise WorkflowValidationError(
+                f"A ciklus widget {field_label} paramétere csak pozitív egész szám lehet."
+            )
+        return numeric
+
+    repeat_count = parse_positive_int(params.get('repeat_count'), 'repeat_count')
+    step_back = parse_positive_int(params.get('step_back'), 'step_back')
+
+    return {
+        'repeat_count': repeat_count,
+        'step_back': step_back
+    }
+
+
 def load_conda_info(force_refresh: bool = False) -> Optional[dict]:
     global CONDA_INFO_CACHE
     with CONDA_INFO_LOCK:
@@ -1006,11 +1042,21 @@ def normalize_workflow_steps(payload: Any) -> Tuple[List[Dict[str, Any]], Set[st
                 raise WorkflowValidationError(f"A(z) {index}. widget lépéshez hiányzik a widget azonosítója.")
             if widget_id not in ALLOWED_WORKFLOW_WIDGETS:
                 logging.warning("Ismeretlen workflow widget: %s", widget_id)
-            normalized_steps.append({
+            widget_params = step.get('params')
+            if widget_params is None:
+                widget_params = {}
+            if not isinstance(widget_params, dict):
+                raise WorkflowValidationError(f"A(z) {index}. widget lépés paraméterei hibás formátumúak.")
+            normalized_widget_step: Dict[str, Any] = {
                 'type': 'widget',
                 'widget': widget_id,
                 'enabled': coerce_bool(step.get('enabled', True))
-            })
+            }
+            if widget_id == 'cycleWidget':
+                normalized_widget_step['params'] = normalize_cycle_widget_params(widget_params)
+            elif widget_params:
+                normalized_widget_step['params'] = copy.deepcopy(widget_params)
+            normalized_steps.append(normalized_widget_step)
             continue
 
         script_id = step.get('script')
