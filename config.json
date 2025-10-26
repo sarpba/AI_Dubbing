@@ -99,13 +99,11 @@
       }
     },
     {
-      "script": "pitch_analizer.py",
+      "script": "AV/Pitch_analizer/pitch_analizer.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
-        "debug": true,
-        "delete_outside": true
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator"
       }
     },
     {

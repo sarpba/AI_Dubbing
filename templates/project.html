@@ -1568,7 +1568,10 @@
         function buildWorkflowInsertSubmenu(position) {
             const submenu = document.createElement('div');
             submenu.className = 'workflow-context-submenu';
-            const groupedScripts = getScriptsGroupedByDirectory();
+            const scriptTree = buildScriptDirectoryTree();
+            const hasDirectoryContent = scriptTree.children.size > 0;
+            const hasRootScripts = scriptTree.scripts.length > 0;
+            const hasAnyScripts = hasDirectoryContent || hasRootScripts;
 
             if (workflowWidgets.length) {
                 const widgetItem = document.createElement('div');
@@ -1593,36 +1596,26 @@
                 submenu.append(widgetItem);
             }
 
-            if (workflowWidgets.length && groupedScripts.length) {
+            if (workflowWidgets.length && hasAnyScripts) {
                 const divider = document.createElement('div');
                 divider.className = 'workflow-context-divider';
                 submenu.append(divider);
             }
 
-            groupedScripts.forEach(([directory, scripts]) => {
-                const dirItem = document.createElement('div');
-                dirItem.className = 'workflow-context-item has-submenu';
-                dirItem.textContent = directory || 'Gyökér';
-                const scriptSubmenu = document.createElement('div');
-                scriptSubmenu.className = 'workflow-context-submenu';
+            if (hasRootScripts) {
+                const rootItem = document.createElement('div');
+                rootItem.className = 'workflow-context-item has-submenu';
+                rootItem.textContent = 'Gyökér';
+                const rootSubmenu = document.createElement('div');
+                rootSubmenu.className = 'workflow-context-submenu';
+                appendScriptsToMenu(rootSubmenu, scriptTree.scripts, position);
+                rootItem.append(rootSubmenu);
+                submenu.append(rootItem);
+            }
 
-                scripts.forEach(script => {
-                    const scriptOption = document.createElement('div');
-                    scriptOption.className = 'workflow-context-item';
-                    scriptOption.textContent = script.display_name || script.script;
-                    scriptOption.addEventListener('click', event => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        insertWorkflowScript(script.id, position);
-                    });
-                    scriptSubmenu.append(scriptOption);
-                });
+            appendDirectoryTreeToMenu(submenu, scriptTree.children, position);
 
-                dirItem.append(scriptSubmenu);
-                submenu.append(dirItem);
-            });
-
-            if (!workflowWidgets.length && !groupedScripts.length) {
+            if (!workflowWidgets.length && !hasAnyScripts) {
                 const empty = document.createElement('div');
                 empty.className = 'workflow-context-item disabled';
                 empty.textContent = 'Nincs elérhető elem';
@@ -1632,47 +1625,106 @@
             return submenu;
         }
 
-        function getScriptsGroupedByDirectory() {
-            const map = new Map();
+        function buildScriptDirectoryTree() {
+            const createNode = name => ({
+                name,
+                children: new Map(),
+                scripts: []
+            });
+
+            const root = createNode('');
+
             availableScripts.forEach(script => {
                 const normalizedPath = String(script.script || '').replace(/\\/g, '/');
                 let relativePath = normalizedPath;
                 if (relativePath.startsWith('scripts/')) {
                     relativePath = relativePath.slice('scripts/'.length);
                 }
-                const lastSlash = relativePath.lastIndexOf('/');
-                const directory = lastSlash >= 0 ? relativePath.slice(0, lastSlash) : '';
-                if (!map.has(directory)) {
-                    map.set(directory, []);
-                }
-                map.get(directory).push(script);
+
+                const pathParts = relativePath.split('/').filter(Boolean);
+                const directories = pathParts.slice(0, -1);
+                const fileName = pathParts[pathParts.length - 1] || (script.display_name || script.script || script.id);
+
+                let current = root;
+                directories.forEach(segment => {
+                    if (!current.children.has(segment)) {
+                        current.children.set(segment, createNode(segment));
+                    }
+                    current = current.children.get(segment);
+                });
+
+                current.scripts.push({
+                    data: script,
+                    fileName
+                });
             });
 
-            const sortedDirectories = Array.from(map.entries()).sort((a, b) => {
-                const dirA = a[0] || '';
-                const dirB = b[0] || '';
-                if (dirA === dirB) {
-                    return 0;
-                }
-                if (!dirA) {
-                    return -1;
-                }
-                if (!dirB) {
-                    return 1;
-                }
-                return dirA.localeCompare(dirB);
-            });
+            return root;
+        }
 
-            return sortedDirectories.map(([directory, scripts]) => {
-                const sortedScripts = scripts
-                    .slice()
-                    .sort((scriptA, scriptB) => {
-                        const labelA = (scriptA.display_name || scriptA.script || '').toLowerCase();
-                        const labelB = (scriptB.display_name || scriptB.script || '').toLowerCase();
-                        return labelA.localeCompare(labelB);
+        function appendDirectoryTreeToMenu(parentMenu, childrenMap, position) {
+            const sortedChildren = Array
+                .from(childrenMap.values())
+                .sort((childA, childB) => childA.name.localeCompare(childB.name));
+
+            sortedChildren.forEach(child => {
+                const hasNestedDirectories = child.children.size > 0;
+                const scriptCount = child.scripts.length;
+
+                if (!hasNestedDirectories && scriptCount === 1) {
+                    const singleItem = document.createElement('div');
+                    singleItem.className = 'workflow-context-item';
+                    singleItem.textContent = child.name;
+                    singleItem.addEventListener('click', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        insertWorkflowScript(child.scripts[0].data.id, position);
                     });
-                return [directory, sortedScripts];
+                    parentMenu.append(singleItem);
+                    return;
+                }
+
+                const dirItem = document.createElement('div');
+                dirItem.className = 'workflow-context-item has-submenu';
+                dirItem.textContent = child.name;
+                const childSubmenu = document.createElement('div');
+                childSubmenu.className = 'workflow-context-submenu';
+
+                appendDirectoryTreeToMenu(childSubmenu, child.children, position);
+                appendScriptsToMenu(childSubmenu, child.scripts, position);
+
+                dirItem.append(childSubmenu);
+                parentMenu.append(dirItem);
             });
+        }
+
+        function appendScriptsToMenu(menuElement, scripts, position) {
+            const sortedScripts = scripts
+                .slice()
+                .sort((entryA, entryB) => {
+                    const labelA = getScriptMenuLabel(entryA).toLowerCase();
+                    const labelB = getScriptMenuLabel(entryB).toLowerCase();
+                    return labelA.localeCompare(labelB);
+                });
+
+            sortedScripts.forEach(entry => {
+                const scriptOption = document.createElement('div');
+                scriptOption.className = 'workflow-context-item';
+                scriptOption.textContent = getScriptMenuLabel(entry);
+                scriptOption.addEventListener('click', event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    insertWorkflowScript(entry.data.id, position);
+                });
+                menuElement.append(scriptOption);
+            });
+        }
+
+        function getScriptMenuLabel(entry) {
+            if (!entry || !entry.data) {
+                return '';
+            }
+            return entry.data.display_name || entry.fileName || entry.data.script || entry.data.id || '';
         }
 
         function calculateInsertIndex(position) {
