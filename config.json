@@ -87,19 +87,19 @@
     },
     {
       "script": "AV/normalise_and_cut_json_easy_v1.1.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AV/merge_chunks_with_background_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AV/merge_to_video_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "language": "hun"

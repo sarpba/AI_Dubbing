@@ -906,10 +906,18 @@ def build_argument_fragment(param_meta: Dict[str, Any], value: Any) -> List[str]
     flags = param_meta.get('flags') or []
 
     if param_type == 'flag':
+        if not flags:
+            return []
+
+        positive_flag = next((flag for flag in flags if not flag.startswith('--no-')), None)
+        negative_flag = next((flag for flag in flags if flag.startswith('--no-')), None)
+
         if value is True:
-            return [flags[0]] if flags else []
-        if value is False and len(flags) > 1 and flags[1].startswith('--no-'):
-            return [flags[1]]
+            return [positive_flag] if positive_flag else []
+        if value is False:
+            if negative_flag:
+                return [negative_flag]
+            return []
         return []
 
     if value is None:
