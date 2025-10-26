@@ -49,6 +49,3 @@ cd AI_Dubbing
 python main_app.py
 ```
 
-## Licenc / License
-MIT
-
