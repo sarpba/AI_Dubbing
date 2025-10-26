@@ -1,6 +1,6 @@
 {
   "enviroment": "sync",
-  "script": "pitch_analizer.py",
+  "script": "AV/Pitch_analizer/pitch_analizer.py",
   "description": "Narrátor és translated_splits audiók hangmagasságának összehasonlítása megadott toleranciával.",
   "required": [
     {

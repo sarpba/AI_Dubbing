@@ -434,8 +434,16 @@ def rebuild_scripts_config_file() -> List[Dict[str, Any]]:
 
         # biztosítsuk, hogy a script mező a valós relatív útvonalra mutat
         relative_script = relative_json.with_suffix('.py').as_posix()
-        # Szinkronban tartjuk a script mezőt a tényleges relatív útvonallal
+        script_needs_update = entry.get('script') != relative_script
         entry['script'] = relative_script
+
+        if script_needs_update:
+            try:
+                with json_path.open('w', encoding='utf-8') as fp:
+                    json.dump(entry, fp, ensure_ascii=False, indent=2)
+                    fp.write('\n')
+            except OSError as exc:
+                logging.error("Nem sikerült frissíteni a script JSON fájlt: %s (%s)", json_path, exc)
 
         collected_entries.append(entry)
 
@@ -556,6 +564,13 @@ def get_scripts_catalog(force_reload: bool = False) -> List[Dict[str, Any]]:
         SCRIPTS_CACHE['mtime'] = current_mtime
         SCRIPTS_CACHE['data'] = catalog
         return copy.deepcopy(catalog)
+
+
+def initialize_scripts_catalog() -> None:
+    try:
+        rebuild_scripts_config_file()
+    except Exception as exc:
+        logging.error("Nem sikerült inicializálni a script katalógust: %s", exc)
 
 
 def get_script_definition(script_id: str) -> Optional[Dict[str, Any]]:
@@ -2982,6 +2997,8 @@ def get_workflow_status(job_id):
     if not job:
         return jsonify({'success': False, 'error': 'Feladat nem található'}), 404
     return jsonify({'success': True, 'job': job})
+
+initialize_scripts_catalog()
 
 
 if __name__ == '__main__':

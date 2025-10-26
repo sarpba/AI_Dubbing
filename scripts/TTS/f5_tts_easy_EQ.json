@@ -1,6 +1,6 @@
 {
   "enviroment": "f5-tts",
-  "script": "TTS/f5_tts_easy_codex_EQ.py",
+  "script": "TTS/f5_tts_easy_EQ.py",
   "description": "A finomhangolt F5-TTS segítségével létrehozza a szinkron darabokat.",
   "required": [
     {
