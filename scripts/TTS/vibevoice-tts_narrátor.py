@@ -825,16 +825,14 @@ def save_noise_segments(
 def process_segment(
     segment: Dict[str, object],
     args: argparse.Namespace,
-    audio_data: np.ndarray,
-    sample_rate: int,
     processor: VibeVoiceProcessor,
     model: VibeVoiceForConditionalGenerationInference,
-    eq_config: Optional[Dict[str, object]],
     transcribe_fn: Optional[Callable[[str], str]],
     whisper_language: Optional[str],
     normalize_fn: Optional[Callable[[str], str]],
     device: str,
     worker_label: str,
+    narrator_sample_path: str,
 ) -> Tuple[bool, Optional[str]]:
     start_time = segment.get("start")
     end_time = segment.get("end")
@@ -844,12 +842,6 @@ def process_segment(
         return False, "Hiányzó vagy érvénytelen időbélyeg."
     if not original_gen_text:
         return False, "Üres generálandó szöveg."
-
-    start_sample = int(start_time * sample_rate)
-    end_sample = int(end_time * sample_rate)
-    end_sample = min(end_sample, len(audio_data))
-    if start_sample >= end_sample:
-        return False, "Érvénytelen audió intervallum."
 
     filename = f"{time_to_filename_str(start_time)}_{time_to_filename_str(end_time)}.wav"
     output_path = Path(args.output_dir) / filename
@@ -866,177 +858,156 @@ def process_segment(
             return False, f"Normalizálási hiba: {exc}"
 
     formatted_text = ensure_script_format(gen_text, args.speaker_name)
-    if not formatted_text:
+   if not formatted_text:
         return False, "Üres generálandó szöveg."
 
-    ref_chunk = audio_data[start_sample:end_sample]
-    ref_chunk = apply_eq_curve_to_audio(ref_chunk, sample_rate, eq_config)
-    if args.normalize_ref_audio:
-        ref_chunk = normalize_peak(ref_chunk.copy(), args.ref_audio_peak)
-    ref_sample_rate = sample_rate
-    if args.target_sample_rate > 0 and args.target_sample_rate != sample_rate:
-        ref_chunk = resample_audio(ref_chunk, sample_rate, args.target_sample_rate)
-        ref_sample_rate = args.target_sample_rate
+    inputs = prepare_inputs(
+        processor=processor,
+        text=formatted_text,
+        voice_sample_paths=[narrator_sample_path],
+        device=device,
+    )
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_ref_file:
-        temp_ref_path = tmp_ref_file.name
-    try:
-        sf.write(temp_ref_path, ref_chunk, ref_sample_rate)
+    attempts = args.max_retries if transcribe_fn else 1
+    normalized_original = normalize_text_for_comparison(gen_text)
+    tolerance_word_count = len(gen_text.split())
+    best_distance = float("inf")
+    best_temp_path: Optional[str] = None
+    last_error: Optional[str] = None
+    filename_stem = Path(filename).stem
 
-        inputs = prepare_inputs(
-            processor=processor,
-            text=formatted_text,
-            voice_sample_paths=[temp_ref_path],
-            device=device,
-        )
-
-        attempts = args.max_retries if transcribe_fn else 1
-        normalized_original = normalize_text_for_comparison(gen_text)
-        tolerance_word_count = len(gen_text.split())
-        best_distance = float("inf")
-        best_temp_path: Optional[str] = None
-        best_transcribed: str = ""
-        last_error: Optional[str] = None
-        filename_stem = Path(filename).stem
-
-        for attempt in range(1, attempts + 1):
-            temp_gen_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=args.output_dir)
-            temp_gen_path = temp_gen_file.name
-            temp_gen_file.close()
-            keep_temp = False
-            try:
-                generation_start = time.time()
-                with torch.no_grad():
-                    outputs = model.generate(
-                        **inputs,
-                        max_new_tokens=None,
-                        cfg_scale=args.cfg_scale,
-                        tokenizer=processor.tokenizer,
-                        generation_config={"do_sample": False},
-                        verbose=False,
-                        is_prefill=not args.disable_prefill,
-                    )
-                generation_time = time.time() - generation_start
-                logger.debug("Generálás kész %.2f mp alatt: %s (attempt %s)", generation_time, filename, attempt)
-
-                speech_outputs = getattr(outputs, "speech_outputs", None)
-                if not speech_outputs or speech_outputs[0] is None:
-                    raise RuntimeError("A modell nem adott vissza audiót.")
-
-                processor.save_audio(speech_outputs[0], output_path=temp_gen_path)
-
-                if not transcribe_fn:
-                    output_path.parent.mkdir(parents=True, exist_ok=True)
-                    os.replace(temp_gen_path, output_path)
-                    return True, None
-
-                raw_transcribed = transcribe_fn(temp_gen_path)
-                converted_transcribed = convert_numbers_to_words(
-                    raw_transcribed,
-                    lang=whisper_language or "",
-                )
-                normalized_transcribed = normalize_text_for_comparison(converted_transcribed)
-                final_tolerance = compute_tolerance(
-                    tolerance_word_count,
-                    args.tolerance_factor,
-                    args.min_tolerance,
-                )
-                distance = levenshtein_distance(normalized_original, normalized_transcribed)
-                outcome = (
-                    "Sikeres ellenőrzés"
-                    if distance <= final_tolerance or distance <= 1
-                    else "Ellenőrzés sikertelen"
-                )
-                log_generation_attempt(
-                    worker_label,
-                    filename,
-                    attempt,
-                    attempts,
-                    normalized_original,
-                    normalized_transcribed,
-                    distance,
-                    final_tolerance,
-                    outcome,
-                )
-
-                if distance <= final_tolerance or distance <= 1:
-                    output_path.parent.mkdir(parents=True, exist_ok=True)
-                    os.replace(temp_gen_path, output_path)
-                    if best_temp_path and os.path.exists(best_temp_path):
-                        os.remove(best_temp_path)
-                    return True, None
-
-                last_error = f"Levenshtein távolság {distance}, tolerancia {final_tolerance}"
-                if args.save_failures:
-                    save_failed_attempt(
-                        args=args,
-                        filename_stem=filename_stem,
-                        attempt_num=attempt,
-                        distance=distance,
-                        tolerance=final_tolerance,
-                        temp_gen_path=temp_gen_path,
-                        original_text=gen_text,
-                        transcribed_text=converted_transcribed,
-                    )
-
-                if distance < best_distance:
-                    if best_temp_path and os.path.exists(best_temp_path):
-                        os.remove(best_temp_path)
-                    best_distance = distance
-                    best_transcribed = converted_transcribed
-                    best_temp_path = temp_gen_path
-                    keep_temp = True
-                else:
-                    keep_temp = False
-
-            except Exception as exc:
-                last_error = f"Generálási hiba: {exc}"
-                logger.error("Hiba a(z) %s szegmens generálása közben: %s", filename, exc, exc_info=True)
-            finally:
-                if not keep_temp and os.path.exists(temp_gen_path):
-                    os.remove(temp_gen_path)
-
-        final_tolerance = compute_tolerance(
-            tolerance_word_count,
-            args.tolerance_factor,
-            args.min_tolerance,
-        )
-        is_best_available = best_temp_path and os.path.exists(best_temp_path)
-        accept_outside_tolerance = (
-            args.keep_best_over_tolerance
-            and is_best_available
-            and best_distance < float("inf")
-        )
-        if is_best_available and (best_distance <= final_tolerance or accept_outside_tolerance):
-            if best_distance <= final_tolerance:
-                logger.info(
-                    "%s: A legjobb próbálkozás elfogadva (distance: %s, tolerance: %s) -> %s",
-                    worker_label,
-                    best_distance,
-                    final_tolerance,
-                    filename,
-                )
-            else:
-                logger.warning(
-                    "%s: A legjobb próbálkozás tolerancia felett is elfogadva (distance: %s, tolerance: %s) -> %s",
-                    worker_label,
-                    best_distance,
-                    final_tolerance,
-                    filename,
-                )
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(best_temp_path, output_path)
-            return True, None
-
-        if best_temp_path and os.path.exists(best_temp_path):
-            os.remove(best_temp_path)
-
-        return False, last_error or "Generálás ismeretlen okból sikertelen."
-    finally:
+    for attempt in range(1, attempts + 1):
+        temp_gen_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False, dir=args.output_dir)
+        temp_gen_path = temp_gen_file.name
+        temp_gen_file.close()
+        keep_temp = False
         try:
-            os.remove(temp_ref_path)
-        except OSError:
-            pass
+            generation_start = time.time()
+            with torch.no_grad():
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=None,
+                    cfg_scale=args.cfg_scale,
+                    tokenizer=processor.tokenizer,
+                    generation_config={"do_sample": False},
+                    verbose=False,
+                    is_prefill=not args.disable_prefill,
+                )
+            generation_time = time.time() - generation_start
+            logger.debug("Generálás kész %.2f mp alatt: %s (attempt %s)", generation_time, filename, attempt)
+
+            speech_outputs = getattr(outputs, "speech_outputs", None)
+            if not speech_outputs or speech_outputs[0] is None:
+                raise RuntimeError("A modell nem adott vissza audiót.")
+
+            processor.save_audio(speech_outputs[0], output_path=temp_gen_path)
+
+            if not transcribe_fn:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(temp_gen_path, output_path)
+                return True, None
+
+            raw_transcribed = transcribe_fn(temp_gen_path)
+            converted_transcribed = convert_numbers_to_words(
+                raw_transcribed,
+                lang=whisper_language or "",
+            )
+            normalized_transcribed = normalize_text_for_comparison(converted_transcribed)
+            final_tolerance = compute_tolerance(
+                tolerance_word_count,
+                args.tolerance_factor,
+                args.min_tolerance,
+            )
+            distance = levenshtein_distance(normalized_original, normalized_transcribed)
+            outcome = (
+                "Sikeres ellenőrzés"
+                if distance <= final_tolerance or distance <= 1
+                else "Ellenőrzés sikertelen"
+            )
+            log_generation_attempt(
+                worker_label,
+                filename,
+                attempt,
+                attempts,
+                normalized_original,
+                normalized_transcribed,
+                distance,
+                final_tolerance,
+                outcome,
+            )
+
+            if distance <= final_tolerance or distance <= 1:
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(temp_gen_path, output_path)
+                if best_temp_path and os.path.exists(best_temp_path):
+                    os.remove(best_temp_path)
+                return True, None
+
+            last_error = f"Levenshtein távolság {distance}, tolerancia {final_tolerance}"
+            if args.save_failures:
+                save_failed_attempt(
+                    args=args,
+                    filename_stem=filename_stem,
+                    attempt_num=attempt,
+                    distance=distance,
+                    tolerance=final_tolerance,
+                    temp_gen_path=temp_gen_path,
+                    original_text=gen_text,
+                    transcribed_text=converted_transcribed,
+                )
+
+            if distance < best_distance:
+                if best_temp_path and os.path.exists(best_temp_path):
+                    os.remove(best_temp_path)
+                best_distance = distance
+                best_temp_path = temp_gen_path
+                keep_temp = True
+            else:
+                keep_temp = False
+
+        except Exception as exc:
+            last_error = f"Generálási hiba: {exc}"
+            logger.error("Hiba a(z) %s szegmens generálása közben: %s", filename, exc, exc_info=True)
+        finally:
+            if not keep_temp and os.path.exists(temp_gen_path):
+                os.remove(temp_gen_path)
+
+    final_tolerance = compute_tolerance(
+        tolerance_word_count,
+        args.tolerance_factor,
+        args.min_tolerance,
+    )
+    is_best_available = best_temp_path and os.path.exists(best_temp_path)
+    accept_outside_tolerance = (
+        args.keep_best_over_tolerance
+        and is_best_available
+        and best_distance < float("inf")
+    )
+    if is_best_available and (best_distance <= final_tolerance or accept_outside_tolerance):
+        if best_distance <= final_tolerance:
+            logger.info(
+                "%s: A legjobb próbálkozás elfogadva (distance: %s, tolerance: %s) -> %s",
+                worker_label,
+                best_distance,
+                final_tolerance,
+                filename,
+            )
+        else:
+            logger.warning(
+                "%s: A legjobb próbálkozás tolerancia felett is elfogadva (distance: %s, tolerance: %s) -> %s",
+                worker_label,
+                best_distance,
+                final_tolerance,
+                filename,
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(best_temp_path, output_path)
+        return True, None
+
+    if best_temp_path and os.path.exists(best_temp_path):
+        os.remove(best_temp_path)
+
+    return False, last_error or "Generálás ismeretlen okból sikertelen."
 
 
 def run_segments_on_device(
@@ -1044,12 +1015,10 @@ def run_segments_on_device(
     worker_label: str,
     args: argparse.Namespace,
     segments: List[Dict[str, object]],
-    input_wav_path_str: str,
-    eq_config: Optional[Dict[str, object]],
+    narrator_sample_path: str,
     stats,
     failed_segments_info,
     progress_position: int = 0,
-    prefetched_audio: Optional[Tuple[np.ndarray, int]] = None,
 ) -> None:
     if not segments:
         return
@@ -1064,11 +1033,6 @@ def run_segments_on_device(
     normalize_fn = load_normalizer(normaliser_path)
     processor, model = load_vibevoice_components(args, device)
 
-    if prefetched_audio is not None:
-        full_audio_data, sample_rate = prefetched_audio
-    else:
-        full_audio_data, sample_rate = sf.read(input_wav_path_str)
-
     progress_iter = tqdm.tqdm(
         segments,
         desc=f"Processing on {worker_label}",
@@ -1082,16 +1046,14 @@ def run_segments_on_device(
         ok, error_msg = process_segment(
             segment=segment,
             args=args,
-            audio_data=full_audio_data,
-            sample_rate=sample_rate,
             processor=processor,
             model=model,
-            eq_config=eq_config,
             transcribe_fn=transcribe_fn,
             whisper_language=whisper_language,
             normalize_fn=normalize_fn,
             device=device,
             worker_label=worker_label,
+            narrator_sample_path=narrator_sample_path,
         )
         if ok:
             increment_stat(stats, "successful")
@@ -1110,8 +1072,7 @@ def gpu_worker(
     worker_idx: int,
     args: argparse.Namespace,
     all_chunks: List[List[Dict[str, object]]],
-    input_wav_path_str: str,
-    eq_config,
+    narrator_sample_path: str,
     stats,
     failed_segments_info,
 ) -> None:
@@ -1125,8 +1086,7 @@ def gpu_worker(
         worker_label=worker_label,
         args=args,
         segments=all_chunks[worker_idx],
-        input_wav_path_str=input_wav_path_str,
-        eq_config=eq_config,
+        narrator_sample_path=narrator_sample_path,
         stats=stats,
         failed_segments_info=failed_segments_info,
         progress_position=worker_idx,
@@ -1175,6 +1135,21 @@ def process_project(args: argparse.Namespace) -> None:
         logger.warning("EQ konfiguráció nem található: %s. EQ kikapcsolva.", eq_config_path)
         eq_config_path = None
     eq_config = load_eq_curve_config(eq_config_path)
+
+    narrator_dir = resolve_narrator_directory(args.narrator)
+    narrator_sample_path, narrator_sample_rate, narrator_duration, narrator_source = prepare_narrator_reference_sample(
+        narrator_dir=narrator_dir,
+        eq_config=eq_config,
+        normalize=args.normalize_ref_audio,
+        peak_target=args.ref_audio_peak,
+        target_sample_rate=args.target_sample_rate,
+    )
+    logger.info(
+        "Narrátor referencia: %s (%.2f mp @ %s Hz)",
+        narrator_source,
+        narrator_duration,
+        narrator_sample_rate,
+    )
 
     cfg_dirs = config_data["DIRECTORIES"]
     full_project_path = (PROJECT_ROOT / cfg_dirs["workdir"]) / args.project_name
