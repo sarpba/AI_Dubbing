@@ -1,6 +1,6 @@
 # scripts.json – konfigurációs útmutató
 
-Ez a gyűjtő-fájl írja le, hogy az AI Dubbing felülete vagy CLI-je hogyan jelenítse meg és parametrizálja a scripts könyvtár parancsait. Minden elem egy önálló szkript-konfigurációt képvisel, amelyből a felület kiolvassa a felhasználónak kínált opciókat.
+Ez a gyűjtő-fájl írja le, hogy az AI Dubbing felülete vagy CLI-je hogyan jelenítse meg és parametrizálja a scripts könyvtár parancsait. Minden elem egy önálló szkript-konfigurációt képvisel, amelyből a felület kiolvassa a felhasználónak kínált opciókat. A scripts.json-t ne frissítsd, csak a scriptel azonos nevű json filet hozd létre.
 
 ## Top-szintű mezők minden listatagban
 - `enviroment`: A szkript futtatásához szükséges környezet/conda env neve. A launcher ennek megfelelően lép be a környezetbe.
