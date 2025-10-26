@@ -42,6 +42,17 @@ except ImportError as exc:
     print("Aktiváld a Canary‑képes conda/env környezetet (nemo_toolkit, torch, librosa, soundfile).")
     sys.exit(1)
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "config.json").is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
 SUPPORTED_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 DEFAULT_MODEL_NAME = "nvidia/canary-1b-v2"
 DEFAULT_BATCH_SIZE = 4
@@ -57,7 +68,7 @@ SAMPLE_RATE = 16000
 def load_config_and_get_paths(project_name: str) -> str:
     """Config.json alapú projekt feldolgozási útvonal kiválasztása."""
     try:
-        project_root = Path(__file__).resolve().parent.parent.parent
+        project_root = get_project_root()
         config_path = project_root / "config.json"
 
         if not config_path.is_file():

@@ -44,6 +44,17 @@ except ImportError as e:
     print("Kérlek, bizonyosodj meg róla, hogy a 'nemo' conda környezet aktív és a szükséges csomagok telepítve vannak.")
     exit(1)
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "config.json").is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
 SUPPORTED_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
 SAMPLE_RATE = 16000
 DEFAULT_CHUNK_S = 30
@@ -312,8 +323,7 @@ def process_project_directory(directory_path: str, auto_chunk: bool, fixed_chunk
 def load_config_and_get_paths(project_name: str):
     """Betölti a config.json-t és visszaadja a projekt feldolgozandó mappájának útvonalát."""
     try:
-        # A szkript a scripts/Nvidia_asr_eng/ mappában van, a config a gyökérben
-        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        project_root = get_project_root()
         config_path = project_root / "config.json"
 
         if not config_path.is_file():
@@ -328,7 +338,7 @@ def load_config_and_get_paths(project_name: str):
         processing_path = workdir / project_name / input_subdir
 
         if not processing_path.is_dir():
-             raise FileNotFoundError(f"A feldolgozandó mappa nem létezik: {processing_path}")
+            raise FileNotFoundError(f"A feldolgozandó mappa nem létezik: {processing_path}")
 
         print("Projekt beállítások betöltve:")
         print(f"  - Projekt név:     {project_name}")

@@ -13,6 +13,16 @@ import subprocess
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
+
+def get_project_root() -> Path:
+    """
+    Felkeresi a projekt gyökerét a config.json alapján.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "config.json").is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
 # Maximum number of retries for processing a single file
 MAX_RETRIES = 3
 # Timeout in seconds
@@ -283,7 +293,7 @@ def transcribe_directory(directory, gpu_ids, hf_token, language_code, args):
 def load_config_and_get_paths(project_name: str) -> str:
     """Betölti a config.json-t, és visszaadja a projekt feldolgozandó mappájának elérési útját."""
     try:
-        project_root = Path(__file__).resolve().parent.parent.parent
+        project_root = get_project_root()
         config_path = project_root / "config.json"
         if not config_path.is_file():
             raise FileNotFoundError(f"A 'config.json' nem található a projekt gyökerében: {project_root}")
