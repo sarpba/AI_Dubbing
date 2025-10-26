@@ -1,7 +1,7 @@
 # pitch_analizer – használati útmutató
 
 **Futtatási környezet:** `sync`  
-**Belépési pont:** `pitch_analizer.py`
+**Belépési pont:** `AV/Pitch_analizer/pitch_analizer.py`
 
 A szkript a narrátor referencia audió medián hangmagasságát hasonlítja össze a projekt `translated_splits` mappájában található kimeneti fájlokkal. Az eltérést hertzben méri, és jelzi, ha bármelyik szegmens túllépi az engedélyezett toleranciát.
 
