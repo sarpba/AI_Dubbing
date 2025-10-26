@@ -503,7 +503,17 @@ def save_failed_attempt(
             with open(info_json_path, "r", encoding="utf-8") as fh:
                 info = json.load(fh)
 
-        attempt_filename = f"{filename_stem}_attempt_{attempt_num}_dist_{distance}.wav"
+        filename_suffix = f"_dist_{distance}"
+        pitch_diff_value: Optional[float] = None
+        if failure_type == "pitch" and extra_metadata:
+            candidate = extra_metadata.get("pitch_diff_hz") or extra_metadata.get("pitch_diff")
+            if isinstance(candidate, (int, float)) and math.isfinite(candidate):
+                pitch_diff_value = float(candidate)
+                filename_suffix = f"_pitch_{pitch_diff_value:.2f}Hz"
+            else:
+                filename_suffix = "_pitch_unknown"
+
+        attempt_filename = f"{filename_stem}_attempt_{attempt_num}{filename_suffix}.wav"
         shutil.copy(temp_gen_path, debug_segment_dir / attempt_filename)
 
         if reference_audio_path and os.path.exists(reference_audio_path):
@@ -526,6 +536,8 @@ def save_failed_attempt(
             }
             if extra_metadata:
                 failure_entry.update(extra_metadata)
+            if pitch_diff_value is not None:
+                failure_entry.setdefault("pitch_diff_hz", pitch_diff_value)
             failures.append(failure_entry)
         info["last_update"] = datetime.datetime.utcnow().isoformat()
 
@@ -1195,7 +1207,7 @@ def process_segment(
                     if args.save_failures:
                         diff_value = pitch_diff if math.isfinite(pitch_diff) else -1.0
                         extra_meta = {
-                            "pitch_diff": pitch_diff if math.isfinite(pitch_diff) else None,
+                            "pitch_diff_hz": pitch_diff if math.isfinite(pitch_diff) else None,
                             "pitch_tolerance": args.pitch_tolerance,
                             "reference_pitch": reference_pitch_summary.median_hz,
                             "generated_pitch": gen_pitch_summary.median_hz if gen_pitch_summary else None,

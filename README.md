@@ -1,6 +1,10 @@
 
 # AI Dubbing
 
+<p align="center">
+  <img src="static/logo.png" alt="AI Dubbing logo" width="240">
+</p>
+
 ## Áttekintés (HU)
 Az AI Dubbing egy eszközkészlet videók és hanganyagok többnyelvű szinkronizálásához. A folyamat WhisperX-alapú átiratozást, opcionális beszélőszétválasztást és többféle TTS modellt kombinál a végső kimenet előállításához.
 
@@ -48,4 +52,3 @@ conda activate sync
 cd AI_Dubbing
 python main_app.py
 ```
-

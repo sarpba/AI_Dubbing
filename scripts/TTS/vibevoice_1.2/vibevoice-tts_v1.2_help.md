@@ -30,7 +30,7 @@
 - `tolerance_factor` (`--tolerance_factor`, option, alapértelmezés: `1.0`) és `min_tolerance` (`--min_tolerance`, option, alapértelmezés: `2`): A Levenshtein-távolság megengedett mértékét szabályozzák (szó-mennyiség * faktor, minimum érték).
 - `whisper_model` (`--whisper_model`, option, alapértelmezés: `openai/whisper-large-v3`) és `beam_size` (`--beam_size`, option, alapértelmezés: `5`): A visszaellenőrzéshez használt ASR modell és beamszélesség.
 - `seed` (`--seed`, option, alapértelmezés: `-1`): Véletlenmag. `-1` esetén véletlenszerűen indul, Whisperrel visszaellenőriz, és szükség esetén újra próbálkozik. Pozitív értéknél determinisztikus (visszaellenőrzés nélkül).
-- `save_failures` (`--save_failures`, flag, alapértelmezés: `false`): Sikertelen kimenetek és metaadatok mentése a `failed_generations` mappába.
+- `save_failures` (`--save_failures`, flag, alapértelmezés: `false`): Sikertelen kimenetek és metaadatok mentése a `failed_generations` mappába; pitch ellenőrzésnél a mentett wav fájl neve tartalmazza az eltérés nagyságát.
 - `keep_best_over_tolerance` (`--keep_best_over_tolerance`, flag, alapértelmezés: `false`): Ha nincs tolerancián belüli találat, a legjobb (legkisebb távolságú) próbálkozást akkor is megtartja.
 - `max_segments` (`--max_segments`, option, alapértelmezés: nincs): Debug célra limitálja a feldolgozott szegmensek számát.
 - `max_workers` (`--max_workers`, option, alapértelmezés: automatikus): Több GPU esetén limitálja a párhuzamos workerek számát.
