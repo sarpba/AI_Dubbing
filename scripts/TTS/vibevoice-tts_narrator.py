@@ -79,8 +79,9 @@ WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
 
 def resolve_narrator_directory(narrator_argument: str) -> Path:
     """
-    Feloldja a narrátor könyvtár elérési útját. Először az abszolút útvonalat használja,
-    majd ha relatív, a jelenlegi munkakönyvtárhoz, végül a projekt gyökeréhez viszonyítva próbálja értelmezni.
+    Feloldja a narrátor referencia könyvtár elérési útját.
+    Abszolút útvonal esetén azt használja, különben először a jelenlegi munkakönyvtárhoz,
+    végül a projekt gyökeréhez viszonyítva oldja fel.
     """
     candidate = Path(narrator_argument).expanduser()
     if candidate.is_absolute():
@@ -101,26 +102,24 @@ def prepare_narrator_reference_sample(
     target_sample_rate: int,
 ) -> Tuple[str, int, float, Path]:
     """
-    Betölti és előkészíti a narrátor referencia audiót. Az eredményt ideiglenes wav fájlba írja ki,
-    amely megosztható a munkafolyamatban futó workerekkel.
+    Betölti, előfeldolgozza és ideiglenes fájlba menti a narrátor referencia audiót.
+    A mappában pontosan egy .wav fájlt várunk, amit opcionálisan EQ-val, normalizálással
+    és újramintavételezéssel dolgozunk fel.
     """
     if not narrator_dir.is_dir():
-        raise FileNotFoundError(f"A narrátor könyvtár nem található: {narrator_dir}")
+        raise FileNotFoundError(f"A megadott narrátor könyvtár nem található: {narrator_dir}")
 
     wav_files = sorted(path for path in narrator_dir.iterdir() if path.suffix.lower() == ".wav")
     if not wav_files:
         raise FileNotFoundError(f"Nem található .wav fájl a narrátor könyvtárban: {narrator_dir}")
     if len(wav_files) > 1:
         raise RuntimeError(
-            f"A narrátor könyvtár pontosan 1 db .wav fájlt tartalmazhat, jelenleg {len(wav_files)} található: {narrator_dir}"
+            f"A narrátor könyvtár pontosan 1 db .wav fájlt tartalmazhat. Talált fájlok száma: {len(wav_files)} | {narrator_dir}"
         )
 
     source_wav = wav_files[0]
     audio_data, sample_rate = sf.read(source_wav)
-    if audio_data.ndim > 1:
-        audio_data = audio_data.astype(np.float32, copy=False)
-    else:
-        audio_data = audio_data.astype(np.float32, copy=False)
+    audio_data = audio_data.astype(np.float32, copy=False)
 
     processed_audio = apply_eq_curve_to_audio(audio_data, sample_rate, eq_config)
     if normalize:
@@ -129,7 +128,6 @@ def prepare_narrator_reference_sample(
         processed_audio = resample_audio(processed_audio, sample_rate, target_sample_rate)
         sample_rate = target_sample_rate
 
-    processed_audio = processed_audio.astype(np.float32, copy=False)
     narrator_tmp = tempfile.NamedTemporaryFile(prefix="vibevoice_narrator_", suffix=".wav", delete=False)
     narrator_tmp_path = narrator_tmp.name
     narrator_tmp.close()
@@ -137,6 +135,18 @@ def prepare_narrator_reference_sample(
 
     duration_seconds = len(processed_audio) / sample_rate if sample_rate else 0.0
     return narrator_tmp_path, sample_rate, duration_seconds, source_wav
+
+
+def extract_cuda_index(device: str) -> int:
+    if not device:
+        return 0
+    if ":" in device:
+        _, _, index_str = device.partition(":")
+        try:
+            return max(0, int(index_str))
+        except ValueError:
+            logger.warning("Érvénytelen CUDA eszköz megadás: %s -> 0-ra váltunk.", device)
+    return 0
 
 
 def set_random_seeds(seed: int, device: str) -> None:
@@ -389,6 +399,7 @@ def save_failed_attempt(
     temp_gen_path: str,
     original_text: str,
     transcribed_text: str,
+    reference_audio_path: Optional[str],
 ) -> None:
     try:
         debug_segment_dir = Path(args.failed_generations_dir) / filename_stem
@@ -402,6 +413,13 @@ def save_failed_attempt(
 
         attempt_filename = f"{filename_stem}_attempt_{attempt_num}_dist_{distance}.wav"
         shutil.copy(temp_gen_path, debug_segment_dir / attempt_filename)
+
+        if reference_audio_path and os.path.exists(reference_audio_path):
+            reference_filename = "reference.wav"
+            reference_target = debug_segment_dir / reference_filename
+            if not reference_target.exists():
+                shutil.copy(reference_audio_path, reference_target)
+            info["reference_audio_filename"] = reference_filename
 
         failures = info.setdefault("failures", [])
         if isinstance(failures, list):
@@ -860,7 +878,6 @@ def process_segment(
     formatted_text = ensure_script_format(gen_text, args.speaker_name)
     if not formatted_text:
         return False, "Üres generálandó szöveg."
-
     inputs = prepare_inputs(
         processor=processor,
         text=formatted_text,
@@ -954,6 +971,7 @@ def process_segment(
                     temp_gen_path=temp_gen_path,
                     original_text=gen_text,
                     transcribed_text=converted_transcribed,
+                    reference_audio_path=narrator_sample_path,
                 )
 
             if distance < best_distance:
@@ -1076,11 +1094,18 @@ def gpu_worker(
     stats,
     failed_segments_info,
 ) -> None:
-    cuda_id = worker_idx
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_id)
-    torch.cuda.set_device(0)
-    device = "cuda:0"
-    worker_label = f"GPU-{cuda_id}"
+    available_gpus = torch.cuda.device_count()
+    if worker_idx >= available_gpus:
+        logger.error(
+            "GPU worker index (%s) nagyobb, mint az elérhető GPU-k száma (%s). A worker leáll.",
+            worker_idx,
+            available_gpus,
+        )
+        return
+
+    torch.cuda.set_device(worker_idx)
+    device = f"cuda:{worker_idx}"
+    worker_label = f"GPU-{worker_idx}"
     run_segments_on_device(
         device=device,
         worker_label=worker_label,
@@ -1165,11 +1190,11 @@ def process_project(args: argparse.Namespace) -> None:
     stats_summary: Dict[str, int] = {"successful": 0, "failed": 0, "total": total_segments}
     failed_segments: List[Dict[str, str]] = []
 
-    if total_segments == 0:
-        logger.warning("Nincs feldolgozandó szegmens a projektben.")
-        return
-
     try:
+        if total_segments == 0:
+            logger.warning("Nincs feldolgozandó szegmens a projektben.")
+            return
+
         if resolved_device.startswith("cuda") and torch.cuda.is_available():
             num_gpus = torch.cuda.device_count()
             max_workers = args.max_workers if args.max_workers is not None else num_gpus
@@ -1199,10 +1224,20 @@ def process_project(args: argparse.Namespace) -> None:
                     stats_summary = dict(stats_proxy)
                     failed_segments = list(failed_proxy)
             else:
-                torch.cuda.set_device(0)
+                target_idx = extract_cuda_index(resolved_device)
+                available_gpus = torch.cuda.device_count()
+                if target_idx >= available_gpus:
+                    logger.warning(
+                        "A kért CUDA index (%s) nem elérhető (%s GPU található). 0-ra váltunk.",
+                        target_idx,
+                        available_gpus,
+                    )
+                    target_idx = 0
+                torch.cuda.set_device(target_idx)
+                target_device = f"cuda:{target_idx}"
                 run_segments_on_device(
-                    device="cuda:0",
-                    worker_label="GPU-0",
+                    device=target_device,
+                    worker_label=f"GPU-{target_idx}",
                     args=args,
                     segments=segments,
                     narrator_sample_path=narrator_sample_path,

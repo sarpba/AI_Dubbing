@@ -86,20 +86,37 @@
       }
     },
     {
-      "script": "AV/normalise_and_cut_json_easy_v1.1.py",
+      "script": "TTS/vibevoice-tts_narrator.py",
       "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "keep_best_over_tolerance": true,
+        "max_retries": "1",
+        "model_path": "aoi-ot/VibeVoice-Large",
+        "narrator": "/home/sarpba/AI_Dubbing/scripts/TTS/narrator",
+        "norm": "eng",
+        "seed": "42"
+      }
+    },
+    {
+      "script": "AV/normalise_and_cut_json_easy_v1.1.py",
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
-      "script": "AV/merge_chunks_with_background_easy.py",
-      "enabled": true,
+      "script": "AV/merge_chunks_with_background_beta.py",
+      "enabled": false,
       "halt_on_fail": true,
-      "params": {}
+      "params": {
+        "background_volume": "1",
+        "max_speedup": "0",
+        "narrator": true
+      }
     },
     {
       "script": "AV/merge_to_video_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "language": "hun"
