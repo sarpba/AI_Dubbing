@@ -1,7 +1,7 @@
 # vibevoice-tts_narrátor – konfigurációs útmutató
 
 **Futtatási környezet:** `vibevoice`  
-**Belépési pont:** `TTS/vibevoice-tts_narrátor.py`
+**Belépési pont:** `TTS/vibevoice-tts_narrator.py`
 
 A szkript a standard `vibevoice-tts` folyamatot bővíti azzal, hogy a narrátor hangmintát nem a fordított sávokból vágja ki, hanem egy külön megadott könyvtárban található, egyetlen WAV fájlból tölti be. A betöltött referencia hangra ugyanazokat az EQ, normalizálási és újramintavételezési lépéseket alkalmazza, majd minden szegmenshez ugyanazt a mintát használja a VibeVoice TTS modell betanításához.
 

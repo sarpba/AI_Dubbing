@@ -1,6 +1,6 @@
 {
   "enviroment": "vibevoice",
-  "script": "TTS/vibevoice-tts_narrátor.py",
+  "script": "TTS/vibevoice-tts_narrator.py",
   "description": "A VibeVoice modellt használja a fordított szegmensek szintetizálására, miközben a narrátor hangját egy külön könyvtárban lévő, egyetlen WAV fájlból veszi.",
   "required": [
     {
