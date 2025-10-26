@@ -835,12 +835,16 @@ def convert_to_lowercase(text):
     """Az egész szöveg kisbetűssé alakítása"""
     return text.lower()
 
-def normalize(text):
+def _normalize_pipeline(text, *, include_changes_new=True, enable_phoneme_updates=True):
     # A szöveg normalizálása a megadott lépésekkel
     force_changes = load_force_changes('force_changes.csv')
     force_changes_end = load_force_changes_end('force_changes_end.csv')
-    changes = load_changes()
-    original_tokens_lower = {token.lower() for token in WORD_TOKEN_PATTERN.findall(text)}
+    changes_source = ("changes.csv", "changes_new.csv") if include_changes_new else "changes.csv"
+    changes = load_changes(changes_source)
+    original_tokens_lower = (
+        {token.lower() for token in WORD_TOKEN_PATTERN.findall(text)}
+        if enable_phoneme_updates else set()
+    )
 
     text = replace_roman_numerals(text)  # Római számok arabra (pl. IV. -> 4.)
     text = replace_times(text)  # Időpontok kezelése előbb, hogy a "-kor" még változatlan legyen
@@ -852,14 +856,18 @@ def normalize(text):
     text = replace_ordinals(text) # Sorszámok (pl. 4. -> negyedik)
     text = replace_numbers(text) # Számok szöveggé
     
-    current_tokens = WORD_TOKEN_PATTERN.findall(text)
-    skip_for_new_changes = {token.lower() for token in current_tokens if token.lower() not in original_tokens_lower}
-    new_changes = collect_new_changes(text, changes, skip_words=skip_for_new_changes)
-    if new_changes:
-        append_changes_to_file(new_changes)
-        new_simple_changes = {key: value for key, (value, _) in new_changes.items()}
-        changes.update(new_simple_changes)
-        text = apply_changes(text, new_simple_changes)
+    if enable_phoneme_updates:
+        current_tokens = WORD_TOKEN_PATTERN.findall(text)
+        skip_for_new_changes = {
+            token.lower() for token in current_tokens
+            if token.lower() not in original_tokens_lower
+        }
+        new_changes = collect_new_changes(text, changes, skip_words=skip_for_new_changes)
+        if new_changes:
+            append_changes_to_file(new_changes)
+            new_simple_changes = {key: value for key, (value, _) in new_changes.items()}
+            changes.update(new_simple_changes)
+            text = apply_changes(text, new_simple_changes)
         
     text = remove_unwanted_characters(text) 
     # Kivételek kezelése kötőjelekkel
@@ -884,5 +892,11 @@ def normalize(text):
     text = apply_force_changes_end(text, force_changes_end)
 
     return text
+
+def normalize_helper(text):
+    return _normalize_pipeline(text, include_changes_new=True, enable_phoneme_updates=True)
+
+def normalize(text):
+    return _normalize_pipeline(text, include_changes_new=False, enable_phoneme_updates=False)
 
 # Tesztkód eltávolítva, átkerült a normalizer_test.py fájlba

@@ -42,10 +42,6 @@
       "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "chunk_size": "5",
-        "debug": false,
-        "device": "cuda",
-        "keep_full_audio": false,
         "non_speech_silence": true
       }
     },
@@ -78,35 +74,14 @@
       "enabled": true
     },
     {
-      "script": "TTS/f5_tts_easy_EQ.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "debug": false,
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "keep_best_over_tolerance": true,
-        "max_retries": "2",
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "norm": "hun",
-        "normalize_ref_audio": false,
-        "phonetic_ref": false,
-        "remove_silence": false,
-        "save_failures": false
-      }
-    },
-    {
-      "script": "TTS/vibevoice-tts.py",
+      "script": "TTS/vibevoice-tts_v1.1.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "debug": false,
-        "disable_prefill": false,
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "keep_best_over_tolerance": false,
-        "model_path": "/home/sarpba/VibeVoice/merged",
         "norm": "hun",
-        "normalize_ref_audio": false,
-        "overwrite": false,
+        "model_path": "/home/sarpba/VibeVoice/merged_large_f32",
+        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
+        "max_retries": "2",
         "save_failures": true
       }
     },

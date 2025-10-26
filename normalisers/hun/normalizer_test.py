@@ -1,4 +1,18 @@
-from normaliser import normalize
+from normaliser import normalize, normalize_helper
+
+FUNCTIONS = (
+    ("normalize_helper", normalize_helper),
+    ("normalize", normalize),
+)
+
+
+def print_results(label, original_text):
+    print(f"Teszt: {label}")
+    print(f"  Eredeti: {original_text}")
+    for func_name, func in FUNCTIONS:
+        normalized = func(original_text)
+        print(f"  {func_name}: {normalized}")
+    print()
 
 # Tesztesetek
 test_cases = {
@@ -37,52 +51,43 @@ def run_tests():
         "Dupla  szóközök  itt  vannak. "
         "Vége."
     )
-    normalized_full_text = normalize(full_sample_text)
     print(f"Eredeti: {full_sample_text}")
-    print(f"Normalizált: {normalized_full_text}\n")
+    for func_name, func in FUNCTIONS:
+        print(f"{func_name}: {func(full_sample_text)}")
+    print()
 
     print("--- Egyedi Tesztesetek ---")
     for desc, text_to_normalize in test_cases.items():
-        print(f"Teszt: {desc}")
-        print(f"  Eredeti: {text_to_normalize}")
-        normalized_text = normalize(text_to_normalize)
-        print(f"  Normalizált: {normalized_text}\n")
+        print_results(desc, text_to_normalize)
 
     # Speciális tesztek
     print("--- Alfanumerikus Speciális Teszt ---")
     alphanum_test_text = "A1, B2B, C3C3, D4D4D, E5-F6, G7H8I9, J10K"
-    print(f"  Eredeti: {alphanum_test_text}")
-    print(f"  Normalizált (teljes): {normalize(alphanum_test_text)}")
+    print_results("Alfanumerikus Speciális", alphanum_test_text)
     
     print("--- Szöveg elejének ellenőrzése ---")
     prefix_test = "   Ez egy szöveg szóközökkel."
-    print(f"  Eredeti: {prefix_test}")
-    print(f"  Normalizált: {normalize(prefix_test)}")
+    print_results("Szöveg eleje", prefix_test)
     
     print("--- Dátum Speciális Teszt ---")
     date_test_text = "2024. jan. 1. és 2024. január 1. valamint 2024. I. 1."
-    print(f"  Eredeti: {date_test_text}")
-    print(f"  Normalizált (teljes): {normalize(date_test_text)}")
+    print_results("Dátum Speciális", date_test_text)
     
     print("--- Nem átalakuló Római Számok Teszt ---")
     roman_test_text = "XIV Lajos és IV Béla uralkodott. A film címe Mission Impossible III volt."
-    print(f"  Eredeti: {roman_test_text}")
-    print(f"  Normalizált (teljes): {normalize(roman_test_text)}")
+    print_results("Nem átalakuló Római Számok", roman_test_text)
     
     print("--- Időpont Speciális Teszt ---")
     time_test_text = "Találkozó 10:00-kor. Indulás 9:15. Érkezés 11:45:30."
-    print(f"  Eredeti: {time_test_text}")
-    print(f"  Normalizált (teljes): {normalize(time_test_text)}")
+    print_results("Időpont Speciális", time_test_text)
 
     print("--- Sorszámok és Számok Teszt ---")
     num_ord_test_text = "A 3. fejezet 12 oldalas. 100 emberből a 10. nyert."
-    print(f"  Eredeti: {num_ord_test_text}")
-    print(f"  Normalizált (teljes): {normalize(num_ord_test_text)}")
+    print_results("Sorszámok és Számok", num_ord_test_text)
     
     print("--- Force Changes (szó közben) Teszt ---")
     force_test_text = "Ez egy tw%eet, showly." # % -> százalék, w -> v, ly -> j
-    print(f"  Eredeti: {force_test_text}")
-    print(f"  Normalizált (teljes): {normalize(force_test_text)}")
+    print_results("Force Changes (szó közben)", force_test_text)
 
 if __name__ == "__main__":
     run_tests()
