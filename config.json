@@ -33,19 +33,19 @@
   "LAST_WORKFLOW": [
     {
       "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
@@ -57,48 +57,48 @@
     },
     {
       "script": "TRANSLATE/chatgpt_with_srt/translate_chatgpt_srt_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "type": "widget",
       "widget": "reviewContinue",
-      "enabled": true
+      "enabled": false
     },
     {
       "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "norm": "hun",
-        "model_path": "/home/sarpba/AI_Dubbing/TTS/VibeVoice-large-hun",
         "enable_pitch_check": true,
-        "save_failures": true,
-        "max_retries": "2"
+        "max_retries": "2",
+        "model_path": "/home/sarpba/AI_Dubbing/TTS/VibeVoice-large-hun",
+        "norm": "hun",
+        "save_failures": true
       }
     },
     {
       "script": "AUDIO-VIDEO/normalize_and_cut_tts_files_old_version/normalise_and_cut_json_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/merge_chunks_with_background/merge_chunks_with_background_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/merge_dub_to_video/merge_to_video_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "language": "hun"

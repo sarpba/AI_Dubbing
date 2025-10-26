@@ -313,7 +313,7 @@ def load_config_and_get_paths(project_name: str):
     """Betölti a config.json-t és visszaadja a projekt feldolgozandó mappájának útvonalát."""
     try:
         # A szkript a scripts/Nvidia_asr_eng/ mappában van, a config a gyökérben
-        project_root = Path(__file__).resolve().parent.parent.parent
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
         config_path = project_root / "config.json"
 
         if not config_path.is_file():
