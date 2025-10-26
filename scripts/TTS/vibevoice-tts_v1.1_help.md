@@ -3,7 +3,7 @@
 **Futtatási környezet:** `vibevoice`  
 **Belépési pont:** `TTS/vibevoice-tts_v1.1.py`
 
-A szkript a VibeVoice TTS modellt és opcionálisan LoRA adaptereket használ, hogy a projekt `translated_splits` kimenetét új magyar hangra szintetizálja. A referencia sávot szegmensekre bontja, EQ-t és normalizálást alkalmazhat, Whisper-alapú visszaellenőrzést végez Levenshtein-távolság alapján, és több GPU-t is képes párhuzamosan kihasználni. A `v1.1` frissítés dedikáltan hozzárendeli a workereket az egyes GPU-khoz, így stabilabb a memóriaeloszlás többkártyás futtatásnál.
+ A szkript a VibeVoice TTS modellt és opcionálisan LoRA adaptereket használ, hogy a projekt `translated_splits` kimenetét új magyar hangra szintetizálja. A referencia sávot szegmensekre bontja, EQ-t és normalizálást alkalmazhat, Whisper-alapú visszaellenőrzést végez Levenshtein-távolság alapján, és több GPU-t is képes párhuzamosan kihasználni. A `v1.1` frissítés dedikáltan hozzárendeli a workereket az egyes GPU-khoz, így stabilabb a memóriaeloszlás többkártyás futtatásnál, és a sikertelen próbálkozások mellé elmenti a használt referencia mintát is.
 
 ## Kötelező beállítások
 - `project_name` (pozícionális, alapértelmezés: nincs): A `workdir` alatti projekt könyvtár neve, amelynek szegmenseit feldolgozzuk.

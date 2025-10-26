@@ -78,10 +78,10 @@
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "norm": "hun",
-        "model_path": "/home/sarpba/VibeVoice/merged_large_f32",
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
         "max_retries": "2",
+        "model_path": "/home/sarpba/VibeVoice/merged_large_f32",
+        "norm": "hun",
         "save_failures": true
       }
     },

@@ -339,6 +339,7 @@ def save_failed_attempt(
     temp_gen_path: str,
     original_text: str,
     transcribed_text: str,
+    reference_audio_path: Optional[str],
 ) -> None:
     try:
         debug_segment_dir = Path(args.failed_generations_dir) / filename_stem
@@ -352,6 +353,13 @@ def save_failed_attempt(
 
         attempt_filename = f"{filename_stem}_attempt_{attempt_num}_dist_{distance}.wav"
         shutil.copy(temp_gen_path, debug_segment_dir / attempt_filename)
+
+        if reference_audio_path and os.path.exists(reference_audio_path):
+            reference_filename = "reference.wav"
+            reference_target = debug_segment_dir / reference_filename
+            if not reference_target.exists():
+                shutil.copy(reference_audio_path, reference_target)
+            info["reference_audio_filename"] = reference_filename
 
         failures = info.setdefault("failures", [])
         if isinstance(failures, list):
@@ -921,6 +929,7 @@ def process_segment(
                         temp_gen_path=temp_gen_path,
                         original_text=gen_text,
                         transcribed_text=converted_transcribed,
+                        reference_audio_path=temp_ref_path,
                     )
 
                 if distance < best_distance:
