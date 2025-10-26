@@ -28,13 +28,13 @@ AI Dubbing is a toolkit for multilingual dubbing of videos and audio. The pipeli
 3. These guides assume the repository is available under `AI_Dubbing` and that Anaconda is already installed on your system.
 
 ## Modell- és API-előkészítés (HU)
-- Frissítsd a `whisperx/alignment.py` fájlt, és állíts be pontosabb alapértelmezett igazítási modelleket, hogy javuljon az időzítés pontossága.
+- Frissítsd a `/anaconda3/envs/whisperx/lib/python3.10/site-packages/whisperx/alignment.py` fájlt, és állíts be pontosabb alapértelmezett igazítási modelleket, hogy javuljon az időzítés pontossága.
 - Másold a saját `model.pt`, `vocab.txt` és `model_conf.json` fájljaidat a megfelelő `TTS/XXX` alkönyvtárba; sablonfájlokat a `TTS` mappában találsz.
 - (Opcionális) Hozz létre Hugging Face fiókot, fogadd el a Pyannote Speaker Diarization 3.1 licencét, majd generálj és tárolj biztonságosan egy olvasási API-kulcsot: https://huggingface.co/pyannote/speaker-diarization-3.1
 - Regisztrálj DeepL fiókot, aktiváld az ingyenes API-előfizetést, és készíts API-kulcsot (kb. 500 000 karakter/hó, ~10–20 óra videó).
 
 ## Model and API Preparation (EN)
-- Update `whisperx/alignment.py` to point to more accurate default alignment models; this improves timeline precision during transcription.
+- Update `/anaconda3/envs/whisperx/lib/python3.10/site-packages/whisperx/alignment.py` to point to more accurate default alignment models; this improves timeline precision during transcription.
 - Copy your `model.pt`, `vocab.txt`, and `model_conf.json` into the appropriate `TTS/XXX` subdirectory. Configuration templates are available in the `TTS` folder.
 - (Optional) Create a Hugging Face account, accept the Pyannote Speaker Diarization 3.1 license, and securely store a read-only API token: https://huggingface.co/pyannote/speaker-diarization-3.1
 - Register for a DeepL account, enable the free API tier, and generate an API key (500,000 characters/month, roughly 10–20 hours of video).
