@@ -858,7 +858,7 @@ def process_segment(
             return False, f"Normalizálási hiba: {exc}"
 
     formatted_text = ensure_script_format(gen_text, args.speaker_name)
-   if not formatted_text:
+    if not formatted_text:
         return False, "Üres generálandó szöveg."
 
     inputs = prepare_inputs(
@@ -1165,69 +1165,68 @@ def process_project(args: argparse.Namespace) -> None:
     stats_summary: Dict[str, int] = {"successful": 0, "failed": 0, "total": total_segments}
     failed_segments: List[Dict[str, str]] = []
 
-    input_wav_path_str = str(input_wav_path)
-
     if total_segments == 0:
         logger.warning("Nincs feldolgozandó szegmens a projektben.")
         return
 
-    if resolved_device.startswith("cuda") and torch.cuda.is_available():
-        num_gpus = torch.cuda.device_count()
-        max_workers = args.max_workers if args.max_workers is not None else num_gpus
-        num_workers = max(1, min(num_gpus, max_workers))
+    try:
+        if resolved_device.startswith("cuda") and torch.cuda.is_available():
+            num_gpus = torch.cuda.device_count()
+            max_workers = args.max_workers if args.max_workers is not None else num_gpus
+            num_workers = max(1, min(num_gpus, max_workers))
 
-        if num_workers > 1:
-            logger.info("Több-GPU feldolgozás %s workerrel.", num_workers)
-            chunks: List[List[Dict[str, object]]] = [[] for _ in range(num_workers)]
-            for idx, segment in enumerate(segments):
-                chunks[idx % num_workers].append(segment)
+            if num_workers > 1:
+                logger.info("Több-GPU feldolgozás %s workerrel.", num_workers)
+                chunks: List[List[Dict[str, object]]] = [[] for _ in range(num_workers)]
+                for idx, segment in enumerate(segments):
+                    chunks[idx % num_workers].append(segment)
 
-            with mp.Manager() as manager:
-                stats_proxy = manager.dict({"successful": 0, "failed": 0, "total": total_segments})
-                failed_proxy = manager.list()
-                mp.spawn(
-                    gpu_worker,
-                    nprocs=num_workers,
-                    args=(
-                        args,
-                        chunks,
-                        input_wav_path_str,
-                        eq_config,
-                        stats_proxy,
-                        failed_proxy,
-                    ),
-                    join=True,
+                with mp.Manager() as manager:
+                    stats_proxy = manager.dict({"successful": 0, "failed": 0, "total": total_segments})
+                    failed_proxy = manager.list()
+                    mp.spawn(
+                        gpu_worker,
+                        nprocs=num_workers,
+                        args=(
+                            args,
+                            chunks,
+                            narrator_sample_path,
+                            stats_proxy,
+                            failed_proxy,
+                        ),
+                        join=True,
+                    )
+                    stats_summary = dict(stats_proxy)
+                    failed_segments = list(failed_proxy)
+            else:
+                torch.cuda.set_device(0)
+                run_segments_on_device(
+                    device="cuda:0",
+                    worker_label="GPU-0",
+                    args=args,
+                    segments=segments,
+                    narrator_sample_path=narrator_sample_path,
+                    stats=stats_summary,
+                    failed_segments_info=failed_segments,
+                    progress_position=0,
                 )
-                stats_summary = dict(stats_proxy)
-                failed_segments = list(failed_proxy)
         else:
-            torch.cuda.set_device(0)
+            worker_label = resolved_device.upper()
             run_segments_on_device(
-                device="cuda:0",
-                worker_label="GPU-0",
+                device=resolved_device,
+                worker_label=worker_label,
                 args=args,
                 segments=segments,
-                input_wav_path_str=input_wav_path_str,
-                eq_config=eq_config,
+                narrator_sample_path=narrator_sample_path,
                 stats=stats_summary,
                 failed_segments_info=failed_segments,
                 progress_position=0,
-                prefetched_audio=(audio_data, sample_rate),
             )
-    else:
-        worker_label = resolved_device.upper()
-        run_segments_on_device(
-            device=resolved_device,
-            worker_label=worker_label,
-            args=args,
-            segments=segments,
-            input_wav_path_str=input_wav_path_str,
-            eq_config=eq_config,
-            stats=stats_summary,
-            failed_segments_info=failed_segments,
-            progress_position=0,
-            prefetched_audio=(audio_data, sample_rate),
-        )
+    finally:
+        try:
+            os.remove(narrator_sample_path)
+        except OSError:
+            pass
 
     successful = int(stats_summary.get("successful", 0))
     failed = int(stats_summary.get("failed", 0))

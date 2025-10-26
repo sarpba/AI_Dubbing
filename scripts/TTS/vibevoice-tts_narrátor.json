@@ -1,0 +1,222 @@
+{
+  "enviroment": "vibevoice",
+  "script": "TTS/vibevoice-tts_narrátor.py",
+  "description": "A VibeVoice modellt használja a fordított szegmensek szintetizálására, miközben a narrátor hangját egy külön könyvtárban lévő, egyetlen WAV fájlból veszi.",
+  "required": [
+    {
+      "name": "project_name",
+      "type": "positional",
+      "default": null
+    },
+    {
+      "name": "norm",
+      "flags": [
+        "--norm"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "narrator",
+      "flags": [
+        "--narrator"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "model_path",
+      "flags": [
+        "--model_path"
+      ],
+      "type": "option",
+      "default": "microsoft/VibeVoice-1.5b"
+    },
+    {
+      "name": "model_dir",
+      "flags": [
+        "--model_dir"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "checkpoint_path",
+      "flags": [
+        "--checkpoint_path"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "device",
+      "flags": [
+        "--device"
+      ],
+      "type": "option",
+      "default": "auto"
+    },
+    {
+      "name": "cfg_scale",
+      "flags": [
+        "--cfg_scale"
+      ],
+      "type": "option",
+      "default": 1.3
+    },
+    {
+      "name": "disable_prefill",
+      "flags": [
+        "--disable_prefill"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "ddpm_steps",
+      "flags": [
+        "--ddpm_steps"
+      ],
+      "type": "option",
+      "default": 10
+    },
+    {
+      "name": "eq_config",
+      "flags": [
+        "--eq_config"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "normalize_ref_audio",
+      "flags": [
+        "--normalize_ref_audio"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "ref_audio_peak",
+      "flags": [
+        "--ref_audio_peak"
+      ],
+      "type": "option",
+      "default": 0.95
+    },
+    {
+      "name": "target_sample_rate",
+      "flags": [
+        "--target_sample_rate"
+      ],
+      "type": "option",
+      "default": 16000
+    },
+    {
+      "name": "speaker_name",
+      "flags": [
+        "--speaker_name"
+      ],
+      "type": "option",
+      "default": "Speaker 1"
+    },
+    {
+      "name": "max_retries",
+      "flags": [
+        "--max_retries"
+      ],
+      "type": "option",
+      "default": 5
+    },
+    {
+      "name": "tolerance_factor",
+      "flags": [
+        "--tolerance_factor"
+      ],
+      "type": "option",
+      "default": 1.0
+    },
+    {
+      "name": "min_tolerance",
+      "flags": [
+        "--min_tolerance"
+      ],
+      "type": "option",
+      "default": 2
+    },
+    {
+      "name": "whisper_model",
+      "flags": [
+        "--whisper_model"
+      ],
+      "type": "option",
+      "default": "openai/whisper-large-v3"
+    },
+    {
+      "name": "beam_size",
+      "flags": [
+        "--beam_size"
+      ],
+      "type": "option",
+      "default": 5
+    },
+    {
+      "name": "seed",
+      "flags": [
+        "--seed"
+      ],
+      "type": "option",
+      "default": -1
+    },
+    {
+      "name": "max_segments",
+      "flags": [
+        "--max_segments"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "overwrite",
+      "flags": [
+        "--overwrite"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "save_failures",
+      "flags": [
+        "--save_failures"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "keep_best_over_tolerance",
+      "flags": [
+        "--keep_best_over_tolerance"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "max_workers",
+      "flags": [
+        "--max_workers"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}
