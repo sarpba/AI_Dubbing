@@ -80,14 +80,14 @@
       "params": {
         "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
         "max_retries": "2",
-        "model_path": "/home/sarpba/VibeVoice/merged_large_f32",
+        "model_path": "/home/sarpba/VibeVoice/merged_large_3200_bf16",
         "norm": "hun",
         "save_failures": true
       }
     },
     {
       "script": "AV/normalise_and_cut_json_easy_v1.1.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },

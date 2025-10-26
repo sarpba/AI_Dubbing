@@ -290,7 +290,7 @@
         const SECRET_VALUE_PLACEHOLDER = '***';
         const AUDIO_EXTENSIONS = new Set({{ audio_extensions|list|sort|tojson }});
         const VIDEO_EXTENSIONS = new Set({{ video_extensions|list|sort|tojson }});
-        const JSON_EXTENSION = '.json';
+        const TEXT_PREVIEW_EXTENSIONS = new Set(['.json', '.txt', '.bak', '.log', '.srt']);
         let audioPreviewModal = null;
         let videoPreviewModal = null;
         let jsonPreviewModal = null;
@@ -517,33 +517,6 @@
 
                     const actions = document.createElement('div');
                     actions.className = 'file-browser-actions';
-
-                    if (AUDIO_EXTENSIONS.has(extension)) {
-                        const audioBtn = document.createElement('button');
-                        audioBtn.type = 'button';
-                        audioBtn.className = 'btn btn-sm btn-outline-secondary file-audio-play-btn';
-                        audioBtn.title = 'Audió lejátszása';
-                        audioBtn.textContent = 'Lejátszás';
-                        actions.append(audioBtn);
-                    }
-
-                    if (VIDEO_EXTENSIONS.has(extension)) {
-                        const videoBtn = document.createElement('button');
-                        videoBtn.type = 'button';
-                        videoBtn.className = 'btn btn-sm btn-outline-secondary file-video-play-btn';
-                        videoBtn.title = 'Videó lejátszása';
-                        videoBtn.textContent = 'Videó';
-                        actions.append(videoBtn);
-                    }
-
-                    if (extension === JSON_EXTENSION) {
-                        const jsonBtn = document.createElement('button');
-                        jsonBtn.type = 'button';
-                        jsonBtn.className = 'btn btn-sm btn-outline-secondary file-json-view-btn';
-                        jsonBtn.title = 'JSON megnyitása';
-                        jsonBtn.textContent = 'Megnyitás';
-                        actions.append(jsonBtn);
-                    }
 
                     const deleteBtn = document.createElement('button');
                     deleteBtn.type = 'button';
@@ -1024,45 +997,40 @@
                     return;
                 }
 
-                const audioButton = event.target.closest('.file-audio-play-btn');
-                if (audioButton && browserRoot.contains(audioButton)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const fileRow = audioButton.closest('.file-browser-item');
+                const fileLink = event.target.closest('.file-browser-link');
+                if (fileLink && browserRoot.contains(fileLink)) {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+                        return;
+                    }
+                    const fileRow = fileLink.closest('.file-browser-item');
                     if (!fileRow) {
                         return;
                     }
                     const fileName = fileRow.dataset.fileName || '';
                     const filePath = fileRow.dataset.filePath || '';
-                    showAudioPreview(fileName, buildWorkdirUrl(filePath));
-                    return;
-                }
+                    const extension = (fileRow.dataset.fileExtension || '').toLowerCase();
 
-                const videoButton = event.target.closest('.file-video-play-btn');
-                if (videoButton && browserRoot.contains(videoButton)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const fileRow = videoButton.closest('.file-browser-item');
-                    if (!fileRow) {
+                    if (AUDIO_EXTENSIONS.has(extension)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        showAudioPreview(fileName, buildWorkdirUrl(filePath));
                         return;
                     }
-                    const fileName = fileRow.dataset.fileName || '';
-                    const filePath = fileRow.dataset.filePath || '';
-                    showVideoPreview(fileName, buildWorkdirUrl(filePath));
-                    return;
-                }
 
-                const jsonButton = event.target.closest('.file-json-view-btn');
-                if (jsonButton && browserRoot.contains(jsonButton)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const fileRow = jsonButton.closest('.file-browser-item');
-                    if (!fileRow) {
+                    if (VIDEO_EXTENSIONS.has(extension)) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        showVideoPreview(fileName, buildWorkdirUrl(filePath));
                         return;
                     }
-                    const fileName = fileRow.dataset.fileName || '';
-                    const filePath = fileRow.dataset.filePath || '';
-                    await showJsonPreview(fileName, buildWorkdirUrl(filePath));
+
+                    if (extension === JSON_EXTENSION) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        await showJsonPreview(fileName, buildWorkdirUrl(filePath));
+                        return;
+                    }
+
                     return;
                 }
 
@@ -3482,15 +3450,6 @@
                                 {{ entry.name }}
                             </a>
                             <div class="file-browser-actions">
-                                {%- if extension in audio_extensions %}
-                                    <button type="button" class="btn btn-sm btn-outline-secondary file-audio-play-btn" title="Audió lejátszása">Lejátszás</button>
-                                {%- endif %}
-                                {%- if extension in video_extensions %}
-                                    <button type="button" class="btn btn-sm btn-outline-secondary file-video-play-btn" title="Videó lejátszása">Videó</button>
-                                {%- endif %}
-                                {%- if extension == '.json' %}
-                                    <button type="button" class="btn btn-sm btn-outline-secondary file-json-view-btn" title="JSON megnyitása">Megnyitás</button>
-                                {%- endif %}
                                 <button type="button" class="btn btn-sm btn-outline-danger file-delete-btn" title="Fájl törlése">Törlés</button>
                                 {%- if entry.enable_failed_move and extension == '.wav' %}
                                     <button type="button" class="btn btn-sm btn-outline-primary file-move-to-translated-btn" title="Áthelyezés a fordított szegmensek közé">Áthelyezés</button>
