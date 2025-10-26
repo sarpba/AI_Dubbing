@@ -1796,6 +1796,51 @@ def delete_project_file(project_name):
     return jsonify({'success': True, 'message': 'Fájl sikeresen törölve.'})
 
 
+@app.route('/api/project-directory/<project_name>', methods=['DELETE'])
+def clear_project_directory(project_name):
+    payload = request.get_json(silent=True) or {}
+    target_path_raw = (payload.get('path') or '').strip()
+    if not target_path_raw:
+        return jsonify({'success': False, 'error': 'Hiányzó könyvtár elérési útvonal.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    project_root = os.path.join(workdir_path, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+
+    target_abs_path = os.path.abspath(os.path.join(project_root_abs, target_path_raw))
+    if not is_subpath(target_abs_path, project_root_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen könyvtár elérési útvonal.'}), 400
+
+    if not os.path.exists(target_abs_path):
+        return jsonify({'success': False, 'error': 'A megadott könyvtár nem létezik.'}), 404
+
+    if not os.path.isdir(target_abs_path):
+        return jsonify({'success': False, 'error': 'Csak könyvtárak tartalma törölhető ezzel a művelettel.'}), 400
+
+    try:
+        with os.scandir(target_abs_path) as entries:
+            for entry in entries:
+                entry_path = entry.path
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        shutil.rmtree(entry_path)
+                    else:
+                        os.remove(entry_path)
+                except OSError as exc:
+                    logging.exception("Nem sikerült törölni a könyvtár tartalmát: %s: %s", entry_path, exc)
+                    return jsonify({'success': False, 'error': 'Nem sikerült törölni a könyvtár teljes tartalmát.'}), 500
+    except OSError as exc:
+        logging.exception("Nem sikerült beolvasni a könyvtár tartalmát: %s: %s", target_abs_path, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült elérni a könyvtárat.'}), 500
+
+    return jsonify({'success': True, 'message': 'A könyvtár tartalma sikeresen törölve.'})
+
+
 @app.route('/review/<project_name>')
 def review_project(project_name):
     project_dir = os.path.join('workdir', secure_filename(project_name))

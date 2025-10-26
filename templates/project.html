@@ -472,8 +472,6 @@
                     const label = document.createElement('span');
                     label.className = 'file-browser-label';
                     label.textContent = entry.name || '(névtelen mappa)';
-                    summary.append(label);
-
                     const actions = document.createElement('div');
                     actions.className = 'file-browser-actions';
                     const uploadBtn = document.createElement('button');
@@ -484,6 +482,15 @@
                     uploadBtn.textContent = 'Feltöltés';
                     actions.append(uploadBtn);
 
+                    const clearBtn = document.createElement('button');
+                    clearBtn.type = 'button';
+                    clearBtn.className = 'btn btn-sm btn-outline-danger file-directory-clear-btn';
+                    clearBtn.dataset.path = entry.path || '';
+                    clearBtn.title = 'Könyvtár tartalmának törlése';
+                    clearBtn.textContent = 'Tartalom törlése';
+                    actions.append(clearBtn);
+
+                    summary.append(label);
                     summary.append(actions);
                     details.append(summary);
 
@@ -721,6 +728,28 @@
             return result;
         }
 
+        async function clearProjectDirectory(directoryPath) {
+            const response = await fetch(`/api/project-directory/${encodeURIComponent(PROJECT_NAME)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ path: directoryPath })
+            });
+
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (error) {
+                // ignore
+            }
+
+            if (!response.ok || !result.success) {
+                throw new Error((result && result.error) || 'Nem sikerült törölni a könyvtár tartalmát.');
+            }
+            return result;
+        }
+
         async function moveFailedGenerationFileRequest(filePath) {
             const response = await fetch('/api/project-file/move-failed', {
                 method: 'POST',
@@ -790,7 +819,7 @@
             videoPreviewModal.show();
         }
 
-        async function showJsonPreview(fileName, fileUrl) {
+        async function showTextPreview(fileName, fileUrl, extension) {
             const modalElement = document.getElementById('jsonPreviewModal');
             if (!modalElement) {
                 window.open(fileUrl, '_blank');
@@ -801,7 +830,7 @@
             }
             const titleElement = document.getElementById('jsonPreviewTitle');
             if (titleElement) {
-                titleElement.textContent = fileName || 'JSON fájl';
+                titleElement.textContent = fileName || 'Fájl előnézete';
             }
             const contentElement = document.getElementById('jsonPreviewContent');
             if (contentElement) {
@@ -812,7 +841,7 @@
             try {
                 const response = await fetch(fileUrl, {
                     headers: {
-                        'Accept': 'application/json, text/plain;q=0.9'
+                        'Accept': 'application/json, text/plain;q=0.9, */*;q=0.8'
                     }
                 });
                 if (!response.ok) {
@@ -820,19 +849,21 @@
                 }
                 const text = await response.text();
                 let formatted = text;
-                try {
-                    const parsed = JSON.parse(text);
-                    formatted = JSON.stringify(parsed, null, 2);
-                } catch (error) {
-                    // fallback to raw text
+                if (extension === '.json') {
+                    try {
+                        const parsed = JSON.parse(text);
+                        formatted = JSON.stringify(parsed, null, 2);
+                    } catch (error) {
+                        // fallback to raw text
+                    }
                 }
                 if (contentElement) {
                     contentElement.textContent = formatted || 'Üres fájl.';
                 }
             } catch (error) {
-                console.error('JSON preview failed:', error);
+                console.error('Text preview failed:', error);
                 if (contentElement) {
-                    contentElement.textContent = `Nem sikerült betölteni a JSON fájlt.\n${error.message || error}`;
+                    contentElement.textContent = `Nem sikerült betölteni a fájlt.\n${error.message || error}`;
                 }
             }
         }
@@ -938,6 +969,39 @@
                     return;
                 }
 
+                const clearDirectoryButton = event.target.closest('.file-directory-clear-btn');
+                if (clearDirectoryButton && browserRoot.contains(clearDirectoryButton)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const detailsElement = clearDirectoryButton.closest('details.file-browser-directory');
+                    if (!detailsElement) {
+                        return;
+                    }
+                    const directoryPath = clearDirectoryButton.dataset.path || detailsElement.dataset.path || '';
+                    if (!directoryPath) {
+                        alert('A mappa útvonala nem határozható meg.');
+                        return;
+                    }
+                    const labelElement = detailsElement.querySelector('.file-browser-label');
+                    const directoryName = (labelElement && labelElement.textContent) ? labelElement.textContent.trim() : directoryPath;
+                    const confirmed = confirm(`Biztosan törlöd a(z) "${directoryName}" mappa teljes tartalmát?\nA mappa megmarad, de minden fájl és alkönyvtár törlődik.`);
+                    if (!confirmed) {
+                        return;
+                    }
+                    clearDirectoryButton.disabled = true;
+                    try {
+                        await clearProjectDirectory(directoryPath);
+                        alert('A mappa tartalma sikeresen törölve.');
+                        await refreshDirectory(detailsElement);
+                        detailsElement.setAttribute('open', '');
+                    } catch (error) {
+                        alert(error.message || 'Nem sikerült törölni a mappa tartalmát.');
+                    } finally {
+                        clearDirectoryButton.disabled = false;
+                    }
+                    return;
+                }
+
                 const deleteButton = event.target.closest('.file-delete-btn');
                 if (deleteButton && browserRoot.contains(deleteButton)) {
                     event.preventDefault();
@@ -1024,10 +1088,10 @@
                         return;
                     }
 
-                    if (extension === JSON_EXTENSION) {
+                    if (TEXT_PREVIEW_EXTENSIONS.has(extension)) {
                         event.preventDefault();
                         event.stopPropagation();
-                        await showJsonPreview(fileName, buildWorkdirUrl(filePath));
+                        await showTextPreview(fileName, buildWorkdirUrl(filePath), extension);
                         return;
                     }
 
@@ -3432,6 +3496,7 @@
                                 <span class="file-browser-label">{{ entry.name }}</span>
                                 <div class="file-browser-actions">
                                     <button type="button" class="btn btn-sm btn-outline-secondary file-upload-trigger" data-path="{{ entry.path }}" title="Fájl feltöltése ebbe a mappába">Feltöltés</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger file-directory-clear-btn" data-path="{{ entry.path }}" title="Könyvtár tartalmának törlése">Tartalom törlése</button>
                                 </div>
                             </summary>
                             <div class="file-browser-children">
@@ -3652,7 +3717,7 @@
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="jsonPreviewTitle">JSON fájl</h5>
+                    <h5 class="modal-title" id="jsonPreviewTitle">Fájl előnézete</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body">
