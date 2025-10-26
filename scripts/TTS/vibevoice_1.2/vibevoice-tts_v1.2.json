@@ -1,7 +1,7 @@
 {
   "enviroment": "vibevoice",
-  "script": "TTS/vibevoice/vibevoice-tts_v1.1.py",
-  "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból, továbbfejlesztett több-GPU kezeléssel.",
+  "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+  "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból, továbbfejlesztett több-GPU kezeléssel és szegmensenkénti pitch ellenőrzéssel.",
   "required": [
     {
       "name": "project_name",
@@ -121,6 +121,46 @@
       ],
       "type": "option",
       "default": 5
+    },
+    {
+      "name": "enable_pitch_check",
+      "flags": [
+        "--enable_pitch_check"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "pitch_tolerance",
+      "flags": [
+        "--pitch_tolerance"
+      ],
+      "type": "option",
+      "default": 20.0
+    },
+    {
+      "name": "pitch_min_frequency",
+      "flags": [
+        "--pitch_min_frequency"
+      ],
+      "type": "option",
+      "default": 60.0
+    },
+    {
+      "name": "pitch_max_frequency",
+      "flags": [
+        "--pitch_max_frequency"
+      ],
+      "type": "option",
+      "default": 400.0
+    },
+    {
+      "name": "pitch_retry",
+      "flags": [
+        "--pitch_retry"
+      ],
+      "type": "option",
+      "default": 3
     },
     {
       "name": "tolerance_factor",

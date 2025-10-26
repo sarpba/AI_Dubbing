@@ -1,36 +1,6 @@
 {
-  "CONFIG": {
-    "default_tts_engine": "f5-tts",
-    "default_tts_modell_dir": "hun_v7_3",
-    "default_translater_engine": "TTS",
-    "default_source_lang": "en",
-    "default_target_lang": "hu"
-  },
-  "DIRECTORIES": {
-    "normalisers": "normalisers",
-    "scripts": "scripts",
-    "TTS": "TTS",
-    "workdir": "workdir"
-  },
-  "PROJECT_SUBDIRS": {
-    "upload": "1_upload",
-    "extracted_audio": "1.5_extracted_audio",
-    "separated_audio_background": "2_separated_audio_background",
-    "separated_audio_speech": "2_separated_audio_speech",
-    "translated": "4_translated_json",
-    "translated_splits": "5_translated_splits",
-    "noice_splits": "6_noice_splits",
-    "film_dubbing": "7_film_dubbing",
-    "download": "8_Download",
-    "logs": "logs"
-  },
-  "LAST_USED_PARAMS": {
-    "translation_context": "Foundation TV series",
-    "tts_model_path": "TTS/hun_v1_v3",
-    "tts_model_path_run4": "TTS/hun_v5",
-    "lang_code": "hun"
-  },
-  "LAST_WORKFLOW": [
+  "name": "Szinkron készítés Vibevocice-al. Félautomata. SRT célnyelvi felirat szükséges.",
+  "steps": [
     {
       "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
       "enabled": true,
@@ -73,15 +43,14 @@
       "enabled": true
     },
     {
-      "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+      "script": "TTS/vibevoice/vibevoice-tts_v1.1.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
         "norm": "hun",
         "model_path": "/home/sarpba/AI_Dubbing/TTS/VibeVoice-large-hun",
-        "enable_pitch_check": true,
-        "save_failures": true,
-        "max_retries": "2"
+        "max_retries": "2",
+        "save_failures": true
       }
     },
     {
@@ -105,5 +74,5 @@
       }
     }
   ],
-  "LAST_WORKFLOW_TEMPLATE": "szinkron_keszites_vibevocice-al_felautomata_srt_celnyelvi_felirat_szukseges"
+  "description": "A widgetnél lehetőség van a szegmensek és a fordítás felülvizsgálatára."
 }
