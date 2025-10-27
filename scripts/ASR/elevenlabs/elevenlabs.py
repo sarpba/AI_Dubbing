@@ -8,6 +8,7 @@ import argparse
 import base64
 import json
 import logging
+import math
 import os
 import sys
 from pathlib import Path
@@ -31,6 +32,8 @@ KEYHOLDER_FIELD = "evenlabs_api_key"
 DEFAULT_MAX_PAUSE_S = 0.8
 DEFAULT_PADDING_S = 0.1
 DEFAULT_MAX_SEGMENT_S = 11.5
+PRIMARY_PUNCTUATION = (".", "!", "?")
+SECONDARY_PUNCTUATION = (",",)
 
 
 def get_project_root() -> Path:
@@ -115,9 +118,10 @@ def load_api_key(project_root: Path) -> Optional[str]:
 
 def _safe_float(value: Any) -> Optional[float]:
     try:
-        return float(value)
+        result = float(value)
     except (TypeError, ValueError):
         return None
+    return result if math.isfinite(result) else None
 
 
 def _normalise_word_entry(entry: dict) -> Optional[dict]:
@@ -226,29 +230,80 @@ def split_long_segments(segments: List[dict], max_duration_s: float) -> List[dic
     if max_duration_s <= 0:
         return segments
     final_segments: List[dict] = []
-    for segment in segments:
-        words = segment["words"]
-        while words:
-            duration = words[-1]["end"] - words[0]["start"]
-            if duration <= max_duration_s or len(words) == 1:
-                seg = _create_segment_from_words(words)
-                if seg:
-                    final_segments.append(seg)
-                break
-            best_idx = 0
-            max_gap = -1.0
-            for idx in range(len(words) - 1):
-                gap = words[idx + 1]["start"] - words[idx]["end"]
-                if gap > max_gap and (words[idx]["end"] - words[0]["start"]) <= max_duration_s:
-                    max_gap = gap
-                    best_idx = idx
-            if best_idx == len(words) - 1:
-                best_idx = max(0, len(words) // 2)
-            chunk = words[: best_idx + 1]
-            seg = _create_segment_from_words(chunk)
-            if seg:
-                final_segments.append(seg)
-            words = words[best_idx + 1 :]
+
+    def pick_split_index(order_words: List[dict], punctuation: Tuple[str, ...]) -> Optional[int]:
+        chosen: Optional[int] = None
+        for idx in range(len(order_words) - 1):
+            token = order_words[idx]["word"].strip()
+            if not token:
+                continue
+            if token.endswith(punctuation):
+                duration = order_words[idx]["end"] - order_words[0]["start"]
+                if duration <= max_duration_s:
+                    chosen = idx
+        return chosen
+
+    def split_by_equal_parts(order_words: List[dict], parts: int) -> List[List[dict]]:
+        if parts <= 1 or len(order_words) <= 1:
+            return [order_words]
+        total_duration = order_words[-1]["end"] - order_words[0]["start"]
+        if total_duration <= 0:
+            return [order_words]
+        target = total_duration / parts
+        boundaries = [order_words[0]["start"] + target * k for k in range(1, parts)]
+        chunks: List[List[dict]] = []
+        start_idx = 0
+        for boundary in boundaries:
+            idx = start_idx
+            while idx < len(order_words) - 1 and order_words[idx]["end"] < boundary:
+                idx += 1
+            chunk = order_words[start_idx : idx + 1]
+            if chunk:
+                chunks.append(chunk)
+                start_idx = idx + 1
+        if start_idx < len(order_words):
+            chunks.append(order_words[start_idx:])
+        if not chunks:
+            return [order_words]
+        return chunks
+
+    queue: List[List[dict]] = [segment["words"] for segment in segments if segment.get("words")]
+
+    while queue:
+        current_words = queue.pop(0)
+        if not current_words:
+            continue
+        duration = current_words[-1]["end"] - current_words[0]["start"]
+        if duration <= max_duration_s or len(current_words) == 1:
+            segment = _create_segment_from_words(current_words)
+            if segment:
+                final_segments.append(segment)
+            continue
+
+        split_idx = pick_split_index(current_words, PRIMARY_PUNCTUATION)
+        if split_idx is None:
+            split_idx = pick_split_index(current_words, SECONDARY_PUNCTUATION)
+
+        if split_idx is not None:
+            left = current_words[: split_idx + 1]
+            right = current_words[split_idx + 1 :]
+            if left:
+                queue.insert(0, left)
+            if right:
+                queue.insert(1, right)
+            continue
+
+        parts = max(2, math.ceil(duration / max_duration_s))
+        equal_chunks = split_by_equal_parts(current_words, parts)
+        if len(equal_chunks) == 1:
+            segment = _create_segment_from_words(equal_chunks[0])
+            if segment:
+                final_segments.append(segment)
+        else:
+            for chunk in reversed(equal_chunks):
+                if chunk:
+                    queue.insert(0, chunk)
+
     return final_segments
 
 
@@ -335,9 +390,7 @@ def process_directory(
             print(f"  ✖  Nem található szó szintű időbélyeg a válaszban: {audio_path.name}")
             continue
 
-        segments = payload.get("segments")
-        if not isinstance(segments, list) or not segments:
-            segments = build_segments(word_segments, max_pause_s=max_pause_s, padding_s=padding_s, max_segment_s=max_segment_s)
+        segments = build_segments(word_segments, max_pause_s=max_pause_s, padding_s=padding_s, max_segment_s=max_segment_s)
 
         language_code = payload.get("language") or payload.get("language_code") or language
 
@@ -351,8 +404,16 @@ def process_directory(
         output_path = audio_path.with_suffix(".json")
         try:
             with output_path.open("w", encoding="utf-8") as fp:
-                json.dump(result, fp, indent=2, ensure_ascii=False)
+                json.dump(result, fp, indent=2, ensure_ascii=False, allow_nan=False)
             print(f"  ✔  Mentve: {output_path.name}")
+        except ValueError as exc:
+            logging.error("Érvénytelen JSON érték a kimenetben (%s): %s", output_path, exc)
+            if output_path.exists():
+                try:
+                    output_path.unlink()
+                except OSError:
+                    pass
+            print(f"  ✖  JSON mentési hiba (érvénytelen érték): {audio_path.name}")
         except OSError as exc:
             logging.error("Nem sikerült menteni a kimenetet (%s): %s", output_path, exc)
             print(f"  ✖  Mentési hiba: {audio_path.name}")
