@@ -23,6 +23,7 @@
     <script src="{{ url_for('static', filename='vendor/marked/marked.min.js') }}"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <script src="{{ url_for('static', filename='js/audio-trimmer.js') }}"></script>
     <script>
         (function() {
             const root = document.documentElement;
@@ -337,19 +338,8 @@
         const AUDIO_EXTENSIONS = new Set({{ audio_extensions|list|sort|tojson }});
         const VIDEO_EXTENSIONS = new Set({{ video_extensions|list|sort|tojson }});
         const TEXT_PREVIEW_EXTENSIONS = new Set(['.json', '.txt', '.bak', '.log', '.srt']);
-        let audioPreviewModal = null;
         let videoPreviewModal = null;
         let jsonPreviewModal = null;
-        let waveSurferInstance = null;
-        let waveSurferRegions = null;
-        let waveSurferRegion = null;
-        let currentAudioFilePath = '';
-        let currentAudioFileName = '';
-        let audioTrimInProgress = false;
-        let trimStartSlider = null;
-        let trimEndSlider = null;
-        const MIN_TRIM_DURATION_SECONDS = 0.05;
-        const TRIM_SLIDER_STEP = 0.01;
 
         const workflowWidgets = [
             {
@@ -943,566 +933,6 @@
             return result;
         }
 
-        function toggleWaveformLoading(isLoading, message) {
-            const overlay = document.getElementById('audioWaveformLoading');
-            if (!overlay) {
-                return;
-            }
-            overlay.textContent = message || 'Betöltés...';
-            if (isLoading) {
-                overlay.classList.remove('d-none');
-            } else {
-                overlay.classList.add('d-none');
-            }
-        }
-
-        function setTrimStatus(message) {
-            const statusElement = document.getElementById('trimStatusText');
-            if (!statusElement) {
-                return;
-            }
-            statusElement.textContent = message || '';
-        }
-
-        function setTrimError(message) {
-            const errorElement = document.getElementById('trimErrorAlert');
-            if (!errorElement) {
-                return;
-            }
-            if (message) {
-                errorElement.textContent = message;
-                errorElement.classList.remove('d-none');
-            } else {
-                errorElement.textContent = '';
-                errorElement.classList.add('d-none');
-            }
-        }
-
-        function toggleTrimSavingSpinner(visible) {
-            const spinner = document.getElementById('trimSaveSpinner');
-            if (!spinner) {
-                return;
-            }
-            if (visible) {
-                spinner.classList.remove('d-none');
-            } else {
-                spinner.classList.add('d-none');
-            }
-        }
-
-        function setTrimSaveEnabled(shouldEnable) {
-            const saveButton = document.getElementById('trimSaveBtn');
-            if (!saveButton) {
-                return;
-            }
-            const enabled = shouldEnable && !audioTrimInProgress;
-            saveButton.disabled = !enabled;
-        }
-
-        function updateTrimSelectionDisplay() {
-            const startElement = document.getElementById('trimStartDisplay');
-            const endElement = document.getElementById('trimEndDisplay');
-            const durationElement = document.getElementById('trimDurationDisplay');
-            const resetButton = document.getElementById('trimResetSelectionBtn');
-            const waveDuration = waveSurferInstance ? waveSurferInstance.getDuration() : 0;
-
-            if (waveSurferRegion && waveDuration > 0) {
-                const start = Math.max(0, waveSurferRegion.start || 0);
-                const end = Math.max(0, waveSurferRegion.end || 0);
-                const duration = Math.max(0, end - start);
-                if (startElement) {
-                    startElement.textContent = `${start.toFixed(2)} s`;
-                }
-                if (endElement) {
-                    endElement.textContent = `${end.toFixed(2)} s`;
-                }
-                if (durationElement) {
-                    durationElement.textContent = `${duration.toFixed(2)} s`;
-                }
-                if (resetButton) {
-                    resetButton.disabled = false;
-                }
-                if (trimStartSlider) {
-                    trimStartSlider.disabled = false;
-                    trimStartSlider.min = '0';
-                    trimStartSlider.max = waveDuration.toFixed(2);
-                    trimStartSlider.step = TRIM_SLIDER_STEP.toString();
-                    trimStartSlider.value = start.toFixed(2);
-                }
-                if (trimEndSlider) {
-                    trimEndSlider.disabled = false;
-                    trimEndSlider.min = '0';
-                    trimEndSlider.max = waveDuration.toFixed(2);
-                    trimEndSlider.step = TRIM_SLIDER_STEP.toString();
-                    trimEndSlider.value = end.toFixed(2);
-                }
-                setTrimSaveEnabled(true);
-            } else {
-                if (startElement) {
-                    startElement.textContent = '—';
-                }
-                if (endElement) {
-                    endElement.textContent = '—';
-                }
-                if (durationElement) {
-                    durationElement.textContent = '—';
-                }
-                if (resetButton) {
-                    resetButton.disabled = true;
-                }
-                if (trimStartSlider) {
-                    trimStartSlider.disabled = true;
-                    trimStartSlider.value = '0';
-                }
-                if (trimEndSlider) {
-                    trimEndSlider.disabled = true;
-                    trimEndSlider.value = '0';
-                }
-                setTrimSaveEnabled(false);
-            }
-        }
-
-        function clearTrimSelection(skipUpdate) {
-            const waveSurfer = waveSurferInstance;
-            const duration = waveSurfer ? waveSurfer.getDuration() : 0;
-            if (duration > 0) {
-                if (waveSurferRegion) {
-                    try {
-                        waveSurferRegion.setOptions({ start: 0, end: duration });
-                    } catch (error) {
-                        console.debug('A kijelölés visszaállítása sikertelen:', error);
-                    }
-                } else if (waveSurferRegions && typeof waveSurferRegions.addRegion === 'function') {
-                    try {
-                        waveSurferRegion = waveSurferRegions.addRegion({
-                            start: 0,
-                            end: duration,
-                            color: 'rgba(13, 110, 253, 0.2)'
-                        });
-                    } catch (error) {
-                        console.debug('Nem sikerült új kijelölést létrehozni:', error);
-                    }
-                }
-            }
-
-            if (!skipUpdate) {
-                updateTrimSelectionDisplay();
-            }
-        }
-
-        function handleTrimStartSliderInput() {
-            if (!trimStartSlider || !waveSurferRegion || !waveSurferInstance) {
-                return;
-            }
-            const duration = waveSurferInstance.getDuration() || 0;
-            if (duration <= 0) {
-                return;
-            }
-            let start = parseFloat(trimStartSlider.value);
-            if (!Number.isFinite(start)) {
-                return;
-            }
-            start = Math.min(Math.max(0, start), duration);
-            let end = Math.max(0, waveSurferRegion.end || duration);
-            if (end - start < MIN_TRIM_DURATION_SECONDS) {
-                end = Math.min(duration, start + MIN_TRIM_DURATION_SECONDS);
-                if (trimEndSlider) {
-                    trimEndSlider.value = end.toFixed(2);
-                }
-            }
-            try {
-                waveSurferRegion.setOptions({ start, end });
-            } catch (error) {
-                console.debug('Nem sikerült frissíteni a kijelölés kezdetét:', error);
-            }
-            updateTrimSelectionDisplay();
-        }
-
-        function handleTrimEndSliderInput() {
-            if (!trimEndSlider || !waveSurferRegion || !waveSurferInstance) {
-                return;
-            }
-            const duration = waveSurferInstance.getDuration() || 0;
-            if (duration <= 0) {
-                return;
-            }
-            let end = parseFloat(trimEndSlider.value);
-            if (!Number.isFinite(end)) {
-                return;
-            }
-            end = Math.min(Math.max(0, end), duration);
-            let start = Math.max(0, waveSurferRegion.start || 0);
-            if (end - start < MIN_TRIM_DURATION_SECONDS) {
-                start = Math.max(0, end - MIN_TRIM_DURATION_SECONDS);
-                if (trimStartSlider) {
-                    trimStartSlider.value = start.toFixed(2);
-                }
-            }
-            try {
-                waveSurferRegion.setOptions({ start, end });
-            } catch (error) {
-                console.debug('Nem sikerült frissíteni a kijelölés végét:', error);
-            }
-            updateTrimSelectionDisplay();
-        }
-
-        function resetTrimState() {
-            currentAudioFilePath = '';
-            currentAudioFileName = '';
-            audioTrimInProgress = false;
-            setTrimStatus('');
-            setTrimError('');
-            toggleTrimSavingSpinner(false);
-            toggleWaveformLoading(false);
-            if (trimStartSlider) {
-                trimStartSlider.disabled = true;
-                trimStartSlider.value = '0';
-                trimStartSlider.min = '0';
-                trimStartSlider.max = '0';
-            }
-            if (trimEndSlider) {
-                trimEndSlider.disabled = true;
-                trimEndSlider.value = '0';
-                trimEndSlider.min = '0';
-                trimEndSlider.max = '0';
-            }
-            waveSurferRegion = null;
-            updateTrimSelectionDisplay();
-        }
-
-        function refreshFileBrowserAfterTrim(relativePath) {
-            if (!relativePath) {
-                return;
-            }
-            const browserRoot = document.getElementById('projectFileBrowser');
-            if (!browserRoot) {
-                return;
-            }
-            const fileSelector = `.file-browser-item[data-file-path="${cssEscape(relativePath)}"]`;
-            let fileRow = null;
-            try {
-                fileRow = browserRoot.querySelector(fileSelector);
-            } catch (error) {
-                console.debug('Nem sikerült elérni a fájlt a listában:', error);
-            }
-            if (fileRow) {
-                const parentDirectory = fileRow.closest('details.file-browser-directory');
-                if (parentDirectory) {
-                    refreshDirectory(parentDirectory);
-                }
-                return;
-            }
-            const parentPath = relativePath.split('/').slice(0, -1).join('/');
-            const parentSelector = `details.file-browser-directory[data-path="${cssEscape(parentPath)}"]`;
-            let parentDetails = null;
-            try {
-                parentDetails = browserRoot.querySelector(parentSelector);
-            } catch (error) {
-                console.debug('Nem sikerült elérni a szülő könyvtárat:', error);
-            }
-            if (parentDetails) {
-                refreshDirectory(parentDetails);
-            }
-        }
-
-        function initWaveSurfer() {
-            if (!window.WaveSurfer || typeof WaveSurfer.create !== 'function') {
-                console.warn('WaveSurfer könyvtár nem érhető el.');
-                return null;
-            }
-            if (waveSurferInstance) {
-                return waveSurferInstance;
-            }
-            const container = document.getElementById('audioWaveform');
-            if (!container) {
-                return null;
-            }
-            const computedStyles = getComputedStyle(document.documentElement);
-            const waveColor = computedStyles.getPropertyValue('--bs-border-color') || '#adb5bd';
-            const progressColor = computedStyles.getPropertyValue('--bs-primary-color') || computedStyles.getPropertyValue('--bs-primary') || '#0d6efd';
-            const cursorColor = computedStyles.getPropertyValue('--bs-primary') || '#0d6efd';
-
-            waveSurferInstance = WaveSurfer.create({
-                container: container,
-                waveColor: waveColor.trim() || '#adb5bd',
-                progressColor: progressColor.trim() || '#0d6efd',
-                cursorColor: cursorColor.trim() || '#0d6efd',
-                height: 128,
-                responsive: true,
-                normalize: true
-            });
-
-            const regionsFactory = (window.WaveSurfer && WaveSurfer.Regions && typeof WaveSurfer.Regions.create === 'function')
-                ? WaveSurfer.Regions
-                : (window.RegionsPlugin && typeof window.RegionsPlugin.create === 'function' ? window.RegionsPlugin : null);
-
-            if (!regionsFactory) {
-                console.warn('WaveSurfer Regions plugin nem érhető el, a trimmelés nem használható.');
-                setTrimError('A hullámforma kijelöléshez szükséges bővítmény nem érhető el.');
-            } else {
-                waveSurferRegions = waveSurferInstance.registerPlugin(regionsFactory.create({
-                    dragSelection: {
-                        slop: 5
-                    }
-                }));
-
-                if (waveSurferRegions && typeof waveSurferRegions.on === 'function') {
-                    waveSurferRegions.on('region-created', function (region) {
-                        if (waveSurferRegion && waveSurferRegion.id !== region.id) {
-                            try {
-                                waveSurferRegion.remove();
-                            } catch (error) {
-                                console.debug('Korábbi kijelölés eltávolítása sikertelen:', error);
-                            }
-                        }
-                        waveSurferRegion = region;
-                        if (region && typeof region.setOptions === 'function') {
-                            region.setOptions({ color: 'rgba(13, 110, 253, 0.2)' });
-                        }
-                        if (region && typeof region.on === 'function') {
-                            region.on('update-end', function () {
-                                updateTrimSelectionDisplay();
-                            });
-                            region.on('remove', function () {
-                                if (waveSurferRegion && waveSurferRegion.id === region.id) {
-                                    waveSurferRegion = null;
-                                    updateTrimSelectionDisplay();
-                                }
-                            });
-                        }
-                        updateTrimSelectionDisplay();
-                    });
-
-                    waveSurferRegions.on('region-updated', function (region) {
-                        if (waveSurferRegion && region && region.id === waveSurferRegion.id) {
-                            updateTrimSelectionDisplay();
-                        }
-                    });
-                }
-            }
-
-            waveSurferInstance.on('ready', function () {
-                const duration = waveSurferInstance.getDuration() || 0;
-                setTrimError('');
-                if (waveSurferRegions && typeof waveSurferRegions.clearRegions === 'function') {
-                    waveSurferRegions.clearRegions();
-                }
-                if (duration > 0 && waveSurferRegions && typeof waveSurferRegions.addRegion === 'function') {
-                    try {
-                        waveSurferRegion = waveSurferRegions.addRegion({
-                            start: 0,
-                            end: duration,
-                            color: 'rgba(13, 110, 253, 0.2)',
-                            resize: true,
-                            drag: true
-                        });
-                    } catch (error) {
-                        console.debug('Nem sikerült alapértelmezett kijelölést létrehozni:', error);
-                    }
-                } else if (duration <= 0) {
-                    setTrimError('A hangfájl hossza nem állapítható meg.');
-                }
-                toggleWaveformLoading(false);
-                if (duration > 0) {
-                    setTrimStatus('A teljes fájl kijelölve. A hullámformán vagy a csúszkákkal módosíthatod a határokat.');
-                } else {
-                    setTrimStatus('');
-                }
-                updateTrimSelectionDisplay();
-                setTrimSaveEnabled(duration > 0);
-                try {
-                    waveSurferInstance.stop();
-                } catch (error) {
-                    // ignore
-                }
-                const playPromise = waveSurferInstance.play(0);
-                if (playPromise && typeof playPromise.catch === 'function') {
-                    playPromise.catch((error) => {
-                        console.debug('Automatikus lejátszás blokkolva lehet:', error);
-                    });
-                }
-            });
-
-            waveSurferInstance.on('loading', function (progress) {
-                if (typeof progress === 'number') {
-                    const message = `Betöltés: ${Math.round(progress)}%`;
-                    toggleWaveformLoading(true, message);
-                    setTrimStatus(message);
-                } else {
-                    toggleWaveformLoading(true, 'Betöltés...');
-                    setTrimStatus('Audió betöltése...');
-                }
-            });
-
-            waveSurferInstance.on('error', function (error) {
-                console.error('WaveSurfer hiba:', error);
-                toggleWaveformLoading(true, 'Nem sikerült betölteni az audiót.');
-                setTrimError('Nem sikerült betölteni az audiót.');
-            });
-
-            return waveSurferInstance;
-        }
-
-        function prepareTrimModal(fileName, filePath) {
-            currentAudioFilePath = filePath || '';
-            currentAudioFileName = fileName || '';
-            audioTrimInProgress = false;
-            setTrimError('');
-            setTrimStatus('Audió betöltése folyamatban...');
-            toggleTrimSavingSpinner(false);
-            if (trimStartSlider) {
-                trimStartSlider.disabled = true;
-                trimStartSlider.value = '0';
-            }
-            if (trimEndSlider) {
-                trimEndSlider.disabled = true;
-                trimEndSlider.value = '0';
-            }
-            waveSurferRegion = null;
-            updateTrimSelectionDisplay();
-        }
-
-        async function saveTrimSelection() {
-            if (!waveSurferRegion) {
-                setTrimError('Előbb jelöld ki a menteni kívánt hangrészletet.');
-                return;
-            }
-            if (!currentAudioFilePath) {
-                setTrimError('Hiányzik az audió fájl elérési útja.');
-                return;
-            }
-            const start = Math.max(0, waveSurferRegion.start || 0);
-            const end = Math.max(0, waveSurferRegion.end || 0);
-            if (end <= start) {
-                setTrimError('A kijelölés vége nagyobbnak kell lennie a kezdetnél.');
-                return;
-            }
-            if ((end - start) < MIN_TRIM_DURATION_SECONDS) {
-                setTrimError(`A kijelölésnek legalább ${MIN_TRIM_DURATION_SECONDS.toFixed(2)} másodperc hosszúnak kell lennie.`);
-                return;
-            }
-
-            audioTrimInProgress = true;
-            setTrimError('');
-            setTrimStatus('Mentés folyamatban...');
-            setTrimSaveEnabled(false);
-            toggleTrimSavingSpinner(true);
-
-            let response = null;
-            let result = {};
-            try {
-                response = await fetch('/api/project-audio/trim', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        projectName: PROJECT_NAME,
-                        filePath: currentAudioFilePath,
-                        start: start,
-                        end: end,
-                        outputName: ''
-                    })
-                });
-                try {
-                    result = await response.json();
-                } catch (error) {
-                    result = {};
-                }
-                if (!response.ok || !result.success) {
-                    throw new Error((result && result.error) || 'Nem sikerült elmenteni a kijelölt hangrészletet.');
-                }
-                const savedPath = result.saved_path || currentAudioFilePath;
-                const savedName = result.saved_name || currentAudioFileName;
-                setTrimStatus('Mentés sikeresen befejezve.');
-                refreshFileBrowserAfterTrim(savedPath);
-                if (waveSurferRegions && typeof waveSurferRegions.clearRegions === 'function') {
-                    waveSurferRegions.clearRegions();
-                } else {
-                    clearTrimSelection(true);
-                }
-                const waveSurfer = initWaveSurfer();
-                if (waveSurfer) {
-                    toggleWaveformLoading(true, 'Betöltés...');
-                    setTrimStatus('Frissített audió betöltése...');
-                    try {
-                        waveSurfer.stop();
-                    } catch (error) {
-                        // ignore
-                    }
-                    waveSurfer.load(buildWorkdirUrl(savedPath));
-                }
-                currentAudioFilePath = savedPath;
-                currentAudioFileName = savedName;
-            } catch (error) {
-                console.error('Trim mentés hiba:', error);
-                setTrimError(error.message || 'Nem sikerült elmenteni a kijelölt hangrészletet.');
-                setTrimStatus('');
-            } finally {
-                audioTrimInProgress = false;
-                toggleTrimSavingSpinner(false);
-                updateTrimSelectionDisplay();
-            }
-        }
-
-        function showAudioPreview(fileName, fileUrl, filePath) {
-            const modalElement = document.getElementById('audioPreviewModal');
-            if (!modalElement) {
-                window.open(fileUrl, '_blank');
-                return;
-            }
-            if (!audioPreviewModal) {
-                audioPreviewModal = new bootstrap.Modal(modalElement);
-            }
-            const titleElement = document.getElementById('audioPreviewTitle');
-            if (titleElement) {
-                titleElement.textContent = fileName || 'Audió szerkesztése';
-            }
-            prepareTrimModal(fileName, filePath);
-            const waveSurfer = initWaveSurfer();
-            if (!waveSurfer) {
-                setTrimError('A hullámforma lejátszó nem érhető el ebben a böngészőben.');
-                toggleWaveformLoading(true, 'Hullámforma nem érhető el.');
-            } else {
-                if (waveSurferRegions && typeof waveSurferRegions.clearRegions === 'function') {
-                    waveSurferRegions.clearRegions();
-                } else {
-                    clearTrimSelection(true);
-                }
-                toggleWaveformLoading(true, 'Betöltés...');
-                setTrimStatus('Audió betöltése...');
-                try {
-                    waveSurfer.stop();
-                } catch (error) {
-                    // ignore
-                }
-                waveSurfer.load(fileUrl);
-            }
-            audioPreviewModal.show();
-        }
-
-        function showVideoPreview(fileName, fileUrl) {
-            const modalElement = document.getElementById('videoPreviewModal');
-            if (!modalElement) {
-                window.open(fileUrl, '_blank');
-                return;
-            }
-            if (!videoPreviewModal) {
-                videoPreviewModal = new bootstrap.Modal(modalElement);
-            }
-            const titleElement = document.getElementById('videoPreviewTitle');
-            if (titleElement) {
-                titleElement.textContent = fileName || 'Videó lejátszása';
-            }
-            const videoElement = document.getElementById('videoPreviewPlayer');
-            if (videoElement) {
-                videoElement.src = fileUrl;
-                videoElement.load();
-                videoElement.play().catch(() => {/* autoplay may be blocked */});
-            }
-            videoPreviewModal.show();
-        }
-
         async function showTextPreview(fileName, fileUrl, extension) {
             const modalElement = document.getElementById('jsonPreviewModal');
             if (!modalElement) {
@@ -1554,13 +984,8 @@
 
         function initPreviewModals() {
             const audioModalElement = document.getElementById('audioPreviewModal');
-            if (audioModalElement) {
-                audioPreviewModal = new bootstrap.Modal(audioModalElement);
+            if (audioModalElement && (!window.AudioTrimmer || typeof AudioTrimmer.init !== 'function')) {
                 audioModalElement.addEventListener('hidden.bs.modal', () => {
-                    if (waveSurferInstance && typeof waveSurferInstance.stop === 'function') {
-                        waveSurferInstance.stop();
-                    }
-                    resetTrimState();
                     const titleElement = document.getElementById('audioPreviewTitle');
                     if (titleElement) {
                         titleElement.textContent = '';
@@ -1597,35 +1022,6 @@
                     if (titleElement) {
                         titleElement.textContent = '';
                     }
-                });
-            }
-        }
-
-        function initAudioTrimControls() {
-            trimStartSlider = document.getElementById('trimStartRange');
-            trimEndSlider = document.getElementById('trimEndRange');
-            if (trimStartSlider) {
-                trimStartSlider.disabled = true;
-                trimStartSlider.addEventListener('input', () => {
-                    handleTrimStartSliderInput();
-                });
-            }
-            if (trimEndSlider) {
-                trimEndSlider.disabled = true;
-                trimEndSlider.addEventListener('input', () => {
-                    handleTrimEndSliderInput();
-                });
-            }
-            const resetButton = document.getElementById('trimResetSelectionBtn');
-            if (resetButton) {
-                resetButton.addEventListener('click', () => {
-                    clearTrimSelection();
-                });
-            }
-            const saveButton = document.getElementById('trimSaveBtn');
-            if (saveButton) {
-                saveButton.addEventListener('click', () => {
-                    saveTrimSelection();
                 });
             }
         }
@@ -1788,7 +1184,11 @@
                     if (AUDIO_EXTENSIONS.has(extension)) {
                         event.preventDefault();
                         event.stopPropagation();
-                        showAudioPreview(fileName, buildWorkdirUrl(filePath), filePath);
+                        if (window.AudioTrimmer && typeof AudioTrimmer.showPreview === 'function') {
+                            AudioTrimmer.showPreview(fileName, buildWorkdirUrl(filePath), filePath);
+                        } else {
+                            window.open(buildWorkdirUrl(filePath), '_blank');
+                        }
                         return;
                     }
 
@@ -4809,7 +4209,15 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initPreviewModals();
-            initAudioTrimControls();
+            if (window.AudioTrimmer && typeof AudioTrimmer.init === 'function') {
+                AudioTrimmer.init({
+                    projectName: PROJECT_NAME,
+                    buildWorkdirUrl: buildWorkdirUrl,
+                    refreshDirectory: refreshDirectory,
+                    reloadFileBrowser: reloadFileBrowser,
+                    cssEscape: cssEscape
+                });
+            }
             initProjectFileActions();
             initFileBrowser();
             initWorkflowModals();
