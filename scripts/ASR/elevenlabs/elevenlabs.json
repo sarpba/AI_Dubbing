@@ -69,7 +69,7 @@
         "--max-segment-duration"
       ],
       "type": "option",
-      "default": 14.0
+      "default": 11.5
     },
     {
       "name": "debug",
