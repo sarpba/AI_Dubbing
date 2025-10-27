@@ -92,7 +92,7 @@
     },
     {
       "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "enable_pitch_check": true,
@@ -109,6 +109,15 @@
       "params": {}
     },
     {
+      "script": "AUDIO-VIDEO/merge_chunks_with_background_narrator_version/merge_chunks_with_background_beta.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {
+        "narrator": true,
+        "background_volume": "1"
+      }
+    },
+    {
       "script": "AUDIO-VIDEO/merge_chunks_with_background/merge_chunks_with_background_easy.py",
       "enabled": false,
       "halt_on_fail": true,
@@ -119,7 +128,7 @@
     },
     {
       "script": "AUDIO-VIDEO/merge_dub_to_video/merge_to_video_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "language": "hun"

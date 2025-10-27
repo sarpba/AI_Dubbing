@@ -933,6 +933,46 @@
             return result;
         }
 
+        function showVideoPreview(fileName, fileUrl) {
+            const modalElement = document.getElementById('videoPreviewModal');
+            if (!modalElement) {
+                window.open(fileUrl, '_blank');
+                return;
+            }
+            if (!videoPreviewModal) {
+                videoPreviewModal = new bootstrap.Modal(modalElement);
+            }
+
+            const titleElement = document.getElementById('videoPreviewTitle');
+            if (titleElement) {
+                titleElement.textContent = fileName || 'Videó lejátszása';
+            }
+
+            const videoElement = document.getElementById('videoPreviewPlayer');
+            if (!videoElement) {
+                window.open(fileUrl, '_blank');
+                return;
+            }
+
+            videoElement.pause();
+            videoElement.src = fileUrl;
+            videoElement.load();
+
+            const handleShown = () => {
+                videoElement.play().catch(() => {
+                    // Autoplay might be blocked; user can start manually.
+                });
+            };
+
+            if (modalElement.classList.contains('show')) {
+                handleShown();
+            } else {
+                modalElement.addEventListener('shown.bs.modal', handleShown, { once: true });
+            }
+
+            videoPreviewModal.show();
+        }
+
         async function showTextPreview(fileName, fileUrl, extension) {
             const modalElement = document.getElementById('jsonPreviewModal');
             if (!modalElement) {
