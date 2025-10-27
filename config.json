@@ -51,7 +51,7 @@
     },
     {
       "script": "ASR/elevenlabs/elevenlabs.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
         "api_key": "sk_176ed1de121b1fc50b5b828a11d85cbe6da580293c7b1ccb",
@@ -63,6 +63,15 @@
       "enabled": false,
       "halt_on_fail": true,
       "params": {}
+    },
+    {
+      "script": "TRANSLATE/deepl/deepl_translate.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "input_language": "en",
+        "output_language": "hu"
+      }
     },
     {
       "script": "TRANSLATE/chatgpt_with_srt/translate_chatgpt_srt_easy.py",
@@ -79,11 +88,11 @@
     {
       "type": "widget",
       "widget": "reviewContinue",
-      "enabled": false
+      "enabled": true
     },
     {
       "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "enable_pitch_check": true,

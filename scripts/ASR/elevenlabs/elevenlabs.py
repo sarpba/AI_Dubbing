@@ -36,6 +36,15 @@ PRIMARY_PUNCTUATION = (".", "!", "?")
 SECONDARY_PUNCTUATION = (",",)
 
 
+def _sanitize_text(value: Any) -> str:
+    """Remove escaped quote sequences from transcribed text."""
+    if not value:
+        return ""
+    text = str(value)
+    cleaned = text.replace('\\"', "").replace('"', "")
+    return cleaned.strip()
+
+
 def get_project_root() -> Path:
     """Locate the repository root by walking upwards until config.json is found."""
     for candidate in Path(__file__).resolve().parents:
@@ -125,7 +134,7 @@ def _safe_float(value: Any) -> Optional[float]:
 
 
 def _normalise_word_entry(entry: dict) -> Optional[dict]:
-    text = str(entry.get("word") or entry.get("text") or entry.get("token") or "").strip()
+    text = _sanitize_text(entry.get("word") or entry.get("text") or entry.get("token") or "")
     if not text:
         return None
     start = (
@@ -198,7 +207,7 @@ def adjust_word_timestamps(word_segments: List[dict], padding_s: float) -> List[
 def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
     if not words:
         return None
-    text = " ".join(word["word"] for word in words).strip()
+    text = _sanitize_text(" ".join(word["word"] for word in words))
     return {
         "start": round(words[0]["start"], 3),
         "end": round(words[-1]["end"], 3),
