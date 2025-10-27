@@ -1,0 +1,90 @@
+{
+  "name": "Magyar audio file angolra fordítása",
+  "steps": [
+    {
+      "script": "AUDIO-VIDEO/audio_copy_helper/audio-copy-helper.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "ASR/paraket-multilang/parakeet-tdt-0.6b-v3.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "TRANSLATE/deepl/deepl_translate.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {
+        "auth_key": "base64:ODc3ZGNmYmQtZDY1Ny1mNGRhLWIyM2EtNDFhNWY5YWQ5MGQ2OmZ4",
+        "input_language": "HU",
+        "output_language": "EN-GB"
+      }
+    },
+    {
+      "type": "widget",
+      "widget": "reviewContinue",
+      "enabled": false
+    },
+    {
+      "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {
+        "device": "cuda",
+        "model_path": "vibevoice/VibeVoice-7B",
+        "norm": "eng",
+        "speaker_name": "Speaker 1"
+      }
+    },
+    {
+      "script": "TTS/f5-tts/f5_tts_easy_EQ.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "max_workers": "3",
+        "model_dir": "/mnt/d/AI/AI_Dubbing/AI_Dubbing/TTS/F5-TTS",
+        "nfe_step": "50",
+        "norm": "eng",
+        "remove_silence": true
+      }
+    },
+    {
+      "script": "TTS/vibevoice-narrator/vibevoice-tts_narrator.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "norm": "eng",
+        "narrator": "/a_narrator_wav_file/eleresi_utja",
+        "model_path": "vibevoice/VibeVoice-7B"
+      }
+    },
+    {
+      "script": "AUDIO-VIDEO/normalize_and_cut_tts_files/normalise_and_cut_json_easy_v1.1.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "sync_loudness": false
+      }
+    },
+    {
+      "script": "AUDIO-VIDEO/merge_chunks_with_background_narrator_version/merge_chunks_with_background_beta.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "narrator": true,
+        "background_volume": "0",
+        "max_speedup": "0"
+      }
+    }
+  ],
+  "description": "Automatizált feldolgozási lánc az elérhető szkriptekkel."
+}

@@ -9,11 +9,13 @@ import threading
 import uuid
 import copy
 import re
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import shutil
 from werkzeug.utils import secure_filename
+from pydub import AudioSegment
 
 app = Flask(__name__)
 
@@ -1855,6 +1857,116 @@ def delete_project_file(project_name):
         return jsonify({'success': False, 'error': 'Nem sikerült törölni a fájlt.'}), 500
 
     return jsonify({'success': True, 'message': 'Fájl sikeresen törölve.'})
+
+
+@app.route('/api/project-audio/trim', methods=['POST'])
+def trim_project_audio():
+    payload = request.get_json(silent=True) or {}
+    project_name = (payload.get('projectName') or '').strip()
+    file_path_raw = (payload.get('filePath') or '').strip()
+    output_name_raw = (payload.get('outputName') or '').strip()
+
+    if not project_name:
+        return jsonify({'success': False, 'error': 'Hiányzó projektnév.'}), 400
+    if not file_path_raw:
+        return jsonify({'success': False, 'error': 'Hiányzó audió elérési útvonal.'}), 400
+
+    try:
+        start_value = float(payload.get('start', 0))
+        end_value = float(payload.get('end', 0))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Érvénytelen időbélyeg értékek.'}), 400
+
+    start_value = max(0.0, start_value)
+    end_value = max(0.0, end_value)
+    if end_value <= start_value:
+        return jsonify({'success': False, 'error': 'A kijelölés vége nagyobbnak kell lennie a kezdetnél.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    project_root = os.path.join(workdir_path, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+
+    source_abs = os.path.abspath(os.path.join(project_root_abs, file_path_raw))
+    if not is_subpath(source_abs, project_root_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen audió elérési útvonal.'}), 400
+    if not os.path.isfile(source_abs):
+        return jsonify({'success': False, 'error': 'A megadott audió fájl nem található.'}), 404
+
+    source_ext = os.path.splitext(source_abs)[1].lower()
+    if source_ext not in AUDIO_EXTENSIONS:
+        return jsonify({'success': False, 'error': 'Csak támogatott hangfájl vágható.'}), 400
+
+    if output_name_raw:
+        safe_output_name = secure_filename(output_name_raw)
+        if not safe_output_name:
+            return jsonify({'success': False, 'error': 'A mentési fájlnév érvénytelen.'}), 400
+        if '.' not in safe_output_name:
+            safe_output_name = f"{safe_output_name}{source_ext}"
+        destination_abs = os.path.abspath(os.path.join(os.path.dirname(source_abs), safe_output_name))
+        if not is_subpath(destination_abs, project_root_abs):
+            return jsonify({'success': False, 'error': 'Érvénytelen mentési elérési útvonal.'}), 400
+    else:
+        destination_abs = source_abs
+
+    if destination_abs != source_abs and os.path.exists(destination_abs):
+        return jsonify({'success': False, 'error': 'Már létezik ilyen nevű fájl ebben a mappában.'}), 409
+
+    try:
+        audio_segment = AudioSegment.from_file(source_abs)
+    except Exception as exc:
+        logging.exception("Nem sikerült beolvasni a hangfájlt (%s): %s", source_abs, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült beolvasni a hangfájlt.'}), 500
+
+    audio_duration_ms = len(audio_segment)
+    if audio_duration_ms <= 0:
+        return jsonify({'success': False, 'error': 'A hangfájl nem tartalmaz adatot.'}), 400
+
+    start_ms = int(start_value * 1000)
+    end_ms = int(end_value * 1000)
+    start_ms = max(0, min(start_ms, audio_duration_ms))
+    end_ms = max(0, min(end_ms, audio_duration_ms))
+
+    if end_ms <= start_ms:
+        return jsonify({'success': False, 'error': 'A kijelölés túl rövid a mentéshez.'}), 400
+
+    trimmed_segment = audio_segment[start_ms:end_ms]
+    if len(trimmed_segment) <= 0:
+        return jsonify({'success': False, 'error': 'A kiválasztott szakasz üres.'}), 400
+
+    export_format = source_ext.lstrip('.') or 'wav'
+    temp_path = None
+    try:
+        fd, temp_path = tempfile.mkstemp(suffix=source_ext)
+        os.close(fd)
+        trimmed_segment.export(temp_path, format=export_format)
+        os.replace(temp_path, destination_abs)
+    except Exception as exc:
+        logging.exception("Nem sikerült menteni a kivágott audiót %s -> %s: %s", source_abs, destination_abs, exc)
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+        return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a kivágott hangrészletet.'}), 500
+
+    relative_saved_path = os.path.relpath(destination_abs, project_root_abs).replace('\\', '/')
+    trimmed_duration = (end_ms - start_ms) / 1000.0
+
+    return jsonify({
+        'success': True,
+        'message': 'Hangrészlet sikeresen mentve.',
+        'saved_path': relative_saved_path,
+        'saved_name': os.path.basename(destination_abs),
+        'overwrote_original': destination_abs == source_abs,
+        'trim_start': start_ms / 1000.0,
+        'trim_end': end_ms / 1000.0,
+        'trim_duration': trimmed_duration
+    })
 
 
 @app.route('/api/project-directory/<project_name>', methods=['DELETE'])
