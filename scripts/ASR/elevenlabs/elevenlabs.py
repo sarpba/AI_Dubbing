@@ -25,7 +25,7 @@ from tools.debug_utils import add_debug_argument, configure_debug_mode
 
 SUPPORTED_EXTENSIONS: Tuple[str, ...] = (".wav", ".mp3", ".flac", ".m4a", ".ogg")
 DEFAULT_API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
-DEFAULT_MODEL_ID = "eleven_multilingual_v2"
+DEFAULT_MODEL_ID = "scribe_v1_experimental"
 ENV_API_KEY = "EVENLABS_API_KEY"
 KEYHOLDER_FIELD = "evenlabs_api_key"
 DEFAULT_MAX_PAUSE_S = 0.8

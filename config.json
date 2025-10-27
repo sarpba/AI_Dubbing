@@ -50,6 +50,15 @@
       "params": {}
     },
     {
+      "script": "ASR/elevenlabs/elevenlabs.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "api_key": "sk_176ed1de121b1fc50b5b828a11d85cbe6da580293c7b1ccb",
+        "language": "en"
+      }
+    },
+    {
       "script": "ASR/paraket-eng/parakeet-tdt-0.6b-v2.py",
       "enabled": false,
       "halt_on_fail": true,
@@ -70,7 +79,7 @@
     {
       "type": "widget",
       "widget": "reviewContinue",
-      "enabled": true
+      "enabled": false
     },
     {
       "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
@@ -92,11 +101,11 @@
     },
     {
       "script": "AUDIO-VIDEO/merge_chunks_with_background/merge_chunks_with_background_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "narrator": true,
-        "background_volume": "1"
+        "background_volume": "1",
+        "narrator": true
       }
     },
     {

@@ -10,6 +10,7 @@ import uuid
 import copy
 import re
 import tempfile
+import glob
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -2088,17 +2089,22 @@ def review_project(project_name):
 
 @app.route('/api/upload-video', methods=['POST'])
 def upload_video():
-    if 'file' not in request.files or 'projectName' not in request.form:
-        return jsonify({'error': 'Missing file or project name'}), 400
-
-    video_file = request.files['file']
-    project_name = request.form['projectName'].strip()
+    project_name = request.form.get('projectName', '').strip()
+    youtube_url = request.form.get('youtubeUrl', '').strip()
+    video_file = request.files.get('file')
+    has_video_file = bool(video_file and video_file.filename)
 
     if not project_name:
         return jsonify({'error': 'Üres projektnév nem engedélyezett.'}), 400
 
-    if not video_file or not video_file.filename:
-        return jsonify({'error': 'Nem érkezett videó fájl.'}), 400
+    if has_video_file and youtube_url:
+        return jsonify({'error': 'Válaszd ki, hogy fájlt töltesz fel, vagy YouTube videót töltesz le.'}), 400
+
+    if not has_video_file and not youtube_url:
+        return jsonify({'error': 'Adj meg videó fájlt vagy YouTube hivatkozást.'}), 400
+
+    if youtube_url and not re.match(r'^https?://', youtube_url, re.IGNORECASE):
+        return jsonify({'error': 'Adj meg érvényes (http/https) YouTube hivatkozást.'}), 400
 
     sanitized_project = secure_filename(project_name)
     if not sanitized_project:
@@ -2115,13 +2121,10 @@ def upload_video():
         return jsonify({'error': 'Nem sikerült létrehozni a projekt könyvtárát.'}), 500
 
     upload_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['upload'])
-    video_filename = secure_filename(video_file.filename)
-    if not video_filename:
-        return jsonify({'error': 'Érvénytelen videó fájlnév.'}), 400
-
     subtitle_file = request.files.get('subtitleFile')
     subtitle_suffix_raw = request.form.get('subtitleSuffix', '').strip()
     subtitle_filename = None
+    subtitle_suffix_normalized = None
 
     if subtitle_file and subtitle_file.filename:
         original_subtitle_filename = secure_filename(subtitle_file.filename)
@@ -2135,16 +2138,69 @@ def upload_video():
             return jsonify({'error': 'A felirat kiegészítés formátuma: aláhúzás + kétbetűs nyelvi kód (pl. _hu).'}), 400
 
         subtitle_suffix_normalized = subtitle_suffix_raw.lower()
+
+    video_filename = None
+    video_path = None
+
+    if has_video_file:
+        video_filename = secure_filename(video_file.filename)
+        if not video_filename:
+            return jsonify({'error': 'Érvénytelen videó fájlnév.'}), 400
+        video_path = os.path.join(upload_dir, video_filename)
+    else:
+        if not shutil.which('yt-dlp'):
+            return jsonify({'error': 'A yt-dlp nem érhető el a kiszolgálón. Telepítsd a yt-dlp csomagot.'}), 500
+
+        video_filename_base = sanitized_project
+        output_template = os.path.join(upload_dir, f"{video_filename_base}.%(ext)s")
+        ytdlp_cmd = [
+            'yt-dlp',
+            youtube_url,
+            '--no-playlist',
+            '--remux-video', 'mkv',
+            '--merge-output-format', 'mkv',
+            '-o', output_template,
+        ]
+
+        logging.info("yt-dlp parancs futtatása: %s", ' '.join(ytdlp_cmd))
+        download_process = subprocess.run(
+            ytdlp_cmd,
+            capture_output=True,
+            text=True,
+        )
+
+        if download_process.returncode != 0:
+            logging.error("A yt-dlp letöltés sikertelen: %s", download_process.stderr)
+            return jsonify({'error': 'Nem sikerült letölteni a YouTube videót.', 'details': download_process.stderr}), 500
+
+        expected_mkv = os.path.join(upload_dir, f"{video_filename_base}.mkv")
+        if os.path.isfile(expected_mkv):
+            video_filename = os.path.basename(expected_mkv)
+            video_path = expected_mkv
+        else:
+            candidate_files = [
+                path for path in glob.glob(os.path.join(upload_dir, f"{video_filename_base}.*"))
+                if not path.endswith('.part')
+            ]
+            if not candidate_files:
+                logging.error("A yt-dlp nem hozott létre videó fájlt az elvárt névvel: %s", output_template)
+                return jsonify({'error': 'A letöltött videó fájl nem található.'}), 500
+
+            candidate_files.sort(key=os.path.getmtime, reverse=True)
+            video_path = candidate_files[0]
+            video_filename = os.path.basename(video_path)
+
+    subtitle_path = None
+    if subtitle_file and subtitle_file.filename:
         base_video_name = os.path.splitext(video_filename)[0]
         subtitle_filename = secure_filename(f"{base_video_name}{subtitle_suffix_normalized}.srt")
-
-    video_path = os.path.join(upload_dir, video_filename)
-    subtitle_path = os.path.join(upload_dir, subtitle_filename) if subtitle_filename else None
+        subtitle_path = os.path.join(upload_dir, subtitle_filename)
 
     try:
-        video_file.save(video_path)
+        if has_video_file and video_path:
+            video_file.save(video_path)
 
-        if subtitle_filename:
+        if subtitle_filename and subtitle_path:
             subtitle_file.save(subtitle_path)
 
         return jsonify({

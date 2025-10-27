@@ -123,8 +123,24 @@
                                     <input type="text" class="form-control" id="projectName" name="projectName" required>
                                 </div>
                                 <div class="mb-3">
+                                    <label class="form-label">Forrás típusa</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="sourceType" id="sourceTypeUpload" value="upload" checked>
+                                        <label class="form-check-label" for="sourceTypeUpload">Videó fájl feltöltése</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="sourceType" id="sourceTypeYoutube" value="youtube">
+                                        <label class="form-check-label" for="sourceTypeYoutube">YouTube letöltés (yt-dlp)</label>
+                                    </div>
+                                </div>
+                                <div class="mb-3" id="fileInputGroup">
                                     <label for="videoFile" class="form-label">Videó fájl</label>
-                                    <input type="file" class="form-control" id="videoFile" name="file" accept="video/*" required>
+                                    <input type="file" class="form-control" id="videoFile" name="file" accept="video/*">
+                                </div>
+                                <div class="mb-3 d-none" id="youtubeInputGroup">
+                                    <label for="youtubeUrl" class="form-label">YouTube hivatkozás</label>
+                                    <input type="url" class="form-control" id="youtubeUrl" name="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." inputmode="url">
+                                    <small class="text-muted">A videó yt-dlp segítségével MKV konténerbe kerül letöltésre.</small>
                                 </div>
                                 <div class="mb-3">
                                     <label for="subtitleFile" class="form-label">Felirat fájl (opcionális)</label>
@@ -192,6 +208,26 @@
         const uploadProgressContainer = document.getElementById('uploadProgressContainer');
         const uploadProgressBar = document.getElementById('uploadProgressBar');
         const uploadProgressText = document.getElementById('uploadProgressText');
+        const videoInput = document.getElementById('videoFile');
+        const sourceRadios = document.querySelectorAll('input[name="sourceType"]');
+        const youtubeUrlInput = document.getElementById('youtubeUrl');
+        const fileInputGroup = document.getElementById('fileInputGroup');
+        const youtubeInputGroup = document.getElementById('youtubeInputGroup');
+
+        function getSelectedSource() {
+            const selected = document.querySelector('input[name="sourceType"]:checked');
+            return selected ? selected.value : 'upload';
+        }
+
+        function updateSourceVisibility() {
+            const useUpload = getSelectedSource() === 'upload';
+            fileInputGroup.classList.toggle('d-none', !useUpload);
+            youtubeInputGroup.classList.toggle('d-none', useUpload);
+            videoInput.required = useUpload;
+        }
+
+        sourceRadios.forEach(radio => radio.addEventListener('change', updateSourceVisibility));
+        updateSourceVisibility();
 
         uploadForm.addEventListener('submit', function(event) {
             event.preventDefault();
@@ -202,10 +238,24 @@
                 return;
             }
 
-            const videoInput = document.getElementById('videoFile');
-            if (!videoInput.files.length) {
-                alert('Válassz videó fájlt!');
-                return;
+            const sourceType = getSelectedSource();
+            const youtubeUrl = youtubeUrlInput.value.trim();
+
+            if (sourceType === 'upload') {
+                if (!videoInput.files.length) {
+                    alert('Válassz videó fájlt!');
+                    return;
+                }
+            } else {
+                if (!youtubeUrl) {
+                    alert('Add meg a YouTube hivatkozást!');
+                    return;
+                }
+                if (!/^https?:\/\//i.test(youtubeUrl)) {
+                    alert('Adj meg érvényes YouTube hivatkozást (https://...)!');
+                    return;
+                }
+                youtubeUrlInput.value = youtubeUrl;
             }
 
             const subtitleInput = document.getElementById('subtitleFile');
@@ -226,7 +276,12 @@
 
             const formData = new FormData();
             formData.append('projectName', projectName);
-            formData.append('file', videoInput.files[0]);
+            formData.append('sourceType', sourceType);
+            if (sourceType === 'upload') {
+                formData.append('file', videoInput.files[0]);
+            } else {
+                formData.append('youtubeUrl', youtubeUrl);
+            }
 
             if (subtitleSuffix) {
                 formData.append('subtitleSuffix', subtitleSuffix);
@@ -238,15 +293,21 @@
 
             uploadProgressContainer.classList.remove('d-none');
             uploadProgressBar.classList.remove('bg-success', 'bg-danger');
-            uploadProgressBar.style.width = '0%';
-            uploadProgressBar.textContent = '0%';
-            uploadProgressText.textContent = 'Feltöltés előkészítése...';
+            if (sourceType === 'upload') {
+                uploadProgressBar.style.width = '0%';
+                uploadProgressBar.textContent = '0%';
+                uploadProgressText.textContent = 'Feltöltés előkészítése...';
+            } else {
+                uploadProgressBar.style.width = '100%';
+                uploadProgressBar.textContent = '';
+                uploadProgressText.textContent = 'YouTube videó letöltése és MKV konvertálása folyamatban...';
+            }
 
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/api/upload-video', true);
 
             xhr.upload.addEventListener('progress', event => {
-                if (!event.lengthComputable) {
+                if (sourceType !== 'upload' || !event.lengthComputable) {
                     return;
                 }
 
@@ -256,22 +317,30 @@
                 uploadProgressText.textContent = `Feltöltve: ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`;
             });
 
+            let responsePayload = null;
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== XMLHttpRequest.DONE) {
                     return;
                 }
 
                 try {
-                    const result = JSON.parse(xhr.responseText || '{}');
-                    if (xhr.status >= 200 && xhr.status < 300 && result.success !== false) {
+                    responsePayload = JSON.parse(xhr.responseText || '{}');
+                    if (xhr.status >= 200 && xhr.status < 300 && responsePayload.success !== false) {
                         uploadProgressBar.classList.add('bg-success');
-                        uploadProgressText.textContent = result.message || 'Feltöltés befejezve. Az oldal frissítése folyamatban...';
+                        const successMessage = responsePayload.message
+                            || (sourceType === 'youtube'
+                                ? 'Letöltés befejezve. Az oldal frissítése folyamatban...'
+                                : 'Feltöltés befejezve. Az oldal frissítése folyamatban...');
+                        uploadProgressText.textContent = successMessage;
                         setTimeout(() => location.reload(), 800);
                     } else {
-                        throw new Error(result.error || 'Ismeretlen hiba történt a feltöltés közben.');
+                        throw new Error(responsePayload.error || 'Ismeretlen hiba történt a feltöltés közben.');
                     }
                 } catch (error) {
                     console.error('Hiba:', error);
+                    if (responsePayload && responsePayload.details) {
+                        console.error('Részletek:', responsePayload.details);
+                    }
                     uploadProgressBar.classList.add('bg-danger');
                     uploadProgressText.textContent = error.message;
                     alert(`Hiba történt a feltöltés során: ${error.message}`);
