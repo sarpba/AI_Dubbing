@@ -1,0 +1,83 @@
+{
+  "enviroment": "evenlabs",
+  "script": "elevenlabs.py",
+  "api": "evenlabs",
+  "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok szó szerinti, időbélyegelt átírására.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "language",
+      "flags": [
+        "--language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "model",
+      "flags": [
+        "--model"
+      ],
+      "type": "option",
+      "default": "eleven_multilingual_v2"
+    },
+    {
+      "name": "api_url",
+      "flags": [
+        "--api-url"
+      ],
+      "type": "option",
+      "default": "https://api.elevenlabs.io/v1/speech-to-text"
+    },
+    {
+      "name": "api_key",
+      "flags": [
+        "--api-key"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "max_pause",
+      "flags": [
+        "--max-pause"
+      ],
+      "type": "option",
+      "default": 0.8
+    },
+    {
+      "name": "timestamp_padding",
+      "flags": [
+        "--timestamp-padding"
+      ],
+      "type": "option",
+      "default": 0.1
+    },
+    {
+      "name": "max_segment_duration",
+      "flags": [
+        "--max-segment-duration"
+      ],
+      "type": "option",
+      "default": 14.0
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

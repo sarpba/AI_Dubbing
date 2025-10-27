@@ -13,6 +13,7 @@ conda install git
 git clone https://github.com/sarpba/AI_Dubbing.git
 cd AI_Dubbing_new
 pip install -r requirements.txt
+pip install elevenlabs yt-dlp
 sudo apt update
 sudo apt install ffmpeg
 sudo apt install gcc
