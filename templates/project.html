@@ -132,13 +132,24 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            padding: 0.15rem 0;
+            padding: 0.15rem 0.35rem;
+            margin: 0 -0.35rem;
             flex-wrap: wrap;
+            border-radius: 0.4rem;
+            transition: background-color 0.12s ease-in-out;
+        }
+        .file-browser-item:hover {
+            background-color: var(--bs-tertiary-bg, rgba(0, 0, 0, 0.05));
         }
         .file-browser-link {
             flex: 1 1 auto;
             min-width: 0;
             word-break: break-word;
+        }
+        .file-browser-meta {
+            font-size: 0.8rem;
+            color: var(--bs-secondary-color, #6c757d);
+            font-variant-numeric: tabular-nums;
         }
         details.file-browser-directory > summary {
             cursor: pointer;
@@ -771,6 +782,17 @@
             return name.substring(dotIndex).toLowerCase();
         }
 
+        function createMetadataElement(entry) {
+            const value = entry && entry.duration_display;
+            if (!value) {
+                return null;
+            }
+            const span = document.createElement('span');
+            span.className = 'file-browser-meta small text-muted';
+            span.textContent = value;
+            return span;
+        }
+
         function createFileTreeList(entries) {
             const list = document.createElement('ul');
             list.className = 'file-browser-tree list-unstyled mb-0';
@@ -864,6 +886,19 @@
                     }
 
                     fileRow.appendChild(actions);
+                    const metadataElement = createMetadataElement(entry);
+                    if (metadataElement) {
+                        fileRow.insertBefore(metadataElement, actions);
+                    }
+                    if (entry.duration_from_name !== undefined && entry.duration_from_name !== null) {
+                        fileRow.dataset.durationFromName = String(entry.duration_from_name);
+                    }
+                    if (entry.duration_actual !== undefined && entry.duration_actual !== null) {
+                        fileRow.dataset.durationActual = String(entry.duration_actual);
+                    }
+                    if (entry.duration_display) {
+                        fileRow.dataset.durationDisplay = entry.duration_display;
+                    }
                     item.appendChild(fileRow);
                 }
                 list.appendChild(item);
@@ -4503,10 +4538,20 @@
                         {%- if '.' in entry.name %}
                             {%- set extension = '.' + entry.name.rsplit('.', 1)[1].lower() %}
                         {%- endif %}
-                        <div class="file-browser-item" data-file-path="{{ entry.path }}" data-file-name="{{ entry.name }}" data-file-extension="{{ extension }}"{% if entry.enable_failed_move %} data-enable-failed-move="true"{% endif %}>
+                        <div class="file-browser-item"
+                             data-file-path="{{ entry.path }}"
+                             data-file-name="{{ entry.name }}"
+                             data-file-extension="{{ extension }}"
+                             {% if entry.duration_from_name is defined and entry.duration_from_name is not none %}data-duration-from-name="{{ '%.6f'|format(entry.duration_from_name) }}"{% endif %}
+                             {% if entry.duration_actual is defined and entry.duration_actual is not none %}data-duration-actual="{{ '%.6f'|format(entry.duration_actual) }}"{% endif %}
+                             {% if entry.duration_display is defined and entry.duration_display %}data-duration-display="{{ entry.duration_display }}"{% endif %}
+                             {% if entry.enable_failed_move %}data-enable-failed-move="true"{% endif %}>
                             <a class="file-browser-link" href="{{ url_for('serve_workdir', filename=project.name + '/' + entry.path) }}" target="_blank" rel="noopener">
                                 {{ entry.name }}
                             </a>
+                            {% if entry.duration_display is defined and entry.duration_display %}
+                                <span class="file-browser-meta small text-muted">{{ entry.duration_display }}</span>
+                            {% endif %}
                             <div class="file-browser-actions">
                                 <button type="button" class="btn btn-sm btn-outline-danger file-delete-btn" title="Fájl törlése">Törlés</button>
                                 {%- if entry.enable_failed_move and extension == '.wav' %}

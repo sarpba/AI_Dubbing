@@ -17,6 +17,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import shutil
 from werkzeug.utils import secure_filename
 from pydub import AudioSegment
+import wave
+import math
 
 app = Flask(__name__)
 
@@ -283,10 +285,12 @@ def is_subpath(child_path, parent_path):
 def collect_directory_entries(
     root_path: str,
     target_path: str,
+    metadata_directories: Optional[Set[str]] = None,
     highlight_map: Optional[Dict[str, str]] = None
 ) -> List[Dict[str, Any]]:
     entries: List[Dict[str, Any]] = []
     highlight_map = highlight_map or {}
+    metadata_directories = metadata_directories or set()
     try:
         for name in sorted(os.listdir(target_path)):
             if name.startswith('.'):
@@ -311,6 +315,9 @@ def collect_directory_entries(
                 }
                 if should_enable_failed_move(rel_path, highlight_map):
                     file_entry['enable_failed_move'] = True
+                metadata = build_audio_metadata(full_path, rel_path, metadata_directories)
+                if metadata:
+                    file_entry.update(metadata)
                 entries.append(file_entry)
     except Exception as exc:
         logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", target_path, exc)
@@ -384,6 +391,111 @@ def should_enable_failed_move(rel_path: str, highlight_map: Dict[str, str]) -> b
         return False
     _, ext = os.path.splitext(rel_path)
     return ext.lower() == '.wav'
+
+
+FILENAME_RANGE_PATTERN = re.compile(
+    r'^(\d{2}-\d{2}-\d{2}-\d{3})_(\d{2}-\d{2}-\d{2}-\d{3})'
+)
+
+
+def get_audio_metadata_directories(config_snapshot: Dict[str, Any]) -> Set[str]:
+    project_subdirs = config_snapshot.get('PROJECT_SUBDIRS', {}) if isinstance(config_snapshot, dict) else {}
+    candidates = {
+        'translated_splits',
+        'failed_generations',
+        project_subdirs.get('translated_splits') or '',
+        project_subdirs.get('failed_generations') or '',
+    }
+    return {value for value in candidates if isinstance(value, str) and value.strip()}
+
+
+def should_collect_audio_metadata(rel_path: str, metadata_directories: Set[str]) -> bool:
+    if not rel_path or not metadata_directories:
+        return False
+    normalized = rel_path.replace('\\', '/')
+    segments = [segment for segment in normalized.split('/') if segment]
+    if len(segments) <= 1:
+        return False
+    parent_segments = segments[:-1]
+    return any(segment in metadata_directories for segment in parent_segments)
+
+
+def parse_timestamp_to_seconds(value: str) -> Optional[float]:
+    if not value:
+        return None
+    parts = value.split('-')
+    if len(parts) != 4:
+        return None
+    try:
+        hours, minutes, seconds, milliseconds = (int(part) for part in parts)
+    except ValueError:
+        return None
+    total_seconds = (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000.0)
+    return max(total_seconds, 0.0)
+
+
+def compute_duration_from_filename(filename: str) -> Optional[float]:
+    if not filename:
+        return None
+    stem, _ = os.path.splitext(filename)
+    match = FILENAME_RANGE_PATTERN.match(stem or '')
+    if not match:
+        return None
+    start_seconds = parse_timestamp_to_seconds(match.group(1))
+    end_seconds = parse_timestamp_to_seconds(match.group(2))
+    if start_seconds is None or end_seconds is None:
+        return None
+    computed = end_seconds - start_seconds
+    if computed < 0:
+        return None
+    return computed
+
+
+def read_wav_duration_seconds(file_path: str) -> Optional[float]:
+    try:
+        with wave.open(file_path, 'rb') as wav_file:
+            frame_rate = wav_file.getframerate()
+            frame_count = wav_file.getnframes()
+            if not frame_rate:
+                return None
+            duration = frame_count / float(frame_rate)
+            if math.isfinite(duration) and duration >= 0:
+                return duration
+    except (wave.Error, OSError) as exc:
+        logging.debug("Nem sikerült kiolvasni a wav időtartamot (%s): %s", file_path, exc)
+    return None
+
+
+def format_seconds_hundredths(value: Optional[float]) -> Optional[str]:
+    if value is None:
+        return None
+    if not math.isfinite(value):
+        return None
+    rounded = round(max(value, 0) + 1e-9, 2)
+    return f"{rounded:.2f}"
+
+
+def build_audio_metadata(
+    full_path: str,
+    rel_path: str,
+    metadata_directories: Set[str]
+) -> Dict[str, Any]:
+    _, ext = os.path.splitext(full_path)
+    if ext.lower() != '.wav':
+        return {}
+    if not should_collect_audio_metadata(rel_path, metadata_directories):
+        return {}
+    filename = os.path.basename(rel_path)
+    computed_seconds = compute_duration_from_filename(filename)
+    actual_seconds = read_wav_duration_seconds(full_path)
+    display_left = format_seconds_hundredths(computed_seconds) or '--'
+    display_right = format_seconds_hundredths(actual_seconds) or '--'
+    display_value = f"{display_left} / {display_right}"
+    return {
+        'duration_from_name': computed_seconds,
+        'duration_actual': actual_seconds,
+        'duration_display': display_value
+    }
 
 
 def infer_autofill_kind(param_name: str) -> Optional[str]:
@@ -1523,6 +1635,7 @@ def show_project(project_name):
     }
 
     highlight_map = compute_failed_generation_highlights(project_dir, config)
+    metadata_directories = get_audio_metadata_directories(config)
 
     def group_files_by_extension(file_list):
         grouped = {}
@@ -1570,6 +1683,9 @@ def show_project(project_name):
                     }
                     if should_enable_failed_move(normalized_file_path, highlight_map):
                         file_entry['enable_failed_move'] = True
+                    metadata = build_audio_metadata(full_path, normalized_file_path, metadata_directories)
+                    if metadata:
+                        file_entry.update(metadata)
                     entries.append(file_entry)
         except Exception as exc:
             logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", current_path, exc)
@@ -1665,7 +1781,13 @@ def get_project_directory_listing(project_name):
         return jsonify({'success': False, 'error': 'A megadott könyvtár nem található'}), 404
 
     highlight_map = compute_failed_generation_highlights(base_dir_abs, config_snapshot)
-    entries = collect_directory_entries(base_dir_abs, target_dir, highlight_map)
+    metadata_directories = get_audio_metadata_directories(config_snapshot)
+    entries = collect_directory_entries(
+        base_dir_abs,
+        target_dir,
+        metadata_directories,
+        highlight_map
+    )
     if target_dir == base_dir_abs:
         current_path_key = ''
     else:
