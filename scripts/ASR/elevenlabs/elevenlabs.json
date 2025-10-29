@@ -2,7 +2,7 @@
   "enviroment": "sync",
   "script": "ASR/elevenlabs/elevenlabs.py",
   "api": "evenlabs",
-  "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok szó szerinti, időbélyegelt átírására.",
+  "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok feldolgozására, a kapott nyers JSON válaszok mentésével.",
   "required": [
     {
       "name": "project_name",
@@ -46,30 +46,6 @@
       ],
       "type": "option",
       "default": null
-    },
-    {
-      "name": "max_pause",
-      "flags": [
-        "--max-pause"
-      ],
-      "type": "option",
-      "default": 0.8
-    },
-    {
-      "name": "timestamp_padding",
-      "flags": [
-        "--timestamp-padding"
-      ],
-      "type": "option",
-      "default": 0.1
-    },
-    {
-      "name": "max_segment_duration",
-      "flags": [
-        "--max-segment-duration"
-      ],
-      "type": "option",
-      "default": 11.5
     },
     {
       "name": "debug",

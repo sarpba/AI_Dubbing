@@ -1,6 +1,6 @@
 """
-Evenlabs ASR integration – project aware transcription pipeline with word timestamps.
-Most: speaker diarizáció támogatása (—diarize / —no-diarize kapcsolók, alapértelmezés: be).
+Evenlabs ASR integration – project aware transcription pipeline that stores the raw ElevenLabs JSON response.
+Speaker diarizáció támogatása továbbra is elérhető (—diarize / —no-diarize kapcsolók, alapértelmezés: be).
 """
 
 from __future__ import annotations
@@ -9,11 +9,10 @@ import argparse
 import base64
 import json
 import logging
-import math
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 
@@ -30,20 +29,6 @@ DEFAULT_API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 DEFAULT_MODEL_ID = "scribe_v1_experimental"
 ENV_API_KEY = "EVENLABS_API_KEY"
 KEYHOLDER_FIELD = "evenlabs_api_key"
-DEFAULT_MAX_PAUSE_S = 0.8
-DEFAULT_PADDING_S = 0.1
-DEFAULT_MAX_SEGMENT_S = 11.5
-PRIMARY_PUNCTUATION = (".", "!", "?")
-SECONDARY_PUNCTUATION = (",",)
-
-
-def _sanitize_text(value: Any) -> str:
-    """Remove escaped quote sequences from transcribed text."""
-    if not value:
-        return ""
-    text = str(value)
-    cleaned = text.replace('\\"', "").replace('"', "")
-    return cleaned.strip()
 
 
 def get_project_root() -> Path:
@@ -126,242 +111,6 @@ def load_api_key(project_root: Path) -> Optional[str]:
         return None
 
 
-def _safe_float(value: Any) -> Optional[float]:
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return None
-    return result if math.isfinite(result) else None
-
-
-def _extract_speaker(entry: dict) -> Optional[str]:
-    """Try to pull a speaker label from various possible fields."""
-    for key in ("speaker", "speaker_label", "speaker_id", "speaker_tag", "spk"):
-        if key in entry and entry[key] is not None and str(entry[key]) != "":
-            return str(entry[key])
-    return None
-
-
-def _normalise_word_entry(entry: dict) -> Optional[dict]:
-    text = _sanitize_text(entry.get("word") or entry.get("text") or entry.get("token") or "")
-    if not text:
-        return None
-    start = (
-        _safe_float(entry.get("start"))
-        or _safe_float(entry.get("start_time"))
-        or _safe_float(entry.get("offset_seconds"))
-        or _safe_float(entry.get("offset"))
-    )
-    end = (
-        _safe_float(entry.get("end"))
-        or _safe_float(entry.get("end_time"))
-        or _safe_float(entry.get("offset_seconds_end"))
-    )
-    if start is None:
-        return None
-    if end is None:
-        duration = _safe_float(entry.get("duration")) or 0.0
-        end = start + duration
-    confidence = _safe_float(entry.get("confidence") or entry.get("score"))
-    speaker = _extract_speaker(entry)
-    return {
-        "word": text,
-        "start": round(start, 3),
-        "end": round(end or start, 3),
-        "score": round(confidence, 4) if confidence is not None else None,
-        "speaker": speaker,
-    }
-
-
-def extract_word_segments(payload: dict) -> List[dict]:
-    raw_candidates: Iterable[Any] = ()
-    if isinstance(payload.get("words"), list):
-        raw_candidates = payload["words"]
-    elif isinstance(payload.get("word_segments"), list):
-        raw_candidates = payload["word_segments"]
-    elif isinstance(payload.get("segments"), list):
-        collected: List[dict] = []
-        for segment in payload["segments"]:
-            words = segment.get("words") or []
-            if isinstance(words, list):
-                collected.extend(words)
-        raw_candidates = collected
-
-    normalised: List[dict] = []
-    for entry in raw_candidates:
-        if isinstance(entry, dict):
-            normalised_word = _normalise_word_entry(entry)
-            if normalised_word:
-                normalised.append(normalised_word)
-    normalised.sort(key=lambda item: item["start"])
-    return normalised
-
-
-def adjust_word_timestamps(word_segments: List[dict], padding_s: float) -> List[dict]:
-    if not word_segments or padding_s <= 0:
-        return word_segments
-    adjusted = [dict(word) for word in word_segments]
-    for idx in range(len(adjusted) - 1):
-        gap = adjusted[idx + 1]["start"] - adjusted[idx]["end"]
-        if gap > padding_s * 2:
-            delta = min(padding_s, gap / 2.0)
-            adjusted[idx]["end"] += delta
-            adjusted[idx + 1]["start"] -= delta
-    adjusted[0]["start"] = max(0.0, adjusted[0]["start"] - padding_s)
-    adjusted[-1]["end"] += padding_s
-    for word in adjusted:
-        word["start"] = round(word["start"], 3)
-        word["end"] = round(word["end"], 3)
-    return adjusted
-
-
-def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
-    if not words:
-        return None
-    text = _sanitize_text(" ".join(word["word"] for word in words))
-    seg = {
-        "start": round(words[0]["start"], 3),
-        "end": round(words[-1]["end"], 3),
-        "text": text,
-        "words": words,
-    }
-    # annotate dominant speaker if all the same
-    speakers = {w.get("speaker") for w in words if w.get("speaker") is not None}
-    if len(speakers) == 1:
-        seg["speaker"] = next(iter(speakers))
-    return seg
-
-
-def sentence_segments_from_words(
-    words: List[dict],
-    max_pause_s: float,
-    *,
-    split_on_speaker_change: bool = False,
-) -> List[dict]:
-    if not words:
-        return []
-    segments: List[dict] = []
-    current: List[dict] = []
-    for word in words:
-        pause_break = current and (word["start"] - current[-1]["end"]) > max_pause_s
-        speaker_break = (
-            split_on_speaker_change
-            and current
-            and current[-1].get("speaker") is not None
-            and word.get("speaker") is not None
-            and word.get("speaker") != current[-1].get("speaker")
-        )
-        if pause_break or speaker_break:
-            segment = _create_segment_from_words(current)
-            if segment:
-                segments.append(segment)
-            current = []
-        current.append(word)
-    if current:
-        segment = _create_segment_from_words(current)
-        if segment:
-            segments.append(segment)
-    return segments
-
-
-def split_long_segments(segments: List[dict], max_duration_s: float) -> List[dict]:
-    if max_duration_s <= 0:
-        return segments
-    final_segments: List[dict] = []
-
-    def pick_split_index(order_words: List[dict], punctuation: Tuple[str, ...]) -> Optional[int]:
-        chosen: Optional[int] = None
-        for idx in range(len(order_words) - 1):
-            token = order_words[idx]["word"].strip()
-            if not token:
-                continue
-            if token.endswith(punctuation):
-                duration = order_words[idx]["end"] - order_words[0]["start"]
-                if duration <= max_duration_s:
-                    chosen = idx
-        return chosen
-
-    def split_by_equal_parts(order_words: List[dict], parts: int) -> List[List[dict]]:
-        if parts <= 1 or len(order_words) <= 1:
-            return [order_words]
-        total_duration = order_words[-1]["end"] - order_words[0]["start"]
-        if total_duration <= 0:
-            return [order_words]
-        target = total_duration / parts
-        boundaries = [order_words[0]["start"] + target * k for k in range(1, parts)]
-        chunks: List[List[dict]] = []
-        start_idx = 0
-        for boundary in boundaries:
-            idx = start_idx
-            while idx < len(order_words) - 1 and order_words[idx]["end"] < boundary:
-                idx += 1
-            chunk = order_words[start_idx : idx + 1]
-            if chunk:
-                chunks.append(chunk)
-                start_idx = idx + 1
-        if start_idx < len(order_words):
-            chunks.append(order_words[start_idx:])
-        if not chunks:
-            return [order_words]
-        return chunks
-
-    queue: List[List[dict]] = [segment["words"] for segment in segments if segment.get("words")]
-
-    while queue:
-        current_words = queue.pop(0)
-        if not current_words:
-            continue
-        duration = current_words[-1]["end"] - current_words[0]["start"]
-        if duration <= max_duration_s or len(current_words) == 1:
-            segment = _create_segment_from_words(current_words)
-            if segment:
-                final_segments.append(segment)
-            continue
-
-        split_idx = pick_split_index(current_words, PRIMARY_PUNCTUATION)
-        if split_idx is None:
-            split_idx = pick_split_index(current_words, SECONDARY_PUNCTUATION)
-
-        if split_idx is not None:
-            left = current_words[: split_idx + 1]
-            right = current_words[split_idx + 1 :]
-            if left:
-                queue.insert(0, left)
-            if right:
-                queue.insert(1, right)
-            continue
-
-        parts = max(2, math.ceil(duration / max_duration_s))
-        equal_chunks = split_by_equal_parts(current_words, parts)
-        if len(equal_chunks) == 1:
-            segment = _create_segment_from_words(equal_chunks[0])
-            if segment:
-                final_segments.append(segment)
-        else:
-            for chunk in reversed(equal_chunks):
-                if chunk:
-                    queue.insert(0, chunk)
-
-    return final_segments
-
-
-def build_segments(
-    word_segments: List[dict],
-    max_pause_s: float,
-    padding_s: float,
-    max_segment_s: float,
-    *,
-    enforce_single_speaker: bool,
-) -> List[dict]:
-    if not word_segments:
-        return []
-    adjusted = adjust_word_timestamps(word_segments, padding_s=padding_s)
-    initial_segments = sentence_segments_from_words(
-        adjusted, max_pause_s=max_pause_s, split_on_speaker_change=enforce_single_speaker
-    )
-    return split_long_segments(initial_segments, max_segment_s)
-
-
 def transcribe_with_evenlabs(
     audio_path: Path,
     api_url: str,
@@ -370,20 +119,15 @@ def transcribe_with_evenlabs(
     language: Optional[str],
     model_id: Optional[str],
     diarize: bool,
-) -> Optional[dict]:
+) -> Optional[str]:
     headers = {"xi-api-key": api_key}
     data: Dict[str, Any] = {}
     if language:
         data["language_code"] = language
     if model_id:
         data["model_id"] = model_id
-    # diarizáció bekapcsolása az API-n (ahol támogatott)
     if diarize:
-        # ElevenLabs Scribe API tipikus paraméterek – rugalmasan küldjük el
         data["diarize"] = "true"
-        # Opcionális: küszöb és max beszélő szám, ha a backend támogatja
-        # data["diarization_threshold"] = 0.25
-        # data["num_speakers"] = 0  # 0 = auto
 
     try:
         with audio_path.open("rb") as fp:
@@ -399,13 +143,14 @@ def transcribe_with_evenlabs(
         )
         return None
 
+    raw_payload = response.text
     try:
-        payload = response.json()
+        json.loads(raw_payload)
     except ValueError:
         logging.error("Evenlabs API nem JSON választ adott (%s).", audio_path.name)
         return None
 
-    return payload
+    return raw_payload
 
 
 def process_directory(
@@ -415,9 +160,6 @@ def process_directory(
     *,
     language: Optional[str],
     model_id: Optional[str],
-    max_pause_s: float,
-    padding_s: float,
-    max_segment_s: float,
     diarize: bool,
 ) -> None:
     audio_files = sorted(
@@ -444,42 +186,11 @@ def process_directory(
             print(f"  ✖  Sikertelen API hívás: {audio_path.name}")
             continue
 
-        word_segments = extract_word_segments(payload)
-        if not word_segments:
-            print(f"  ✖  Nem található szó szintű időbélyeg a válaszban: {audio_path.name}")
-            continue
-
-        segments = build_segments(
-            word_segments,
-            max_pause_s=max_pause_s,
-            padding_s=padding_s,
-            max_segment_s=max_segment_s,
-            enforce_single_speaker=diarize,
-        )
-
-        language_code = payload.get("language") or payload.get("language_code") or language
-
-        result = {
-            "segments": segments,
-            "word_segments": word_segments,
-            "language": language_code,
-            "provider": "evenlabs",
-            "diarization": diarize,
-        }
-
         output_path = audio_path.with_suffix(".json")
         try:
             with output_path.open("w", encoding="utf-8") as fp:
-                json.dump(result, fp, indent=2, ensure_ascii=False, allow_nan=False)
+                fp.write(payload)
             print(f"  ✔  Mentve: {output_path.name}")
-        except ValueError as exc:
-            logging.error("Érvénytelen JSON érték a kimenetben (%s): %s", output_path, exc)
-            if output_path.exists():
-                try:
-                    output_path.unlink()
-                except OSError:
-                    pass
-            print(f"  ✖  JSON mentési hiba (érvénytelen érték): {audio_path.name}")
         except OSError as exc:
             logging.error("Nem sikerült menteni a kimenetet (%s): %s", output_path, exc)
             print(f"  ✖  Mentési hiba: {audio_path.name}")
@@ -502,9 +213,7 @@ def resolve_api_key(args: argparse.Namespace, project_root: Path) -> Optional[st
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Evenlabs ASR – projekt alapú hangtár feldolgozás szó szintű időbélyegekkel és opcionális diarizációval."
-        )
+        description=("Evenlabs ASR – projekt alapú hangtár feldolgozás az ElevenLabs nyers JSON válaszaival.")
     )
     parser.add_argument(
         "-p",
@@ -529,24 +238,6 @@ def main() -> None:
     parser.add_argument(
         "--api-key",
         help=f"Evenlabs API kulcs. Ha megadod, elmenti a keyholder.json fájlba. Környezeti változó: {ENV_API_KEY}.",
-    )
-    parser.add_argument(
-        "--max-pause",
-        type=float,
-        default=DEFAULT_MAX_PAUSE_S,
-        help=f"Mondatszegmensek közti maximális szünet (mp) saját szegmentáláshoz (alapértelmezett: {DEFAULT_MAX_PAUSE_S}).",
-    )
-    parser.add_argument(
-        "--timestamp-padding",
-        type=float,
-        default=DEFAULT_PADDING_S,
-        help=f"Szó időbélyegek bővítése szegmentáláskor (mp, alapértelmezett: {DEFAULT_PADDING_S}).",
-    )
-    parser.add_argument(
-        "--max-segment-duration",
-        type=float,
-        default=DEFAULT_MAX_SEGMENT_S,
-        help=f"Mondatszegmensek maximális hossza (mp, alapértelmezett: {DEFAULT_MAX_SEGMENT_S}).",
     )
     # —diarize / —no-diarize; alapértelmezés: be
     parser.add_argument(
@@ -591,9 +282,6 @@ def main() -> None:
         api_key=api_key,
         language=args.language,
         model_id=args.model,
-        max_pause_s=args.max_pause,
-        padding_s=args.timestamp_padding,
-        max_segment_s=args.max_segment_duration,
         diarize=args.diarize,
     )
 
