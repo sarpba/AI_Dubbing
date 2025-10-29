@@ -151,6 +151,13 @@
             color: var(--bs-secondary-color, #6c757d);
             font-variant-numeric: tabular-nums;
         }
+        .file-browser-note {
+            font-size: 0.8rem;
+            color: var(--bs-secondary-color, #6c757d);
+            flex-basis: 100%;
+            margin-left: 0.2rem;
+            word-break: break-word;
+        }
         details.file-browser-directory > summary {
             cursor: pointer;
         }
@@ -793,6 +800,17 @@
             return span;
         }
 
+        function createFailedOriginalTextElement(entry) {
+            const value = entry && entry.failed_original_text_display;
+            if (!value) {
+                return null;
+            }
+            const span = document.createElement('span');
+            span.className = 'file-browser-note small text-muted';
+            span.textContent = value;
+            return span;
+        }
+
         function createFileTreeList(entries) {
             const list = document.createElement('ul');
             list.className = 'file-browser-tree list-unstyled mb-0';
@@ -890,6 +908,10 @@
                     if (metadataElement) {
                         fileRow.insertBefore(metadataElement, actions);
                     }
+                    const noteElement = createFailedOriginalTextElement(entry);
+                    if (noteElement) {
+                        fileRow.insertBefore(noteElement, actions);
+                    }
                     if (entry.duration_from_name !== undefined && entry.duration_from_name !== null) {
                         fileRow.dataset.durationFromName = String(entry.duration_from_name);
                     }
@@ -898,6 +920,12 @@
                     }
                     if (entry.duration_display) {
                         fileRow.dataset.durationDisplay = entry.duration_display;
+                    }
+                    if (entry.failed_original_text !== undefined && entry.failed_original_text !== null) {
+                        fileRow.dataset.failedOriginalText = entry.failed_original_text;
+                    }
+                    if (entry.failed_original_text_display) {
+                        fileRow.dataset.failedOriginalTextDisplay = entry.failed_original_text_display;
                     }
                     item.appendChild(fileRow);
                 }
@@ -4545,12 +4573,17 @@
                              {% if entry.duration_from_name is defined and entry.duration_from_name is not none %}data-duration-from-name="{{ '%.6f'|format(entry.duration_from_name) }}"{% endif %}
                              {% if entry.duration_actual is defined and entry.duration_actual is not none %}data-duration-actual="{{ '%.6f'|format(entry.duration_actual) }}"{% endif %}
                              {% if entry.duration_display is defined and entry.duration_display %}data-duration-display="{{ entry.duration_display }}"{% endif %}
+                             {% if entry.failed_original_text is defined and entry.failed_original_text is not none %}data-failed-original-text="{{ entry.failed_original_text }}"{% endif %}
+                             {% if entry.failed_original_text_display is defined and entry.failed_original_text_display %}data-failed-original-text-display="{{ entry.failed_original_text_display }}"{% endif %}
                              {% if entry.enable_failed_move %}data-enable-failed-move="true"{% endif %}>
                             <a class="file-browser-link" href="{{ url_for('serve_workdir', filename=project.name + '/' + entry.path) }}" target="_blank" rel="noopener">
                                 {{ entry.name }}
                             </a>
                             {% if entry.duration_display is defined and entry.duration_display %}
                                 <span class="file-browser-meta small text-muted">{{ entry.duration_display }}</span>
+                            {% endif %}
+                            {% if entry.failed_original_text_display is defined and entry.failed_original_text_display %}
+                                <span class="file-browser-note small text-muted">{{ entry.failed_original_text_display }}</span>
                             {% endif %}
                             <div class="file-browser-actions">
                                 <button type="button" class="btn btn-sm btn-outline-danger file-delete-btn" title="Fájl törlése">Törlés</button>

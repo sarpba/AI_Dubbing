@@ -286,11 +286,13 @@ def collect_directory_entries(
     root_path: str,
     target_path: str,
     metadata_directories: Optional[Set[str]] = None,
-    highlight_map: Optional[Dict[str, str]] = None
+    highlight_map: Optional[Dict[str, str]] = None,
+    failed_generation_directories: Optional[Set[str]] = None
 ) -> List[Dict[str, Any]]:
     entries: List[Dict[str, Any]] = []
     highlight_map = highlight_map or {}
     metadata_directories = metadata_directories or set()
+    failed_generation_directories = failed_generation_directories or set()
     try:
         for name in sorted(os.listdir(target_path)):
             if name.startswith('.'):
@@ -318,6 +320,13 @@ def collect_directory_entries(
                 metadata = build_audio_metadata(full_path, rel_path, metadata_directories)
                 if metadata:
                     file_entry.update(metadata)
+                failed_metadata = build_failed_generation_json_metadata(
+                    full_path,
+                    rel_path,
+                    failed_generation_directories
+                )
+                if failed_metadata:
+                    file_entry.update(failed_metadata)
                 entries.append(file_entry)
     except Exception as exc:
         logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", target_path, exc)
@@ -495,6 +504,74 @@ def build_audio_metadata(
         'duration_from_name': computed_seconds,
         'duration_actual': actual_seconds,
         'duration_display': display_value
+    }
+
+
+def get_failed_generation_directories(config_snapshot: Dict[str, Any]) -> Set[str]:
+    project_subdirs = config_snapshot.get('PROJECT_SUBDIRS', {}) if isinstance(config_snapshot, dict) else {}
+    candidates = {
+        'failed_generations',
+        project_subdirs.get('failed_generations') or '',
+    }
+    return {value for value in candidates if isinstance(value, str) and value.strip()}
+
+
+def should_collect_failed_generation_text(rel_path: str, failed_directories: Set[str]) -> bool:
+    if not rel_path or not failed_directories:
+        return False
+    normalized = rel_path.replace('\\', '/')
+    segments = [segment for segment in normalized.split('/') if segment]
+    if len(segments) <= 1:
+        return False
+    parent_segments = segments[:-1]
+    return any(segment in failed_directories for segment in parent_segments)
+
+
+def build_failed_generation_json_metadata(
+    full_path: str,
+    rel_path: str,
+    failed_directories: Set[str]
+) -> Dict[str, Any]:
+    _, ext = os.path.splitext(full_path)
+    if ext.lower() != '.json':
+        return {}
+    if os.path.basename(rel_path) != 'info.json':
+        return {}
+    if not should_collect_failed_generation_text(rel_path, failed_directories):
+        return {}
+    try:
+        with open(full_path, 'r', encoding='utf-8') as fp:
+            data = json.load(fp)
+    except (OSError, json.JSONDecodeError) as exc:
+        logging.debug("Nem sikerült beolvasni az info.json fájlt (%s): %s", full_path, exc)
+        return {}
+    def extract_text(source: Dict[str, Any], primary: str, secondary: str) -> Optional[str]:
+        primary_value = source.get(primary)
+        if isinstance(primary_value, str) and primary_value.strip():
+            return primary_value
+        secondary_value = source.get(secondary)
+        if isinstance(secondary_value, str) and secondary_value.strip():
+            return secondary_value
+        return None
+
+    value = extract_text(data, 'original_text', 'gen_text')
+    if value is None:
+        failures = data.get('failures')
+        if isinstance(failures, list):
+            for failure in failures:
+                if isinstance(failure, dict):
+                    candidate = extract_text(failure, 'original_text', 'gen_text')
+                    if isinstance(candidate, str):
+                        value = candidate
+                        break
+    if not isinstance(value, str):
+        return {}
+    display_value = ' '.join(value.split())
+    if not display_value:
+        return {}
+    return {
+        'failed_original_text': value,
+        'failed_original_text_display': display_value
     }
 
 
@@ -1636,6 +1713,7 @@ def show_project(project_name):
 
     highlight_map = compute_failed_generation_highlights(project_dir, config)
     metadata_directories = get_audio_metadata_directories(config)
+    failed_generation_directories = get_failed_generation_directories(config)
 
     def group_files_by_extension(file_list):
         grouped = {}
@@ -1686,6 +1764,13 @@ def show_project(project_name):
                     metadata = build_audio_metadata(full_path, normalized_file_path, metadata_directories)
                     if metadata:
                         file_entry.update(metadata)
+                    failed_metadata = build_failed_generation_json_metadata(
+                        full_path,
+                        normalized_file_path,
+                        failed_generation_directories
+                    )
+                    if failed_metadata:
+                        file_entry.update(failed_metadata)
                     entries.append(file_entry)
         except Exception as exc:
             logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", current_path, exc)
@@ -1782,11 +1867,13 @@ def get_project_directory_listing(project_name):
 
     highlight_map = compute_failed_generation_highlights(base_dir_abs, config_snapshot)
     metadata_directories = get_audio_metadata_directories(config_snapshot)
+    failed_generation_directories = get_failed_generation_directories(config_snapshot)
     entries = collect_directory_entries(
         base_dir_abs,
         target_dir,
         metadata_directories,
-        highlight_map
+        highlight_map,
+        failed_generation_directories
     )
     if target_dir == base_dir_abs:
         current_path_key = ''
