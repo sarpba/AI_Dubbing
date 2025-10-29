@@ -312,8 +312,15 @@
         let pendingWorkflowPayload = null;
         let pendingWorkflowContext = null;
         let availableScripts = [];
+        const WORKFLOW_STATE_FILENAME = 'workflow_state.json';
         let defaultWorkflow = [];
         let workflowSteps = [];
+        let workflowAutoSaveEnabled = false;
+        let workflowAutoSaveTimer = null;
+        let workflowAutoSavePending = false;
+        let workflowSaving = false;
+        let workflowSuppressAutoSave = false;
+        let workflowLastSavedSnapshot = null;
         let selectedStepIndex = null;
         let selectedStepType = null;
         let selectedWidgetConfig = null;
@@ -474,6 +481,163 @@
 
         function collectWorkflowState() {
             return cloneSteps(workflowSteps);
+        }
+
+        function buildWorkflowSnapshot() {
+            return {
+                steps: collectWorkflowState(),
+                template_id: currentTemplateId || null
+            };
+        }
+
+        function resetWorkflowAutoSave() {
+            if (workflowAutoSaveTimer) {
+                clearTimeout(workflowAutoSaveTimer);
+                workflowAutoSaveTimer = null;
+            }
+            workflowAutoSavePending = false;
+        }
+
+        function markWorkflowDirty() {
+            if (!workflowAutoSaveEnabled || workflowSuppressAutoSave) {
+                return;
+            }
+            workflowAutoSavePending = true;
+            scheduleWorkflowAutoSave();
+        }
+
+        function scheduleWorkflowAutoSave(delay = 500) {
+            if (workflowAutoSaveTimer) {
+                clearTimeout(workflowAutoSaveTimer);
+            }
+            workflowAutoSaveTimer = setTimeout(runWorkflowAutoSave, delay);
+        }
+
+        async function runWorkflowAutoSave() {
+            workflowAutoSaveTimer = null;
+            if (!workflowAutoSaveEnabled || workflowSuppressAutoSave) {
+                return;
+            }
+            if (!workflowAutoSavePending) {
+                return;
+            }
+            if (workflowSaving) {
+                scheduleWorkflowAutoSave(300);
+                return;
+            }
+
+            const snapshot = buildWorkflowSnapshot();
+            const snapshotKey = JSON.stringify(snapshot);
+            if (snapshotKey === workflowLastSavedSnapshot) {
+                workflowAutoSavePending = false;
+                return;
+            }
+
+            workflowSaving = true;
+            try {
+                const payload = {
+                    ...snapshot,
+                    saved_at: new Date().toISOString()
+                };
+                const serialized = JSON.stringify(payload, null, 2);
+                await writeProjectFile(WORKFLOW_STATE_FILENAME, serialized, 'application/json');
+                workflowLastSavedSnapshot = snapshotKey;
+                workflowAutoSavePending = false;
+            } catch (error) {
+                console.error('Workflow állapot mentése sikertelen:', error);
+                workflowAutoSavePending = true;
+                scheduleWorkflowAutoSave(2000);
+            } finally {
+                workflowSaving = false;
+            }
+        }
+
+        async function writeProjectFile(relativePath, contents, contentType = 'application/octet-stream') {
+            const normalizedPath = (relativePath || '').trim().replace(/^\/+/, '');
+            if (!normalizedPath) {
+                throw new Error('Érvénytelen fájlnév a mentéshez.');
+            }
+            const lastSlashIndex = normalizedPath.lastIndexOf('/');
+            const targetPath = lastSlashIndex > -1 ? normalizedPath.slice(0, lastSlashIndex) : '';
+            const fileName = lastSlashIndex > -1 ? normalizedPath.slice(lastSlashIndex + 1) : normalizedPath;
+            if (!fileName) {
+                throw new Error('Érvénytelen fájlnév a mentéshez.');
+            }
+
+            const upload = async () => {
+                const formData = new FormData();
+                formData.append('projectName', PROJECT_NAME);
+                formData.append('targetPath', targetPath);
+                const blob = new Blob([contents], { type: contentType });
+                formData.append('file', blob, fileName);
+                return fetch('/api/project-file/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+            };
+
+            let response = await upload();
+            if (response.status === 409) {
+                await deleteProjectFile(normalizedPath, { ignoreMissing: true });
+                response = await upload();
+            }
+            if (!response.ok) {
+                let message = `HTTP ${response.status}`;
+                try {
+                    const result = await response.json();
+                    if (result && result.error) {
+                        message = result.error;
+                    }
+                } catch (error) {
+                    // ignore parse errors
+                }
+                throw new Error(message);
+            }
+        }
+
+        async function loadProjectWorkflowState() {
+            const url = buildWorkdirUrl(WORKFLOW_STATE_FILENAME);
+            try {
+                const response = await fetch(url, { cache: 'no-store' });
+                if (response.status === 404) {
+                    return null;
+                }
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    return { steps: data, template_id: null };
+                }
+                if (data && typeof data === 'object') {
+                    const steps = Array.isArray(data.steps) ? data.steps : [];
+                    const templateId = data.template_id || null;
+                    return { steps, template_id: templateId };
+                }
+            } catch (error) {
+                console.warn('Nem sikerült betölteni a projekt workflow állapotát:', error);
+            }
+            return null;
+        }
+
+        async function loadDefaultWorkflowTemplate(templates) {
+            const list = Array.isArray(templates) ? templates : [];
+            const defaultEntry = list.find(item => item && item.id === 'default');
+            if (!defaultEntry) {
+                return null;
+            }
+            try {
+                const response = await fetch(`/api/workflow-template/${encodeURIComponent(defaultEntry.id)}`);
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    throw new Error(result.error || 'Ismeretlen hiba');
+                }
+                const template = result.template || {};
+                return Array.isArray(template.steps) ? template.steps : [];
+            } catch (error) {
+                console.error('Alapértelmezett workflow betöltési hiba:', error);
+                return null;
+            }
         }
 
         function collectScriptStepsBefore(index, requiredCount) {
@@ -864,7 +1028,7 @@
             return result;
         }
 
-        async function deleteProjectFile(filePath) {
+        async function deleteProjectFile(filePath, { ignoreMissing = false } = {}) {
             const response = await fetch(`/api/project-file/${encodeURIComponent(PROJECT_NAME)}`, {
                 method: 'DELETE',
                 headers: {
@@ -872,6 +1036,10 @@
                 },
                 body: JSON.stringify({ path: filePath })
             });
+
+            if (response.status === 404 && ignoreMissing) {
+                return { success: true, skipped: true };
+            }
 
             let result = {};
             try {
@@ -1455,6 +1623,7 @@
                 currentTemplateId = template.id || templateId;
                 workflowSteps = cloneSteps(template.steps || []);
                 defaultWorkflow = cloneSteps(template.steps || []);
+                markWorkflowDirty();
                 populateWorkflowTemplateSelect(currentTemplateId);
                 renderWorkflowSteps();
                 if (showMessage) {
@@ -1582,6 +1751,7 @@
                 templateSelect.addEventListener('change', event => {
                     const value = event.target.value || '';
                     currentTemplateId = value || null;
+                    markWorkflowDirty();
                 });
             }
 
@@ -1612,6 +1782,7 @@
                         return;
                     }
                     workflowSteps = cloneSteps(defaultWorkflow);
+                    markWorkflowDirty();
                     renderWorkflowSteps();
                     updateInfoBox('info', 'Az alapértelmezett lépéssor betöltve.');
                 });
@@ -1982,6 +2153,9 @@
         async function loadWorkflowOptions(projectName) {
             const statusText = document.getElementById('workflowStatusText');
             const startButton = document.getElementById('startWorkflowBtn');
+            resetWorkflowAutoSave();
+            workflowAutoSaveEnabled = false;
+            workflowSuppressAutoSave = true;
             try {
                 const response = await fetch(`/api/workflow-options/${encodeURIComponent(projectName)}`);
                 const result = await response.json();
@@ -1993,16 +2167,33 @@
                 workflowTemplates = result.templates || [];
                 const defaults = result.defaults || {};
 
-                defaultWorkflow = cloneSteps(defaults.workflow || []);
+                const [savedState, defaultTemplateSteps] = await Promise.all([
+                    loadProjectWorkflowState(),
+                    loadDefaultWorkflowTemplate(workflowTemplates)
+                ]);
 
-                if (!workflowInitialized) {
-                    workflowSteps = cloneSteps(defaultWorkflow);
-                    workflowInitialized = true;
-                } else if (!workflowSteps.length && defaultWorkflow.length) {
-                    workflowSteps = cloneSteps(defaultWorkflow);
+                if (Array.isArray(defaultTemplateSteps)) {
+                    defaultWorkflow = cloneSteps(defaultTemplateSteps);
+                } else {
+                    defaultWorkflow = cloneSteps(defaults.workflow || []);
                 }
 
-                currentTemplateId = defaults.selected_template || currentTemplateId || (workflowTemplates.length ? workflowTemplates[0].id : null);
+                let initialTemplateId = defaults.selected_template || currentTemplateId || (workflowTemplates.length ? workflowTemplates[0].id : null);
+                let initialSteps;
+                if (savedState && Array.isArray(savedState.steps)) {
+                    initialSteps = cloneSteps(savedState.steps);
+                    if (Object.prototype.hasOwnProperty.call(savedState, 'template_id')) {
+                        initialTemplateId = savedState.template_id;
+                    }
+                } else {
+                    initialSteps = cloneSteps(defaultWorkflow);
+                }
+
+                workflowSteps = initialSteps;
+                workflowInitialized = true;
+                currentTemplateId = initialTemplateId;
+                workflowSuppressAutoSave = false;
+
                 populateWorkflowTemplateSelect(currentTemplateId);
 
                 renderWorkflowSteps();
@@ -2031,6 +2222,9 @@
                 if (startButton) {
                     startButton.disabled = !runnableSegment.length;
                 }
+
+                workflowLastSavedSnapshot = JSON.stringify(buildWorkflowSnapshot());
+                workflowAutoSaveEnabled = true;
             } catch (error) {
                 console.error('Hiba a workflow opciók betöltésekor:', error);
                 if (statusText) {
@@ -2040,6 +2234,8 @@
                     startButton.disabled = true;
                 }
                 updateInfoBox('danger', `Nem sikerült betölteni a workflow opciókat: ${error.message}`);
+            } finally {
+                workflowSuppressAutoSave = false;
             }
         }
 
@@ -2093,6 +2289,7 @@
                 enabledCheckbox.checked = step.enabled !== false;
                 enabledCheckbox.addEventListener('change', () => {
                     step.enabled = enabledCheckbox.checked;
+                    markWorkflowDirty();
                     renderWorkflowSteps();
                 });
                 enabledWrapper.append(enabledCheckbox);
@@ -2235,6 +2432,7 @@
                     haltCheckbox.checked = step.halt_on_fail !== false;
                     haltCheckbox.addEventListener('change', () => {
                         step.halt_on_fail = haltCheckbox.checked;
+                        markWorkflowDirty();
                         renderWorkflowSteps();
                     });
                     const haltLabel = document.createElement('label');
@@ -2484,7 +2682,8 @@
                 alert(`Ismeretlen szkript: ${scriptId}`);
                 return;
             }
-            const template = (defaultWorkflow || []).find(step => step.script === script.id);
+            const currentMatch = workflowSteps.find(step => step && step.type !== 'widget' && step.script === script.id);
+            const template = currentMatch || (defaultWorkflow || []).find(step => step.script === script.id);
             const newStep = {
                 script: script.id,
                 enabled: true,
@@ -2497,6 +2696,7 @@
             }
             targetIndex = Math.max(0, Math.min(targetIndex, workflowSteps.length));
             workflowSteps.splice(targetIndex, 0, newStep);
+            markWorkflowDirty();
             renderWorkflowSteps();
             updateInfoBox('secondary', `${script.display_name || script.script} hozzáadva a workflow-hoz.`);
         }
@@ -2527,6 +2727,7 @@
             }
             targetIndex = Math.max(0, Math.min(targetIndex, workflowSteps.length));
             workflowSteps.splice(targetIndex, 0, newStep);
+            markWorkflowDirty();
             renderWorkflowSteps();
             updateInfoBox('secondary', `${widget.name} widget hozzáadva a workflow-hoz.`);
         }
@@ -2595,11 +2796,13 @@
             }
             const [step] = workflowSteps.splice(index, 1);
             workflowSteps.splice(newIndex, 0, step);
+            markWorkflowDirty();
             renderWorkflowSteps();
         }
 
         function removeWorkflowStep(index) {
             const [removed] = workflowSteps.splice(index, 1);
+            markWorkflowDirty();
             renderWorkflowSteps();
             if (removed) {
                 let label = removed.script;
@@ -3074,6 +3277,7 @@
             }
 
             step.params = newParams;
+            markWorkflowDirty();
             if (workflowParamsModal) {
                 workflowParamsModal.hide();
             }
@@ -3089,6 +3293,7 @@
             const parameters = Array.isArray(widget && widget.parameters) ? widget.parameters : [];
             if (!parameters.length) {
                 step.params = {};
+                markWorkflowDirty();
                 if (workflowParamsModal) {
                     workflowParamsModal.hide();
                 }
@@ -3144,6 +3349,7 @@
                 return;
             }
             step.params = newParams;
+            markWorkflowDirty();
             if (workflowParamsModal) {
                 workflowParamsModal.hide();
             }
