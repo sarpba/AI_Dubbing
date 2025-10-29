@@ -1,21 +1,18 @@
 """
-Evenlabs ASR integration – project aware transcription pipeline with word timestamps.
-Most: speaker diarizáció támogatása (—diarize / —no-diarize kapcsolók, alapértelmezés: be).
+Resegment script - JSON szegmensek újraformázása különböző paraméterekkel.
+Az ASR script által létrehozott JSON fájlok biztonsági mentése és újraformázása.
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import logging
 import math
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-
-import requests
+from typing import Any, Dict, List, Optional, Tuple
 
 for candidate in Path(__file__).resolve().parents:
     if (candidate / "tools").is_dir():
@@ -25,11 +22,6 @@ for candidate in Path(__file__).resolve().parents:
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
 
-SUPPORTED_EXTENSIONS: Tuple[str, ...] = (".wav", ".mp3", ".flac", ".m4a", ".ogg")
-DEFAULT_API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
-DEFAULT_MODEL_ID = "scribe_v1_experimental"
-ENV_API_KEY = "EVENLABS_API_KEY"
-KEYHOLDER_FIELD = "evenlabs_api_key"
 DEFAULT_MAX_PAUSE_S = 0.8
 DEFAULT_PADDING_S = 0.1
 DEFAULT_MAX_SEGMENT_S = 11.5
@@ -68,7 +60,7 @@ def load_config() -> Tuple[dict, Path]:
 
 
 def resolve_project_input(project_name: str, config: dict, project_root: Path) -> Path:
-    """Resolve the directory that contains speech-separated audio for the project."""
+    """Resolve the directory that contains ASR JSON files for the project."""
     try:
         workdir = project_root / config["DIRECTORIES"]["workdir"]
         input_subdir = config["PROJECT_SUBDIRS"]["separated_audio_speech"]
@@ -81,49 +73,6 @@ def resolve_project_input(project_name: str, config: dict, project_root: Path) -
         print(f"Hiba: a feldolgozandó mappa nem található: {input_dir}")
         sys.exit(1)
     return input_dir
-
-
-def get_keyholder_path(project_root: Path) -> Path:
-    return project_root / "keyholder.json"
-
-
-def save_api_key(project_root: Path, api_key: str) -> None:
-    keyholder_path = get_keyholder_path(project_root)
-    try:
-        data: Dict[str, Any] = {}
-        if keyholder_path.exists():
-            with keyholder_path.open("r", encoding="utf-8") as fp:
-                try:
-                    data = json.load(fp)
-                except json.JSONDecodeError:
-                    logging.warning("A keyholder.json sérült, új struktúra létrehozása.")
-                    data = {}
-        encoded = base64.b64encode(api_key.encode("utf-8")).decode("utf-8")
-        data[KEYHOLDER_FIELD] = encoded
-        with keyholder_path.open("w", encoding="utf-8") as fp:
-            json.dump(data, fp, indent=2)
-        logging.info("Evenlabs API kulcs elmentve a keyholder.json fájlba.")
-    except Exception as exc:
-        logging.error("Nem sikerült elmenteni az Evenlabs API kulcsot: %s", exc)
-
-
-def load_api_key(project_root: Path) -> Optional[str]:
-    keyholder_path = get_keyholder_path(project_root)
-    if not keyholder_path.exists():
-        return None
-    try:
-        with keyholder_path.open("r", encoding="utf-8") as fp:
-            data = json.load(fp)
-        encoded = data.get(KEYHOLDER_FIELD)
-        if not encoded:
-            return None
-        return base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
-    except (json.JSONDecodeError, KeyError, base64.binascii.Error) as exc:
-        logging.error("Nem sikerült beolvasni az Evenlabs API kulcsot: %s", exc)
-        return None
-    except Exception as exc:
-        logging.error("Váratlan hiba kulcs betöltésekor: %s", exc)
-        return None
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -174,7 +123,7 @@ def _normalise_word_entry(entry: dict) -> Optional[dict]:
 
 
 def extract_word_segments(payload: dict) -> List[dict]:
-    raw_candidates: Iterable[Any] = ()
+    raw_candidates = []
     if isinstance(payload.get("words"), list):
         raw_candidates = payload["words"]
     elif isinstance(payload.get("word_segments"), list):
@@ -229,6 +178,18 @@ def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
     speakers = {w.get("speaker") for w in words if w.get("speaker") is not None}
     if len(speakers) == 1:
         seg["speaker"] = next(iter(speakers))
+    elif len(speakers) > 1:
+        # Ha több speaker van a szegmensben, akkor a legtöbb szót tartalmazó speaker lesz a domináns
+        speaker_counts = {}
+        for word in words:
+            speaker = word.get("speaker")
+            if speaker is not None:
+                speaker_counts[speaker] = speaker_counts.get(speaker, 0) + 1
+        if speaker_counts:
+            dominant_speaker = max(speaker_counts.items(), key=lambda x: x[1])[0]
+            seg["speaker"] = dominant_speaker
+            # Jelzés, hogy a szegmens több speakerből áll, de egy domináns speaker van
+            seg["mixed_speakers"] = True
     return seg
 
 
@@ -236,7 +197,7 @@ def sentence_segments_from_words(
     words: List[dict],
     max_pause_s: float,
     *,
-    split_on_speaker_change: bool = False,
+    split_on_speaker_change: bool = True,  # Alapértelmezett: mindig szétválasztjuk speaker változásnál
 ) -> List[dict]:
     if not words:
         return []
@@ -362,148 +323,153 @@ def build_segments(
     return split_long_segments(initial_segments, max_segment_s)
 
 
-def transcribe_with_evenlabs(
-    audio_path: Path,
-    api_url: str,
-    api_key: str,
-    *,
-    language: Optional[str],
-    model_id: Optional[str],
-    diarize: bool,
-) -> Optional[dict]:
-    headers = {"xi-api-key": api_key}
-    data: Dict[str, Any] = {}
-    if language:
-        data["language_code"] = language
-    if model_id:
-        data["model_id"] = model_id
-    # diarizáció bekapcsolása az API-n (ahol támogatott)
-    if diarize:
-        # ElevenLabs Scribe API tipikus paraméterek – rugalmasan küldjük el
-        data["diarize"] = "true"
-        # Opcionális: küszöb és max beszélő szám, ha a backend támogatja
-        # data["diarization_threshold"] = 0.25
-        # data["num_speakers"] = 0  # 0 = auto
-
+def backup_json_file(json_path: Path) -> Path:
+    """Create a backup of the JSON file with .json.bak extension."""
+    backup_path = json_path.with_suffix(".json.bak")
     try:
-        with audio_path.open("rb") as fp:
-            files = {"file": (audio_path.name, fp, "application/octet-stream")}
-            response = requests.post(api_url, headers=headers, data=data, files=files, timeout=600)
-    except requests.RequestException as exc:
-        logging.error("Evenlabs API hívás sikertelen (%s): %s", audio_path.name, exc)
-        return None
+        import shutil
+        shutil.copy2(json_path, backup_path)
+        logging.info(f"Biztonsági mentés létrehozva: {backup_path.name}")
+        return backup_path
+    except Exception as exc:
+        logging.error(f"Hiba a biztonsági mentés létrehozásakor ({json_path}): {exc}")
+        raise
 
-    if not response.ok:
-        logging.error(
-            "Evenlabs API hibát jelzett (%s): %s – %s", audio_path.name, response.status_code, response.text[:500]
+
+def load_json_file(json_path: Path) -> dict:
+    """Load JSON file and return its content."""
+    try:
+        with json_path.open("r", encoding="utf-8") as fp:
+            return json.load(fp)
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        logging.error(f"Hiba a JSON fájl betöltésekor ({json_path}): {exc}")
+        raise
+
+
+def create_resegmented_json(
+    original_data: dict,
+    max_pause_s: float,
+    padding_s: float,
+    max_segment_s: float,
+    enforce_single_speaker: bool,
+) -> dict:
+    """Create new JSON with resegmented data."""
+    word_segments = extract_word_segments(original_data)
+    
+    if not word_segments:
+        logging.warning("Nincsenek szó szegmensek a JSON fájlban")
+        return original_data
+
+    segments = build_segments(
+        word_segments,
+        max_pause_s=max_pause_s,
+        padding_s=padding_s,
+        max_segment_s=max_segment_s,
+        enforce_single_speaker=enforce_single_speaker,
+    )
+
+    # Preserve original metadata
+    result = {
+        "segments": segments,
+        "word_segments": word_segments,
+        "language": original_data.get("language"),
+        "provider": original_data.get("provider", "resegment"),
+        "diarization": original_data.get("diarization", False),
+        "original_provider": original_data.get("provider"),
+        "resegment_parameters": {
+            "max_pause_s": max_pause_s,
+            "padding_s": padding_s,
+            "max_segment_s": max_segment_s,
+            "enforce_single_speaker": enforce_single_speaker
+        }
+    }
+
+    return result
+
+
+def process_json_file(
+    json_path: Path,
+    max_pause_s: float,
+    padding_s: float,
+    max_segment_s: float,
+    enforce_single_speaker: bool,
+    backup: bool,
+) -> None:
+    """Process a single JSON file: backup, load, resegment, and save."""
+    print(f"▶  Feldolgozás: {json_path.name}")
+    
+    # Create backup if requested
+    if backup:
+        try:
+            backup_json_file(json_path)
+        except Exception:
+            print(f"  ✖  Sikertelen biztonsági mentés: {json_path.name}")
+            return
+
+    # Load original JSON
+    try:
+        original_data = load_json_file(json_path)
+    except Exception:
+        print(f"  ✖  Sikertelen JSON betöltés: {json_path.name}")
+        return
+
+    # Create resegmented JSON
+    try:
+        resegmented_data = create_resegmented_json(
+            original_data,
+            max_pause_s=max_pause_s,
+            padding_s=padding_s,
+            max_segment_s=max_segment_s,
+            enforce_single_speaker=enforce_single_speaker,
         )
-        return None
+    except Exception as exc:
+        logging.error(f"Hiba a szegmentálás során ({json_path}): {exc}")
+        print(f"  ✖  Szegmentálási hiba: {json_path.name}")
+        return
 
+    # Save resegmented JSON - overwrite original file (after backup)
     try:
-        payload = response.json()
-    except ValueError:
-        logging.error("Evenlabs API nem JSON választ adott (%s).", audio_path.name)
-        return None
-
-    return payload
+        with json_path.open("w", encoding="utf-8") as fp:
+            json.dump(resegmented_data, fp, indent=2, ensure_ascii=False, allow_nan=False)
+        print(f"  ✔  Mentve: {json_path.name}")
+    except Exception as exc:
+        logging.error(f"Hiba a mentés során ({json_path}): {exc}")
+        print(f"  ✖  Mentési hiba: {json_path.name}")
 
 
 def process_directory(
     input_dir: Path,
-    api_url: str,
-    api_key: str,
-    *,
-    language: Optional[str],
-    model_id: Optional[str],
     max_pause_s: float,
     padding_s: float,
     max_segment_s: float,
-    diarize: bool,
+    enforce_single_speaker: bool,
+    backup: bool,
 ) -> None:
-    audio_files = sorted(
-        [path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
-    )
+    """Process all JSON files in the directory."""
+    json_files = sorted([path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() == ".json"])
 
-    if not audio_files:
-        print(f"Nem található támogatott hangfájl a megadott mappában: {input_dir}")
+    if not json_files:
+        print(f"Nem található JSON fájl a megadott mappában: {input_dir}")
         return
 
-    print(f"{len(audio_files)} hangfájl feldolgozása indul az Evenlabs API-val…")
-    for audio_path in audio_files:
+    print(f"{len(json_files)} JSON fájl feldolgozása indul...")
+    for json_path in json_files:
         print("-" * 48)
-        print(f"▶  Feldolgozás: {audio_path.name}")
-        payload = transcribe_with_evenlabs(
-            audio_path,
-            api_url,
-            api_key,
-            language=language,
-            model_id=model_id,
-            diarize=diarize,
-        )
-        if payload is None:
-            print(f"  ✖  Sikertelen API hívás: {audio_path.name}")
-            continue
-
-        word_segments = extract_word_segments(payload)
-        if not word_segments:
-            print(f"  ✖  Nem található szó szintű időbélyeg a válaszban: {audio_path.name}")
-            continue
-
-        segments = build_segments(
-            word_segments,
+        process_json_file(
+            json_path,
             max_pause_s=max_pause_s,
             padding_s=padding_s,
             max_segment_s=max_segment_s,
-            enforce_single_speaker=diarize,
+            enforce_single_speaker=enforce_single_speaker,
+            backup=backup,
         )
-
-        language_code = payload.get("language") or payload.get("language_code") or language
-
-        result = {
-            "segments": segments,
-            "word_segments": word_segments,
-            "language": language_code,
-            "provider": "evenlabs",
-            "diarization": diarize,
-        }
-
-        output_path = audio_path.with_suffix(".json")
-        try:
-            with output_path.open("w", encoding="utf-8") as fp:
-                json.dump(result, fp, indent=2, ensure_ascii=False, allow_nan=False)
-            print(f"  ✔  Mentve: {output_path.name}")
-        except ValueError as exc:
-            logging.error("Érvénytelen JSON érték a kimenetben (%s): %s", output_path, exc)
-            if output_path.exists():
-                try:
-                    output_path.unlink()
-                except OSError:
-                    pass
-            print(f"  ✖  JSON mentési hiba (érvénytelen érték): {audio_path.name}")
-        except OSError as exc:
-            logging.error("Nem sikerült menteni a kimenetet (%s): %s", output_path, exc)
-            print(f"  ✖  Mentési hiba: {audio_path.name}")
-
-
-def resolve_api_key(args: argparse.Namespace, project_root: Path) -> Optional[str]:
-    if args.api_key:
-        save_api_key(project_root, args.api_key)
-        return args.api_key
-    env_key = os.environ.get(ENV_API_KEY)
-    if env_key:
-        logging.info("Evenlabs API kulcs betöltve környezeti változóból (%s).", ENV_API_KEY)
-        return env_key
-    stored_key = load_api_key(project_root)
-    if stored_key:
-        logging.info("Evenlabs API kulcs betöltve a keyholder.json fájlból.")
-        return stored_key
-    return None
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Evenlabs ASR – projekt alapú hangtár feldolgozás szó szintű időbélyegekkel és opcionális diarizációval."
+            "JSON szegmensek újraformázása - ASR script által létrehozott JSON fájlok "
+            "biztonsági mentése és újraformázása különböző paraméterekkel."
         )
     )
     parser.add_argument(
@@ -511,24 +477,6 @@ def main() -> None:
         "--project-name",
         required=True,
         help="A projekt neve (a workdir alatti mappa), amit fel kell dolgozni.",
-    )
-    parser.add_argument(
-        "--language",
-        help="ISO nyelvkód (pl. en, hu). Ha nincs megadva, az Evenlabs automatikus felismerését használja.",
-    )
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL_ID,
-        help=f"Evenlabs modell azonosító (alapértelmezett: {DEFAULT_MODEL_ID}).",
-    )
-    parser.add_argument(
-        "--api-url",
-        default=DEFAULT_API_URL,
-        help=f"Evenlabs API végpont URL-je (alapértelmezett: {DEFAULT_API_URL}).",
-    )
-    parser.add_argument(
-        "--api-key",
-        help=f"Evenlabs API kulcs. Ha megadod, elmenti a keyholder.json fájlba. Környezeti változó: {ENV_API_KEY}.",
     )
     parser.add_argument(
         "--max-pause",
@@ -548,19 +496,31 @@ def main() -> None:
         default=DEFAULT_MAX_SEGMENT_S,
         help=f"Mondatszegmensek maximális hossza (mp, alapértelmezett: {DEFAULT_MAX_SEGMENT_S}).",
     )
-    # —diarize / —no-diarize; alapértelmezés: be
     parser.add_argument(
-        "--diarize",
-        dest="diarize",
+        "--enforce-single-speaker",
+        dest="enforce_single_speaker",
         action="store_true",
-        default=True,
-        help="Speaker diarizáció bekapcsolása (alapértelmezett: be)",
+        default=False,
+        help="Speaker diarizáció alapján szegmentálás (alapértelmezett: ki)",
     )
     parser.add_argument(
-        "--no-diarize",
-        dest="diarize",
+        "--no-enforce-single-speaker",
+        dest="enforce_single_speaker",
         action="store_false",
-        help="Speaker diarizáció kikapcsolása",
+        help="Speaker diarizáció figyelmen kívül hagyása szegmentáláskor",
+    )
+    parser.add_argument(
+        "--backup",
+        dest="backup",
+        action="store_true",
+        default=True,
+        help="JSON fájlok biztonsági mentése .json.bak kiterjesztéssel (alapértelmezett: be)",
+    )
+    parser.add_argument(
+        "--no-backup",
+        dest="backup",
+        action="store_false",
+        help="JSON fájlok biztonsági mentésének kikapcsolása",
     )
 
     add_debug_argument(parser)
@@ -570,31 +530,24 @@ def main() -> None:
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
     config, project_root = load_config()
-    api_key = resolve_api_key(args, project_root)
-    if not api_key:
-        print(
-            "Hiba: Nem található Evenlabs API kulcs. Add meg az --api-key kapcsolóval vagy az EVENLABS_API_KEY környezeti változóval."
-        )
-        sys.exit(1)
-
     input_dir = resolve_project_input(args.project_name, config, project_root)
+    
     print("Projekt beállítások betöltve:")
     print(f"  - Projekt név:    {args.project_name}")
     print(f"  - Bemeneti mappa: {input_dir}")
-    print(f"  - Evenlabs modell: {args.model}")
-    print(f"  - API végpont:     {args.api_url}")
-    print(f"  - Diarizáció:      {'BE' if args.diarize else 'KI'}")
+    print(f"  - Max szünet:     {args.max_pause} s")
+    print(f"  - Időbélyeg padding: {args.timestamp_padding} s")
+    print(f"  - Max szegmens hossz: {args.max_segment_duration} s")
+    print(f"  - Speaker szegmentálás: {'BE' if args.enforce_single_speaker else 'KI'}")
+    print(f"  - Biztonsági mentés: {'BE' if args.backup else 'KI'}")
 
     process_directory(
         input_dir=input_dir,
-        api_url=args.api_url,
-        api_key=api_key,
-        language=args.language,
-        model_id=args.model,
         max_pause_s=args.max_pause,
         padding_s=args.timestamp_padding,
         max_segment_s=args.max_segment_duration,
-        diarize=args.diarize,
+        enforce_single_speaker=args.enforce_single_speaker,
+        backup=args.backup,
     )
 
 

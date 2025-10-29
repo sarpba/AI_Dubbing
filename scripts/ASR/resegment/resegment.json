@@ -1,0 +1,66 @@
+{
+  "enviroment": "sync",
+  "script": "ASR/resegment/resegment.py",
+  "description": "JSON szegmensek újraformázása - ASR script által létrehozott JSON fájlok biztonsági mentése és újraformázása különböző paraméterekkel.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "max_pause",
+      "flags": [
+        "--max-pause"
+      ],
+      "type": "option",
+      "default": 0.8
+    },
+    {
+      "name": "timestamp_padding",
+      "flags": [
+        "--timestamp-padding"
+      ],
+      "type": "option",
+      "default": 0.1
+    },
+    {
+      "name": "max_segment_duration",
+      "flags": [
+        "--max-segment-duration"
+      ],
+      "type": "option",
+      "default": 11.5
+    },
+    {
+      "name": "enforce_single_speaker",
+      "flags": [
+        "--enforce-single-speaker"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "backup",
+      "flags": [
+        "--backup"
+      ],
+      "type": "flag",
+      "default": true
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}
