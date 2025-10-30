@@ -11,6 +11,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import statistics
 import subprocess
 import sys
@@ -39,6 +40,7 @@ ENERGY_TARGET_SAMPLE_RATE = 16000
 ENERGY_WINDOW_MS = 10
 ENERGY_BACKTRACK_LIMIT_S = 0.5
 ENERGY_THRESHOLD_FLOOR = 150.0
+ENERGY_FORWARD_WINDOW_S = 0.3
 MIN_WORD_DURATION_S = 0.02
 
 
@@ -308,20 +310,15 @@ def refine_word_segments_with_energy(
             else:
                 adjusted_end_frame = adjusted_start_frame
         else:
-            forward_window_frames = max(1, int(round(0.2 / frame_duration)))
-            backward_window_frames = max(1, int(round(0.3 / frame_duration)))
+            forward_window_frames = max(1, int(round(ENERGY_FORWARD_WINDOW_S / frame_duration)))
             forward_limit = min(len(energies) - 1, end_frame + forward_window_frames)
             found_silence: Optional[int] = None
+            
             for candidate in range(end_frame + 1, forward_limit + 1):
                 if energies[candidate] <= threshold_low:
                     found_silence = candidate
                     break
-            if found_silence is None:
-                backward_limit = max(adjusted_start_frame, end_frame - backward_window_frames)
-                for candidate in range(end_frame, backward_limit - 1, -1):
-                    if energies[candidate] <= threshold_low:
-                        found_silence = candidate
-                        break
+            
             if found_silence is not None:
                 adjusted_end_frame = max(found_silence, adjusted_start_frame)
             else:
@@ -339,7 +336,6 @@ def refine_word_segments_with_energy(
         if refined and adjusted_end < refined[-1]["end"]:
             adjusted_end = refined[-1]["end"]
 
-        # Prevent overlap with next original word by capping to next start if needed
         if idx + 1 < len(word_segments):
             next_start_original = float(word_segments[idx + 1].get("start") or adjusted_end)
             if adjusted_end > next_start_original:
@@ -460,12 +456,10 @@ def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
         "text": text,
         "words": words,
     }
-    # annotate dominant speaker if all the same
     speakers = {w.get("speaker") for w in words if w.get("speaker") is not None}
     if len(speakers) == 1:
         seg["speaker"] = next(iter(speakers))
     elif len(speakers) > 1:
-        # Ha több speaker van a szegmensben, akkor a legtöbb szót tartalmazó speaker lesz a domináns
         speaker_counts = {}
         for word in words:
             speaker = word.get("speaker")
@@ -474,7 +468,6 @@ def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
         if speaker_counts:
             dominant_speaker = max(speaker_counts.items(), key=lambda x: x[1])[0]
             seg["speaker"] = dominant_speaker
-            # Jelzés, hogy a szegmens több speakerből áll, de egy domináns speaker van
             seg["mixed_speakers"] = True
     return seg
 
@@ -483,7 +476,7 @@ def sentence_segments_from_words(
     words: List[dict],
     max_pause_s: float,
     *,
-    split_on_speaker_change: bool = True,  # Alapértelmezett: mindig szétválasztjuk speaker változásnál
+    split_on_speaker_change: bool = True,
 ) -> List[dict]:
     if not words:
         return []
@@ -610,10 +603,27 @@ def build_segments(
 
 
 def backup_json_file(json_path: Path) -> Path:
-    """Create a backup of the JSON file with .json.bak extension."""
-    backup_path = json_path.with_suffix(".json.bak")
+    """
+    Create a backup of the JSON file with .json.bak extension.
+    If a backup already exists, create a numbered version (.bak_2, .bak_3, etc.).
+    """
+    ### MÓDOSÍTÁS KEZDETE ###
+    base_backup_str = str(json_path.with_suffix(".json.bak"))
+    backup_path = Path(base_backup_str)
+
+    # Ha az alap .bak fájl már létezik, keress egy sorszámozott verziót
+    if backup_path.exists():
+        counter = 2
+        while True:
+            # Hozzuk létre a sorszámozott elérési utat, pl. file.json.bak_2
+            numbered_backup_path = Path(f"{base_backup_str}_{counter}")
+            if not numbered_backup_path.exists():
+                backup_path = numbered_backup_path
+                break  # Megtaláltuk a szabad helyet
+            counter += 1
+    ### MÓDOSÍTÁS VÉGE ###
+            
     try:
-        import shutil
         shutil.copy2(json_path, backup_path)
         logging.info(f"Biztonsági mentés létrehozva: {backup_path.name}")
         return backup_path
@@ -684,7 +694,6 @@ def create_resegmented_json(
         enforce_single_speaker=enforce_single_speaker,
     )
 
-    # Preserve original metadata
     result = {
         "segments": segments,
         "word_segments": word_segments,
@@ -721,7 +730,6 @@ def process_json_file(
     """Process a single JSON file: backup, load, resegment, and save."""
     print(f"▶  Feldolgozás: {json_path.name}")
     
-    # Create backup if requested
     if backup:
         try:
             backup_json_file(json_path)
@@ -729,7 +737,6 @@ def process_json_file(
             print(f"  ✖  Sikertelen biztonsági mentés: {json_path.name}")
             return
 
-    # Load original JSON
     try:
         original_data = load_json_file(json_path)
     except Exception:
@@ -742,7 +749,6 @@ def process_json_file(
         if audio_path is None:
             logging.warning("Nem található hozzárendelt hangfájl energiabecsléshez (%s).", json_path.name)
 
-    # Create resegmented JSON
     try:
         resegmented_data = create_resegmented_json(
             original_data,
@@ -759,7 +765,6 @@ def process_json_file(
         print(f"  ✖  Szegmentálási hiba: {json_path.name}")
         return
 
-    # Save resegmented JSON - overwrite original file (after backup)
     try:
         with json_path.open("w", encoding="utf-8") as fp:
             json.dump(resegmented_data, fp, indent=2, ensure_ascii=False, allow_nan=False)
