@@ -55,6 +55,22 @@
       "default": true
     },
     {
+      "name": "skip_vad",
+      "flags": [
+        "--skip-vad"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "vad_aggressiveness",
+      "flags": [
+        "--vad-aggressiveness"
+      ],
+      "type": "option",
+      "default": 3
+    },
+    {
       "name": "debug",
       "flags": [
         "--debug"

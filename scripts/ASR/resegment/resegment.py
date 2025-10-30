@@ -6,13 +6,19 @@ Az ASR script által létrehozott JSON fájlok biztonsági mentése és újrafor
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import math
 import os
+import subprocess
 import sys
+import tempfile
+import wave
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+import webrtcvad
 
 for candidate in Path(__file__).resolve().parents:
     if (candidate / "tools").is_dir():
@@ -27,6 +33,13 @@ DEFAULT_PADDING_S = 0.1
 DEFAULT_MAX_SEGMENT_S = 11.5
 PRIMARY_PUNCTUATION = (".", "!", "?")
 SECONDARY_PUNCTUATION = (",",)
+SUPPORTED_AUDIO_EXTENSIONS: Tuple[str, ...] = (".wav", ".mp3", ".flac", ".m4a", ".ogg")
+VAD_ALLOWED_SAMPLE_RATES: Tuple[int, ...] = (8000, 16000, 32000, 48000)
+VAD_TARGET_SAMPLE_RATE = 16000
+VAD_FRAME_DURATION_MS = 30
+VAD_GAP_MERGE_S = 0.05
+VAD_TOLERANCE_S = 0.05
+MIN_WORD_DURATION_S = 0.02
 
 
 def _sanitize_text(value: Any) -> str:
@@ -73,6 +86,237 @@ def resolve_project_input(project_name: str, config: dict, project_root: Path) -
         print(f"Hiba: a feldolgozandó mappa nem található: {input_dir}")
         sys.exit(1)
     return input_dir
+
+
+def find_audio_for_json(json_path: Path) -> Optional[Path]:
+    """Try to locate the audio file that belongs to the JSON transcript."""
+    stem = json_path.stem
+    for ext in SUPPORTED_AUDIO_EXTENSIONS:
+        candidate = json_path.with_suffix(ext)
+        if candidate.is_file():
+            return candidate
+    for candidate in json_path.parent.iterdir():
+        if (
+            candidate.is_file()
+            and candidate.stem == stem
+            and candidate.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
+        ):
+            return candidate
+    return None
+
+
+def _convert_to_vad_wav(path: Path) -> Optional[Path]:
+    """Convert arbitrary audio to a PCM16 mono WAV accepted by WebRTC VAD."""
+    try:
+        temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    except Exception as exc:
+        logging.warning("Nem sikerült ideiglenes fájlt létrehozni VAD-hoz (%s): %s", path, exc)
+        return None
+    temp_file.close()
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(path),
+        "-ac",
+        "1",
+        "-ar",
+        str(VAD_TARGET_SAMPLE_RATE),
+        "-acodec",
+        "pcm_s16le",
+        temp_file.name,
+    ]
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return Path(temp_file.name)
+    except FileNotFoundError:
+        logging.warning("Az ffmpeg nem elérhető, a VAD alapú korrekció kihagyva (%s).", path)
+    except subprocess.CalledProcessError as exc:
+        error_message = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
+        logging.warning("FFmpeg konverzió sikertelen VAD-hoz (%s): %s", path, error_message.strip())
+    try:
+        if os.path.exists(temp_file.name):
+            os.remove(temp_file.name)
+    except OSError:
+        pass
+    return None
+
+
+def read_wave_for_vad(path: Path) -> Optional[Tuple[bytes, int, int]]:
+    """Load audio data suitable for the VAD. Returns bytes, sample_rate, sample_width."""
+    converted_path: Optional[Path] = None
+    source_path = path
+    try:
+        with contextlib.closing(wave.open(str(path), "rb")) as wf:
+            sample_rate = wf.getframerate()
+            if sample_rate not in VAD_ALLOWED_SAMPLE_RATES or wf.getnchannels() != 1 or wf.getsampwidth() != 2:
+                raise ValueError("unsupported format")
+            frames = wf.readframes(wf.getnframes())
+            return frames, sample_rate, wf.getsampwidth()
+    except (wave.Error, FileNotFoundError, ValueError):
+        converted_path = _convert_to_vad_wav(source_path)
+        if not converted_path:
+            return None
+        try:
+            with contextlib.closing(wave.open(str(converted_path), "rb")) as wf:
+                frames = wf.readframes(wf.getnframes())
+                return frames, wf.getframerate(), wf.getsampwidth()
+        except (wave.Error, FileNotFoundError) as exc:
+            logging.warning("A konvertált WAV nem tölthető be VAD-hoz (%s): %s", source_path, exc)
+            return None
+        finally:
+            try:
+                os.remove(str(converted_path))
+            except OSError:
+                pass
+
+
+def _vad_frame_generator(
+    frame_duration_ms: int, audio: bytes, sample_rate: int, sample_width: int
+) -> Iterable[Tuple[bytes, float]]:
+    bytes_per_frame = int(sample_rate * (frame_duration_ms / 1000.0) * sample_width)
+    if bytes_per_frame <= 0:
+        return []
+    offset = 0
+    timestamp = 0.0
+    frame_duration = frame_duration_ms / 1000.0
+    while offset + bytes_per_frame <= len(audio):
+        yield audio[offset : offset + bytes_per_frame], timestamp
+        timestamp += frame_duration
+        offset += bytes_per_frame
+
+
+def _collect_vad_regions(
+    frames: Iterable[Tuple[bytes, float]],
+    sample_rate: int,
+    aggressiveness: int,
+) -> List[Tuple[float, float]]:
+    vad = webrtcvad.Vad(int(max(0, min(3, aggressiveness))))
+    regions: List[Tuple[float, float]] = []
+    in_region = False
+    region_start = 0.0
+    frame_duration = VAD_FRAME_DURATION_MS / 1000.0
+    for frame, timestamp in frames:
+        try:
+            is_speech = vad.is_speech(frame, sample_rate)
+        except Exception as exc:
+            logging.debug("VAD feldolgozási hiba %s időbélyegnél: %s", timestamp, exc)
+            is_speech = False
+        if is_speech:
+            if not in_region:
+                in_region = True
+                region_start = timestamp
+        else:
+            if in_region:
+                regions.append((region_start, timestamp))
+                in_region = False
+    if in_region:
+        regions.append((region_start, timestamp + frame_duration))
+
+    if not regions:
+        return []
+
+    # Merge regions separated by tiny gaps
+    merged: List[Tuple[float, float]] = []
+    current_start, current_end = regions[0]
+    for start, end in regions[1:]:
+        if start - current_end <= VAD_GAP_MERGE_S:
+            current_end = end
+        else:
+            merged.append((current_start, current_end))
+            current_start, current_end = start, end
+    merged.append((current_start, current_end))
+    return merged
+
+
+def _find_matching_region(
+    regions: Sequence[Tuple[float, float]], start: float, end: float, tolerance: float = VAD_TOLERANCE_S
+) -> Optional[Tuple[float, float]]:
+    for region_start, region_end in regions:
+        if region_end + tolerance < start:
+            continue
+        if region_start - tolerance > end:
+            break
+        overlap = min(end, region_end) - max(start, region_start)
+        if overlap >= -tolerance:
+            return region_start, region_end
+    return None
+
+
+def refine_word_segments_with_vad(
+    word_segments: List[dict],
+    audio_path: Path,
+    *,
+    aggressiveness: int = 3,
+) -> Tuple[List[dict], Dict[str, Any]]:
+    """Use VAD to trim word boundaries closer to actual speech activity."""
+    audio_data = read_wave_for_vad(audio_path)
+    if not audio_data:
+        return word_segments, {
+            "status": "skipped_audio_unavailable",
+            "audio": audio_path.name,
+        }
+    audio_bytes, sample_rate, sample_width = audio_data
+    frames = list(_vad_frame_generator(VAD_FRAME_DURATION_MS, audio_bytes, sample_rate, sample_width))
+    if not frames:
+        return word_segments, {
+            "status": "skipped_no_frames",
+            "audio": audio_path.name,
+        }
+    regions = _collect_vad_regions(frames, sample_rate, aggressiveness)
+    if not regions:
+        return word_segments, {
+            "status": "skipped_no_regions",
+            "audio": audio_path.name,
+        }
+
+    refined: List[dict] = []
+    for idx, word in enumerate(word_segments):
+        start = float(word.get("start", 0.0) or 0.0)
+        end = float(word.get("end", start))
+        if end <= start:
+            end = start + MIN_WORD_DURATION_S
+        region = _find_matching_region(regions, start, end)
+        adjusted_start, adjusted_end = start, end
+        region_end_value: Optional[float] = None
+        if region:
+            region_start, region_end = region
+            region_end_value = region_end
+            adjusted_start = max(start, region_start)
+            adjusted_end = min(end, region_end)
+            if adjusted_end - adjusted_start < MIN_WORD_DURATION_S:
+                adjusted_end = min(region_end, adjusted_start + MIN_WORD_DURATION_S)
+        if refined:
+            previous_end = refined[-1]["end"]
+            if adjusted_start < previous_end:
+                adjusted_start = previous_end
+        if adjusted_end < adjusted_start + MIN_WORD_DURATION_S:
+            adjusted_end = adjusted_start + MIN_WORD_DURATION_S
+            if region_end_value is not None:
+                adjusted_end = min(adjusted_end, region_end_value)
+        if region_end_value is not None:
+            adjusted_end = min(adjusted_end, region_end_value)
+        if adjusted_end > end:
+            adjusted_end = end
+        if adjusted_end <= adjusted_start:
+            adjusted_end = adjusted_start + MIN_WORD_DURATION_S
+            if region_end_value is not None:
+                adjusted_end = min(adjusted_end, region_end_value)
+            if adjusted_end <= adjusted_start:
+                adjusted_end = adjusted_start + MIN_WORD_DURATION_S
+        refined_word = dict(word)
+        refined_word["start"] = round(adjusted_start, 3)
+        refined_word["end"] = round(adjusted_end, 3)
+        refined.append(refined_word)
+
+    report = {
+        "status": "applied",
+        "audio": audio_path.name,
+        "aggressiveness": int(max(0, min(3, aggressiveness))),
+        "frame_duration_ms": VAD_FRAME_DURATION_MS,
+        "regions": len(regions),
+    }
+    return refined, report
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -352,6 +596,11 @@ def create_resegmented_json(
     padding_s: float,
     max_segment_s: float,
     enforce_single_speaker: bool,
+    *,
+    source_label: str,
+    audio_path: Optional[Path],
+    use_vad: bool,
+    vad_aggressiveness: int,
 ) -> dict:
     """Create new JSON with resegmented data."""
     word_segments = extract_word_segments(original_data)
@@ -359,6 +608,34 @@ def create_resegmented_json(
     if not word_segments:
         logging.warning("Nincsenek szó szegmensek a JSON fájlban")
         return original_data
+
+    vad_report: Optional[Dict[str, Any]] = None
+    if use_vad:
+        if audio_path:
+            refined_segments, vad_report = refine_word_segments_with_vad(
+                word_segments,
+                audio_path,
+                aggressiveness=vad_aggressiveness,
+            )
+            if vad_report.get("status") == "applied":
+                word_segments = refined_segments
+                logging.debug(
+                    "VAD korrekció alkalmazva (%s, régiók: %s)",
+                    audio_path.name,
+                    vad_report.get("regions"),
+                )
+            else:
+                logging.info(
+                    "VAD kihagyva (%s): %s",
+                    audio_path.name,
+                    vad_report.get("status"),
+                )
+        else:
+            vad_report = {
+                "status": "skipped_audio_missing",
+                "audio": None,
+            }
+            logging.warning("Nem található hangfájl VAD korrekcióhoz (JSON: %s).", source_label)
 
     segments = build_segments(
         word_segments,
@@ -380,9 +657,15 @@ def create_resegmented_json(
             "max_pause_s": max_pause_s,
             "padding_s": padding_s,
             "max_segment_s": max_segment_s,
-            "enforce_single_speaker": enforce_single_speaker
+            "enforce_single_speaker": enforce_single_speaker,
+            "vad_enabled": use_vad,
+            "vad_aggressiveness": vad_aggressiveness,
         }
     }
+    if audio_path:
+        result["audio_file"] = audio_path.name
+    if vad_report:
+        result["vad_adjustment"] = vad_report
 
     return result
 
@@ -394,6 +677,8 @@ def process_json_file(
     max_segment_s: float,
     enforce_single_speaker: bool,
     backup: bool,
+    use_vad: bool,
+    vad_aggressiveness: int,
 ) -> None:
     """Process a single JSON file: backup, load, resegment, and save."""
     print(f"▶  Feldolgozás: {json_path.name}")
@@ -413,6 +698,12 @@ def process_json_file(
         print(f"  ✖  Sikertelen JSON betöltés: {json_path.name}")
         return
 
+    audio_path: Optional[Path] = None
+    if use_vad:
+        audio_path = find_audio_for_json(json_path)
+        if audio_path is None:
+            logging.warning("Nem található hozzárendelt hangfájl VAD korrekcióhoz (%s).", json_path.name)
+
     # Create resegmented JSON
     try:
         resegmented_data = create_resegmented_json(
@@ -421,6 +712,10 @@ def process_json_file(
             padding_s=padding_s,
             max_segment_s=max_segment_s,
             enforce_single_speaker=enforce_single_speaker,
+            source_label=json_path.name,
+            audio_path=audio_path,
+            use_vad=use_vad,
+            vad_aggressiveness=vad_aggressiveness,
         )
     except Exception as exc:
         logging.error(f"Hiba a szegmentálás során ({json_path}): {exc}")
@@ -444,6 +739,8 @@ def process_directory(
     max_segment_s: float,
     enforce_single_speaker: bool,
     backup: bool,
+    use_vad: bool,
+    vad_aggressiveness: int,
 ) -> None:
     """Process all JSON files in the directory."""
     json_files = sorted([path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() == ".json"])
@@ -462,6 +759,8 @@ def process_directory(
             max_segment_s=max_segment_s,
             enforce_single_speaker=enforce_single_speaker,
             backup=backup,
+            use_vad=use_vad,
+            vad_aggressiveness=vad_aggressiveness,
         )
 
 
@@ -522,6 +821,20 @@ def main() -> None:
         action="store_false",
         help="JSON fájlok biztonsági mentésének kikapcsolása",
     )
+    parser.add_argument(
+        "--skip-vad",
+        dest="skip_vad",
+        action="store_true",
+        default=False,
+        help="WebRTC VAD alapú szó időbélyeg korrekció kihagyása.",
+    )
+    parser.add_argument(
+        "--vad-aggressiveness",
+        type=int,
+        choices=(0, 1, 2, 3),
+        default=3,
+        help="WebRTC VAD agresszivitási szintje (0-3, alapértelmezett: 3).",
+    )
 
     add_debug_argument(parser)
     args = parser.parse_args()
@@ -540,6 +853,11 @@ def main() -> None:
     print(f"  - Max szegmens hossz: {args.max_segment_duration} s")
     print(f"  - Speaker szegmentálás: {'BE' if args.enforce_single_speaker else 'KI'}")
     print(f"  - Biztonsági mentés: {'BE' if args.backup else 'KI'}")
+    vad_enabled = not args.skip_vad
+    print(
+        f"  - VAD korrekció: {'BE' if vad_enabled else 'KI'}"
+        + (f" (aggr.: {args.vad_aggressiveness})" if vad_enabled else "")
+    )
 
     process_directory(
         input_dir=input_dir,
@@ -548,6 +866,8 @@ def main() -> None:
         max_segment_s=args.max_segment_duration,
         enforce_single_speaker=args.enforce_single_speaker,
         backup=args.backup,
+        use_vad=vad_enabled,
+        vad_aggressiveness=args.vad_aggressiveness,
     )
 
 

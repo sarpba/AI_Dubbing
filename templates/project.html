@@ -330,7 +330,6 @@
         let pendingWorkflowPayload = null;
         let pendingWorkflowContext = null;
         let availableScripts = [];
-        const WORKFLOW_STATE_FILENAME = 'workflow_state.json';
         let defaultWorkflow = [];
         let workflowSteps = [];
         let workflowAutoSaveEnabled = false;
@@ -554,11 +553,11 @@
             workflowSaving = true;
             try {
                 const payload = {
-                    ...snapshot,
+                    steps: snapshot.steps,
+                    template_id: snapshot.template_id,
                     saved_at: new Date().toISOString()
                 };
-                const serialized = JSON.stringify(payload, null, 2);
-                await writeProjectFile(WORKFLOW_STATE_FILENAME, serialized, 'application/json');
+                await persistProjectWorkflowState(payload);
                 workflowLastSavedSnapshot = snapshotKey;
                 workflowAutoSavePending = false;
             } catch (error) {
@@ -570,68 +569,43 @@
             }
         }
 
-        async function writeProjectFile(relativePath, contents, contentType = 'application/octet-stream') {
-            const normalizedPath = (relativePath || '').trim().replace(/^\/+/, '');
-            if (!normalizedPath) {
-                throw new Error('Érvénytelen fájlnév a mentéshez.');
+        async function persistProjectWorkflowState(payload) {
+            const response = await fetch(`/api/project-workflow-state/${encodeURIComponent(PROJECT_NAME)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload || {})
+            });
+            let result = null;
+            try {
+                result = await response.json();
+            } catch (error) {
+                // ignore JSON parsing issues; handled below
             }
-            const lastSlashIndex = normalizedPath.lastIndexOf('/');
-            const targetPath = lastSlashIndex > -1 ? normalizedPath.slice(0, lastSlashIndex) : '';
-            const fileName = lastSlashIndex > -1 ? normalizedPath.slice(lastSlashIndex + 1) : normalizedPath;
-            if (!fileName) {
-                throw new Error('Érvénytelen fájlnév a mentéshez.');
-            }
-
-            const upload = async () => {
-                const formData = new FormData();
-                formData.append('projectName', PROJECT_NAME);
-                formData.append('targetPath', targetPath);
-                const blob = new Blob([contents], { type: contentType });
-                formData.append('file', blob, fileName);
-                return fetch('/api/project-file/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-            };
-
-            let response = await upload();
-            if (response.status === 409) {
-                await deleteProjectFile(normalizedPath, { ignoreMissing: true });
-                response = await upload();
-            }
-            if (!response.ok) {
-                let message = `HTTP ${response.status}`;
-                try {
-                    const result = await response.json();
-                    if (result && result.error) {
-                        message = result.error;
-                    }
-                } catch (error) {
-                    // ignore parse errors
-                }
+            if (!response.ok || !result || !result.success) {
+                const message = result && result.error ? result.error : `HTTP ${response.status}`;
                 throw new Error(message);
             }
+            return result.state || null;
         }
 
         async function loadProjectWorkflowState() {
-            const url = buildWorkdirUrl(WORKFLOW_STATE_FILENAME);
             try {
-                const response = await fetch(url, { cache: 'no-store' });
+                const response = await fetch(`/api/project-workflow-state/${encodeURIComponent(PROJECT_NAME)}`, { cache: 'no-store' });
                 if (response.status === 404) {
                     return null;
                 }
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                const data = await response.json();
-                if (Array.isArray(data)) {
-                    return { steps: data, template_id: null };
+                const result = await response.json();
+                if (!result || result.success !== true) {
+                    const message = result && result.error ? result.error : 'Ismeretlen hiba';
+                    throw new Error(message);
                 }
-                if (data && typeof data === 'object') {
-                    const steps = Array.isArray(data.steps) ? data.steps : [];
-                    const templateId = data.template_id || null;
-                    return { steps, template_id: templateId };
-                }
+                const data = result.state || {};
+                const steps = Array.isArray(data.steps) ? data.steps : [];
+                const templateId = data.template_id || null;
+                return { steps, template_id: templateId };
             } catch (error) {
                 console.warn('Nem sikerült betölteni a projekt workflow állapotát:', error);
             }

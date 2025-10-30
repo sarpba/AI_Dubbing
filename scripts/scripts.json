@@ -101,7 +101,7 @@
     "enviroment": "sync",
     "script": "ASR/elevenlabs/elevenlabs.py",
     "api": "evenlabs",
-    "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok feldolgozására, a kapott nyers JSON válaszok mentésével.",
+    "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok feldolgozására, normalizált szó szintű (word_segments) JSON kimenettel.",
     "required": [
       {
         "name": "project_name",
@@ -343,6 +343,22 @@
         ],
         "type": "flag",
         "default": true
+      },
+      {
+        "name": "skip_vad",
+        "flags": [
+          "--skip-vad"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "vad_aggressiveness",
+        "flags": [
+          "--vad-aggressiveness"
+        ],
+        "type": "option",
+        "default": 3
       },
       {
         "name": "debug",

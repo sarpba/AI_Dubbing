@@ -7,6 +7,7 @@ Ez a script lehetővé teszi az ASR (Automatic Speech Recognition) scriptek ált
 ## Főbb funkciók
 
 - **Biztonsági mentés**: Az eredeti JSON fájlok biztonsági mentése `.json.bak` kiterjesztéssel
+- **VAD-alapú korrekció**: WebRTC VAD-del pontosított szó időbélyegek a szegmentálás előtt
 - **Újraformázás**: Az eredeti JSON fájlok felülírása újraformázott tartalommal
 - **Konfigurálható szegmentálás**: Testreszabható szegmentálási paraméterek
 - **Projekt-alapú működés**: A config.json alapján automatikusan feloldja a projekt könyvtárait
@@ -43,6 +44,8 @@ python scripts/ASR/resegment/resegment.py \
 - `--timestamp-padding`: Szó időbélyegek bővítése másodpercben (alapértelmezett: 0.1)
 - `--max-segment-duration`: Mondatszegmensek maximális hossza másodpercben (alapértelmezett: 11.5)
 - `--enforce-single-speaker`: Speaker diarizáció alapján szegmentálás (alapértelmezett: ki)
+- `--skip-vad`: WebRTC VAD alapú szó időbélyeg korrekció kihagyása
+- `--vad-aggressiveness`: VAD agresszivitási szint (0-3, alapértelmezett: 3)
 - `--backup`: JSON fájlok biztonsági mentése (alapértelmezett: be)
 - `--no-backup`: JSON fájlok biztonsági mentésének kikapcsolása
 - `--debug`: Debug mód engedélyezése
@@ -68,10 +71,23 @@ A script a következő fájlokat hozza létre:
     "max_pause_s": 0.8,
     "padding_s": 0.1,
     "max_segment_s": 11.5,
-    "enforce_single_speaker": false
+    "enforce_single_speaker": false,
+    "vad_enabled": true,
+    "vad_aggressiveness": 3
+  },
+  "vad_adjustment": {
+    "status": "applied",
+    "audio": "clip.wav",
+    "aggressiveness": 3,
+    "frame_duration_ms": 30,
+    "regions": 42
   }
 }
 ```
+
+## VAD-alapú pontosítás
+
+A script megpróbálja a JSON-nal azonos nevű hangfájlt (pl. `clip.wav`, `clip.mp3`) betölteni, majd WebRTC VAD segítségével meghatározni az aktív beszédrészeket. A szavak `start` és `end` időbélyegeit a detektált beszédrészekhez igazítja, így csökkenthető a szegmensek elején/végén maradó csend. A folyamat az `ffmpeg` eszközt használja szükség esetén konverzióra; ha az `ffmpeg` nem elérhető vagy a hangfájl hiányzik, a VAD lépést kihagyja, és ezt naplózza.
 
 ## Szegmentálási algoritmus
 

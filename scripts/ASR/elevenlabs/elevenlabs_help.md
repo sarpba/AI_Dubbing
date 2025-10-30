@@ -3,9 +3,28 @@
 **Futtatási környezet:** `sync`
 **Belépési pont:** `elevenlabs.py`
 
-A szkript az Evenlabs speech-to-text API-t hívja meg, és a projekt `separated_audio_speech` mappájában található hangfájlokhoz az API-ból kapott nyers JSON választ menti el további feldolgozás nélkül.
+A szkript az Evenlabs speech-to-text API-t hívja meg, és a projekt `separated_audio_speech` mappájában található hangfájlokhoz normalizált `word_segments` listát ment el. Minden szó objektum tartalmazza a szót, a kezdő- és végidőt (másodpercben), opcionális pontossági értéket és – ha elérhető – a beszélő azonosítót.
 
-> **Fontos:** Az így keletkező nyers JSON-t a következő lépésben a `scripts/ASR/resegment/resegment.py` szkripttel szükséges újraszegmentálni, ezért ezt a lépést illeszd be közvetlenül az elevenlabs futtatása után.
+> **Fontos:** A keletkező `word_segments` JSON-t a következő lépésben a `scripts/ASR/resegment/resegment.py` szkripttel szükséges mondatszintre újraszegmentálni, ezért ezt a lépést illeszd be közvetlenül az elevenlabs futtatása után.
+
+Példa kimenet:
+
+```json
+{
+  "word_segments": [
+    {
+      "word": "If",
+      "start": 1.28,
+      "end": 1.46,
+      "score": null,
+      "speaker": "speaker_0"
+    }
+  ],
+  "language": "en",
+  "provider": "evenlabs",
+  "diarization": true
+}
+```
 
 ## Kötelező beállítás
 - `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `workdir` alatti projektmappa neve, amelynek hanganyagát feldolgozza.
@@ -18,4 +37,4 @@ A szkript az Evenlabs speech-to-text API-t hívja meg, és a projekt `separated_
 - `diarize` (`--diarize` / `--no-diarize`, flag, alapértelmezés: `--diarize`): A diarizáció be- vagy kikapcsolása az API kérésben.
 - `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás, figyelmeztetések megjelenítése.
 
-> **Megjegyzés:** A szkript minden feldolgozott hangfájllal azonos nevű `.json` fájlt hoz létre ugyanabban a mappában, amely az ElevenLabs teljes válaszát tartalmazza.
+> **Megjegyzés:** A szkript minden feldolgozott hangfájllal azonos nevű `.json` fájlt hoz létre ugyanabban a mappában, amely az ElevenLabs válaszából származó normalizált `word_segments` listát tartalmazza.

@@ -67,6 +67,7 @@ SCRIPTS_CACHE_LOCK = threading.Lock()
 CONDA_INFO_CACHE: Optional[dict] = None
 CONDA_INFO_LOCK = threading.Lock()
 WORKFLOWS_DIR = Path(app.root_path) / 'workflows'
+WORKFLOW_STATE_FILENAME = 'workflow_state.json'
 THEME_CONFIG_PATH = Path(app.root_path) / 'config' / 'theme_colors.json'
 THEME_COLOR_KEYS = [
     'primary-color',
@@ -901,6 +902,80 @@ def save_workflow_template_file(
         'name': payload['name'],
         'filename': target_path.name
     }
+
+
+def get_project_root_path(project_name: str, config_snapshot: Optional[Dict[str, Any]] = None) -> Optional[Path]:
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return None
+    snapshot = config_snapshot or get_config_copy()
+    workdir_path = snapshot['DIRECTORIES']['workdir']
+    return Path(workdir_path) / sanitized_project
+
+
+def get_project_workflow_state_path(project_name: str, config_snapshot: Optional[Dict[str, Any]] = None) -> Optional[Path]:
+    project_root = get_project_root_path(project_name, config_snapshot=config_snapshot)
+    if not project_root:
+        return None
+    return project_root / WORKFLOW_STATE_FILENAME
+
+
+def load_project_workflow_state(project_name: str, config_snapshot: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    state_path = get_project_workflow_state_path(project_name, config_snapshot=config_snapshot)
+    if not state_path or not state_path.is_file():
+        return None
+    try:
+        with state_path.open('r', encoding='utf-8') as fp:
+            raw_state = json.load(fp)
+    except (OSError, json.JSONDecodeError) as exc:
+        logging.warning("Nem sikerült betölteni a workflow állapotot (%s): %s", state_path, exc)
+        return None
+
+    if isinstance(raw_state, list):
+        steps = mask_workflow_secret_params(raw_state)
+        return {'steps': steps, 'template_id': None}
+    if isinstance(raw_state, dict):
+        steps = mask_workflow_secret_params(raw_state.get('steps') or [])
+        state: Dict[str, Any] = {
+            'steps': steps,
+            'template_id': raw_state.get('template_id')
+        }
+        if 'saved_at' in raw_state:
+            state['saved_at'] = raw_state['saved_at']
+        return state
+    return None
+
+
+def save_project_workflow_state(
+    project_name: str,
+    steps: List[Dict[str, Any]],
+    template_id: Optional[str] = None,
+    *,
+    config_snapshot: Optional[Dict[str, Any]] = None,
+    saved_at: Optional[str] = None
+) -> Dict[str, Any]:
+    state_path = get_project_workflow_state_path(project_name, config_snapshot=config_snapshot)
+    if not state_path:
+        raise WorkflowValidationError("Érvénytelen projekt azonosító.")
+    project_root = state_path.parent
+    if not project_root.is_dir():
+        raise WorkflowValidationError("A projekt könyvtára nem található.")
+
+    payload: Dict[str, Any] = {
+        'steps': mask_workflow_secret_params(steps or [])
+    }
+    if template_id:
+        payload['template_id'] = template_id
+    if saved_at:
+        payload['saved_at'] = saved_at
+
+    try:
+        with state_path.open('w', encoding='utf-8') as fp:
+            json.dump(payload, fp, ensure_ascii=False, indent=2)
+    except OSError as exc:
+        logging.error("Nem sikerült menteni a workflow állapotot (%s): %s", state_path, exc)
+        raise WorkflowValidationError("Nem sikerült menteni a workflow állapotot.") from exc
+    return payload
 
 
 def coerce_bool(value: Any) -> bool:
@@ -3229,27 +3304,25 @@ def get_workflow_options_api(project_name):
 
     scripts = get_scripts_catalog()
     templates = list_workflow_templates()
-    last_workflow = current_config.get('LAST_WORKFLOW')
-    last_template = current_config.get('LAST_WORKFLOW_TEMPLATE')
 
+    saved_state = load_project_workflow_state(sanitized_project, config_snapshot=current_config)
     defaults_workflow: List[Dict[str, Any]] = []
     selected_template: Optional[str] = None
 
-    if isinstance(last_workflow, list) and last_workflow:
-        defaults_workflow = copy.deepcopy(last_workflow)
-        if last_template:
-            selected_template = last_template
+    if saved_state and isinstance(saved_state.get('steps'), list):
+        defaults_workflow = copy.deepcopy(saved_state['steps'])
+        selected_template = saved_state.get('template_id')
     else:
-        template_data = None
-        if last_template:
-            template_data = load_workflow_template(last_template)
-        elif templates:
-            selected_template = templates[0]['id']
-            template_data = load_workflow_template(selected_template)
+        template_data = load_workflow_template('default')
+        if not template_data and templates:
+            template_id = templates[0]['id']
+            template_data = load_workflow_template(template_id)
+        else:
+            template_id = 'default'
 
         if template_data and isinstance(template_data.get('steps'), list):
             defaults_workflow = copy.deepcopy(template_data['steps'])
-            selected_template = template_data.get('id') or selected_template
+            selected_template = template_data.get('id') or template_id
 
     defaults = {
         'workflow': mask_workflow_secret_params(defaults_workflow),
@@ -3271,6 +3344,50 @@ def get_workflow_options_api(project_name):
         'latest_job': latest_job,
         'project': sanitized_project
     })
+
+
+@app.route('/api/project-workflow-state/<project_name>', methods=['GET', 'POST'])
+def project_workflow_state_api(project_name):
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'Érvénytelen projektnév.'}), 400
+
+    config_snapshot = get_config_copy()
+    project_root = get_project_root_path(sanitized_project, config_snapshot=config_snapshot)
+    if not project_root or not project_root.is_dir():
+        return jsonify({'success': False, 'error': 'Projekt nem található.'}), 404
+
+    if request.method == 'GET':
+        state = load_project_workflow_state(sanitized_project, config_snapshot=config_snapshot)
+        if not state:
+            return jsonify({'success': False, 'error': 'Nincs mentett workflow állapot.'}), 404
+        return jsonify({'success': True, 'state': state})
+
+    payload = request.get_json() or {}
+    steps_payload = payload.get('steps')
+    try:
+        normalized_steps, _, _ = normalize_workflow_steps(steps_payload)
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    template_id = (payload.get('template_id') or '').strip() or None
+    saved_at = (payload.get('saved_at') or '').strip() or datetime.utcnow().isoformat()
+
+    try:
+        state = save_project_workflow_state(
+            sanitized_project,
+            normalized_steps,
+            template_id,
+            config_snapshot=config_snapshot,
+            saved_at=saved_at
+        )
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - váratlan hibák naplózása
+        logging.error("Nem sikerült menteni a workflow állapotot: %s", exc, exc_info=True)
+        return jsonify({'success': False, 'error': 'Nem sikerült menteni a workflow állapotot.'}), 500
+
+    return jsonify({'success': True, 'state': state})
 
 
 @app.route('/api/run-workflow/<project_name>', methods=['POST'])
@@ -3322,15 +3439,22 @@ def run_workflow_api(project_name):
             'missing_keys': missing_keys
         }), 400
 
-    updated_config = copy.deepcopy(current_config)
     encoded_full_steps = mask_workflow_secret_params(normalized_full_steps)
     encoded_steps = mask_workflow_secret_params(normalized_steps)
-    updated_config['LAST_WORKFLOW'] = encoded_full_steps
-    if template_id:
-        updated_config['LAST_WORKFLOW_TEMPLATE'] = template_id
-    else:
-        updated_config.pop('LAST_WORKFLOW_TEMPLATE', None)
-    persist_config(updated_config)
+    saved_timestamp = datetime.utcnow().isoformat()
+    try:
+        save_project_workflow_state(
+            sanitized_project,
+            normalized_full_steps,
+            template_id,
+            config_snapshot=current_config,
+            saved_at=saved_timestamp
+        )
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+    except Exception as exc:  # pragma: no cover - váratlan hibák naplózása
+        logging.error("Nem sikerült menteni a workflow állapotot: %s", exc, exc_info=True)
+        return jsonify({'success': False, 'error': 'Nem sikerült menteni a workflow állapotot.'}), 500
 
     job_id = uuid.uuid4().hex
     job_data = {

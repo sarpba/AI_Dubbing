@@ -2,7 +2,7 @@
   "enviroment": "sync",
   "script": "ASR/elevenlabs/elevenlabs.py",
   "api": "evenlabs",
-  "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok feldolgozására, a kapott nyers JSON válaszok mentésével.",
+  "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok feldolgozására, normalizált szó szintű (word_segments) JSON kimenettel.",
   "required": [
     {
       "name": "project_name",
