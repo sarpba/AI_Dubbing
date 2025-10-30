@@ -345,20 +345,12 @@
         "default": true
       },
       {
-        "name": "skip_vad",
+        "name": "skip_energy_refine",
         "flags": [
-          "--skip-vad"
+          "--skip-energy-refine"
         ],
         "type": "flag",
         "default": false
-      },
-      {
-        "name": "vad_aggressiveness",
-        "flags": [
-          "--vad-aggressiveness"
-        ],
-        "type": "option",
-        "default": 3
       },
       {
         "name": "debug",
