@@ -1,0 +1,2 @@
+file 'angol_resz.mkv'
+file 'magyar_resz.mkv'

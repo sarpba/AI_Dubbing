@@ -1,6 +1,7 @@
 """
-Resegment script - JSON szegmensek újraformázása különböző paraméterekkel.
-Az ASR script által létrehozott JSON fájlok biztonsági mentése és újraformázása.
+Resegment script with Montreal Forced Aligner (MFA) integration.
+This script refines word timestamps using forced alignment for English audio
+and then resegments the transcript based on various parameters.
 """
 
 from __future__ import annotations
@@ -17,10 +18,18 @@ import subprocess
 import sys
 import tempfile
 import wave
-from array import array
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+# Attempt to locate the 'textgrid' library, required for MFA output parsing.
+try:
+    import textgrid
+except ImportError:
+    print("Error: The 'textgrid' library is not installed.")
+    print("Please install it using: pip install textgrid")
+    sys.exit(1)
+
+# Ensure the script can find tools from the project root
 for candidate in Path(__file__).resolve().parents:
     if (candidate / "tools").is_dir():
         if str(candidate) not in sys.path:
@@ -29,22 +38,16 @@ for candidate in Path(__file__).resolve().parents:
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
 
+# --- Constants ---
 DEFAULT_MAX_PAUSE_S = 0.8
 DEFAULT_PADDING_S = 0.1
 DEFAULT_MAX_SEGMENT_S = 11.5
 PRIMARY_PUNCTUATION = (".", "!", "?")
 SECONDARY_PUNCTUATION = (",",)
 SUPPORTED_AUDIO_EXTENSIONS: Tuple[str, ...] = (".wav", ".mp3", ".flac", ".m4a", ".ogg")
-ENERGY_ALLOWED_SAMPLE_RATES: Tuple[int, ...] = (8000, 16000, 22050, 24000, 32000, 44100, 48000)
-ENERGY_TARGET_SAMPLE_RATE = 16000
-ENERGY_WINDOW_MS = 10
-ENERGY_BACKTRACK_LIMIT_S = 0.5
-ENERGY_THRESHOLD_FLOOR = 150.0
-ENERGY_FORWARD_WINDOW_S = 0.3
-MIN_WORD_DURATION_S = 0.02
-MIN_SILENCE_FRAMES = 3
-INTER_WORD_SEARCH_WINDOW_S = 0.1
+MFA_TARGET_SAMPLE_RATE = 16000  # MFA typically works best with 16kHz audio
 
+# --- Utility Functions ---
 
 def _sanitize_text(value: Any) -> str:
     """Remove escaped quote sequences from transcribed text."""
@@ -60,7 +63,7 @@ def get_project_root() -> Path:
     for candidate in Path(__file__).resolve().parents:
         if (candidate / "config.json").is_file():
             return candidate
-    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+    raise FileNotFoundError("Could not find config.json in any parent directories.")
 
 
 def load_config() -> Tuple[dict, Path]:
@@ -71,7 +74,7 @@ def load_config() -> Tuple[dict, Path]:
         with config_path.open("r", encoding="utf-8") as fp:
             config = json.load(fp)
     except (FileNotFoundError, json.JSONDecodeError) as exc:
-        print(f"Hiba a konfiguráció betöltésekor ({config_path}): {exc}")
+        print(f"Error loading configuration ({config_path}): {exc}")
         sys.exit(1)
     return config, project_root
 
@@ -82,12 +85,12 @@ def resolve_project_input(project_name: str, config: dict, project_root: Path) -
         workdir = project_root / config["DIRECTORIES"]["workdir"]
         input_subdir = config["PROJECT_SUBDIRS"]["separated_audio_speech"]
     except KeyError as exc:
-        print(f"Hiba: hiányzó kulcs a config.json-ban: {exc}")
+        print(f"Error: missing key in config.json: {exc}")
         sys.exit(1)
 
     input_dir = workdir / project_name / input_subdir
     if not input_dir.is_dir():
-        print(f"Hiba: a feldolgozandó mappa nem található: {input_dir}")
+        print(f"Error: processing directory not found: {input_dir}")
         sys.exit(1)
     return input_dir
 
@@ -108,209 +111,170 @@ def find_audio_for_json(json_path: Path) -> Optional[Path]:
             return candidate
     return None
 
+# --- MFA (Montreal Forced Aligner) Integration ---
 
-def _convert_to_energy_wav(path: Path) -> Optional[Path]:
-    """Convert arbitrary audio to a PCM16 mono WAV accepted by the energy analysis."""
-    try:
-        temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    except Exception as exc:
-        logging.warning("Nem sikerült ideiglenes fájlt létrehozni energiabecsléshez (%s): %s", path, exc)
-        return None
-    temp_file.close()
+def _prepare_mfa_input(
+    audio_path: Path,
+    word_segments: List[dict],
+    temp_dir: Path,
+) -> Optional[Tuple[Path, Path]]:
+    """
+    Prepares audio and transcript files for MFA.
+    Converts audio to 16kHz mono WAV and creates a .lab transcript file.
+    Returns (path_to_wav, path_to_lab) or None on failure.
+    """
+    # 1. Prepare audio file
+    mfa_audio_path = temp_dir / f"{audio_path.stem}.wav"
     command = [
         "ffmpeg",
         "-y",
         "-i",
-        str(path),
+        str(audio_path),
         "-ac",
         "1",
         "-ar",
-        str(ENERGY_TARGET_SAMPLE_RATE),
+        str(MFA_TARGET_SAMPLE_RATE),
         "-acodec",
         "pcm_s16le",
-        temp_file.name,
+        str(mfa_audio_path),
     ]
     try:
         subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return Path(temp_file.name)
     except FileNotFoundError:
-        logging.warning("Az ffmpeg nem elérhető, az energiabecsléses korrekció kihagyva (%s).", path)
+        logging.error("ffmpeg is not available. It is required for MFA audio preparation.")
+        return None
     except subprocess.CalledProcessError as exc:
-        error_message = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
-        logging.warning("FFmpeg konverzió sikertelen energiabecsléshez (%s): %s", path, error_message.strip())
+        error_message = exc.stderr.decode("utf-8", errors="ignore").strip()
+        logging.error(f"FFmpeg conversion failed for MFA ({audio_path}): {error_message}")
+        return None
+
+    # 2. Prepare transcript file (.lab)
+    transcript = " ".join(word.get("word", "") for word in word_segments)
+    mfa_transcript_path = temp_dir / f"{audio_path.stem}.lab"
     try:
-        if os.path.exists(temp_file.name):
-            os.remove(temp_file.name)
-    except OSError:
-        pass
-    return None
+        with mfa_transcript_path.open("w", encoding="utf-8") as f:
+            f.write(transcript)
+    except IOError as exc:
+        logging.error(f"Failed to write MFA transcript file: {exc}")
+        return None
+
+    return mfa_audio_path, mfa_transcript_path
 
 
-def read_wave_for_energy(path: Path) -> Optional[Tuple[array, int]]:
-    """Load audio data suitable for energy analysis. Returns PCM samples and sample_rate."""
-    converted_path: Optional[Path] = None
-    source_path = path
+def _parse_mfa_textgrid(textgrid_path: Path, original_words: List[dict]) -> List[dict]:
+    """Parses the TextGrid output from MFA and updates word timestamps."""
     try:
-        with contextlib.closing(wave.open(str(path), "rb")) as wf:
-            sample_rate = wf.getframerate()
-            sample_width = wf.getsampwidth()
-            channels = wf.getnchannels()
-            if (
-                sample_rate not in ENERGY_ALLOWED_SAMPLE_RATES
-                or sample_width != 2
-                or channels != 1
-            ):
-                raise ValueError("unsupported format")
-            frames = wf.readframes(wf.getnframes())
-            samples = array("h")
-            samples.frombytes(frames)
-            return samples, sample_rate
-    except (wave.Error, FileNotFoundError, ValueError):
-        converted_path = _convert_to_energy_wav(source_path)
-        if not converted_path:
-            return None
-        try:
-            with contextlib.closing(wave.open(str(converted_path), "rb")) as wf:
-                frames = wf.readframes(wf.getnframes())
-                samples = array("h")
-                samples.frombytes(frames)
-                return samples, wf.getframerate()
-        except (wave.Error, FileNotFoundError) as exc:
-            logging.warning("A konvertált WAV nem tölthető be energiabecsléshez (%s): %s", source_path, exc)
-            return None
-        finally:
-            try:
-                os.remove(str(converted_path))
-            except OSError:
-                pass
+        tg = textgrid.TextGrid.fromFile(str(textgrid_path))
+    except Exception as e:
+        logging.warning(f"Could not parse TextGrid file '{textgrid_path}': {e}")
+        return original_words
+
+    if not tg.tiers or "words" not in tg.tierNames:
+        logging.warning(f"TextGrid file '{textgrid_path}' does not contain a 'words' tier.")
+        return original_words
+
+    word_tier = tg.getFirst("words")
+    aligned_words = [interval for interval in word_tier if interval.mark.strip()]
+    
+    if len(aligned_words) != len(original_words):
+        logging.warning(
+            f"MFA alignment mismatch: original had {len(original_words)} words, "
+            f"MFA produced {len(aligned_words)}. Timestamps will not be updated."
+        )
+        return original_words
+
+    refined_segments = []
+    for i, original_word in enumerate(original_words):
+        aligned_interval = aligned_words[i]
+        
+        # Basic sanity check
+        if original_word["word"].lower() != aligned_interval.mark.lower():
+            logging.debug(
+                f"Word mismatch at index {i}: original='{original_word['word']}', "
+                f"MFA='{aligned_interval.mark}'. Using MFA timestamps anyway."
+            )
+
+        updated_word = dict(original_word)
+        updated_word["start"] = round(aligned_interval.minTime, 3)
+        updated_word["end"] = round(aligned_interval.maxTime, 3)
+        refined_segments.append(updated_word)
+
+    return refined_segments
 
 
-def _compute_energy_frames(
-    samples: array,
-    sample_rate: int,
-    frame_ms: int = ENERGY_WINDOW_MS,
-) -> Tuple[List[float], float]:
-    """Return RMS energies per frame and the frame duration in seconds."""
-    frame_size = max(1, int(sample_rate * frame_ms / 1000))
-    if frame_size <= 0:
-        frame_size = 1
-    energies: List[float] = []
-    total_samples = len(samples)
-    if total_samples == 0:
-        return energies, frame_size / sample_rate if sample_rate else 0.0
-    for offset in range(0, total_samples, frame_size):
-        chunk = samples[offset : offset + frame_size]
-        if not chunk:
-            continue
-        # RMS energy
-        sumsq = 0
-        for value in chunk:
-            sumsq += value * value
-        rms = math.sqrt(sumsq / len(chunk))
-        energies.append(rms)
-    frame_duration = frame_size / sample_rate if sample_rate else 0.0
-    return energies, frame_duration
-
-
-def _calculate_energy_thresholds(energies: Sequence[float]) -> Tuple[float, float]:
-    positives = [e for e in energies if e > 0]
-    if not positives:
-        return 0.0, 0.0
-    positives.sort()
-    median_val = statistics.median(positives)
-    ninety_idx = min(int(round(0.9 * (len(positives) - 1))), len(positives) - 1)
-    p90 = positives[ninety_idx]
-    max_val = positives[-1]
-    threshold_high = max(median_val * 0.8, p90 * 0.6)
-    if max_val > ENERGY_THRESHOLD_FLOOR:
-        threshold_high = max(threshold_high, ENERGY_THRESHOLD_FLOOR)
-    threshold_high = min(threshold_high, max_val)
-    if threshold_high <= 0:
-        threshold_high = max_val
-    threshold_low = threshold_high * 0.5
-    return threshold_high, threshold_low
-
-
-def refine_word_segments_with_energy(
+def refine_word_segments_with_mfa(
     word_segments: List[dict],
     audio_path: Path,
 ) -> Tuple[List[dict], Dict[str, Any]]:
-    """Adjust word timestamps using internal content analysis to handle ASR inaccuracies."""
-    audio_data = read_wave_for_energy(audio_path)
-    if not audio_data:
-        return word_segments, {"status": "skipped_audio_unavailable", "audio": audio_path.name}
-    
-    samples, sample_rate = audio_data
-    energies, frame_duration = _compute_energy_frames(samples, sample_rate)
-    if not energies or frame_duration <= 0:
-        return word_segments, {"status": "skipped_no_energy_frames", "audio": audio_path.name}
+    """
+    Adjusts word timestamps using the Montreal Forced Aligner.
+    This function assumes MFA is installed and English models are downloaded.
+    """
+    report = {"status": "skipped", "audio": audio_path.name}
 
-    threshold_high, threshold_low = _calculate_energy_thresholds(energies)
-    if threshold_high == 0:
-        return word_segments, {"status": "skipped_low_energy", "audio": audio_path.name}
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        mfa_input_dir = temp_dir / "mfa_input"
+        mfa_output_dir = temp_dir / "mfa_output"
+        mfa_input_dir.mkdir()
+        mfa_output_dir.mkdir()
 
-    audio_length = len(samples) / sample_rate if sample_rate else 0.0
-    num_frames = len(energies)
-    refined: List[dict] = []
-
-    for idx, word in enumerate(word_segments):
-        original_start = float(word.get("start") or 0.0)
-        original_end = float(word.get("end") or original_start)
+        # 1. Prepare inputs for MFA
+        prepared = _prepare_mfa_input(audio_path, word_segments, mfa_input_dir)
+        if not prepared:
+            report["status"] = "skipped_ffmpeg_error"
+            return word_segments, report
         
-        start_frame = min(max(int(original_start / frame_duration), 0), num_frames - 1)
-        end_frame = min(max(int(original_end / frame_duration), 0), num_frames - 1)
+        # 2. Run MFA align
+        # These models should be downloaded beforehand with 'mfa model download'
+        acoustic_model = "english_mfa"
+        dictionary = "english_mfa"
+        
+        command = [
+            "mfa",
+            "align",
+            str(mfa_input_dir),
+            dictionary,
+            acoustic_model,
+            str(mfa_output_dir),
+            "--clean",
+            "--quiet",
+        ]
+        
+        try:
+            logging.info(f"Running MFA on {audio_path.name}...")
+            subprocess.run(
+                command,
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding="utf-8",
+            )
+        except FileNotFoundError:
+            logging.error("MFA command not found. Is Montreal Forced Aligner installed and in your PATH?")
+            report["status"] = "skipped_mfa_not_found"
+            return word_segments, report
+        except subprocess.CalledProcessError as exc:
+            logging.error(f"MFA alignment failed for {audio_path.name}.")
+            logging.error(f"MFA STDOUT: {exc.stdout}")
+            logging.error(f"MFA STDERR: {exc.stderr}")
+            report["status"] = "skipped_mfa_error"
+            report["error_log"] = exc.stderr
+            return word_segments, report
 
-        first_active_frame = -1
-        last_active_frame = -1
-
-        if start_frame <= end_frame:
-            for i in range(start_frame, end_frame + 1):
-                if energies[i] > threshold_high:
-                    first_active_frame = i
-                    break
+        # 3. Parse the output TextGrid
+        output_tg_path = mfa_output_dir / f"{audio_path.stem}.TextGrid"
+        if not output_tg_path.is_file():
+            logging.warning(f"MFA did not produce an output TextGrid for {audio_path.name}.")
+            report["status"] = "skipped_mfa_no_output"
+            return word_segments, report
             
-            for i in range(end_frame, start_frame - 1, -1):
-                if energies[i] > threshold_high:
-                    last_active_frame = i
-                    break
-        
-        adjusted_start_frame: int
-        adjusted_end_frame: int
+        refined_segments = _parse_mfa_textgrid(output_tg_path, word_segments)
+        report["status"] = "applied_mfa_alignment"
+        logging.info(f"MFA alignment successful for {audio_path.name}.")
+        return refined_segments, report
 
-        if first_active_frame != -1 and last_active_frame != -1:
-            adjusted_start_frame = first_active_frame
-            adjusted_end_frame = last_active_frame
-        else:
-            adjusted_start_frame = start_frame
-            adjusted_end_frame = end_frame
-
-        adjusted_start = adjusted_start_frame * frame_duration
-        adjusted_end = (adjusted_end_frame + 1) * frame_duration
-
-        if refined:
-            adjusted_start = max(adjusted_start, refined[-1]["end"])
-        
-        if adjusted_end - adjusted_start < MIN_WORD_DURATION_S:
-            adjusted_end = adjusted_start + MIN_WORD_DURATION_S
-
-        adjusted_start = max(0.0, adjusted_start)
-        adjusted_end = min(audio_length, adjusted_end)
-
-        refined_word = dict(word)
-        refined_word["start"] = round(adjusted_start, 3)
-        refined_word["end"] = round(adjusted_end, 3)
-        refined.append(refined_word)
-
-    report = {
-        "status": "applied_internal_scan",
-        "audio": audio_path.name,
-        "frame_duration_ms": ENERGY_WINDOW_MS,
-        "threshold_high": threshold_high,
-        "threshold_low": threshold_low,
-        "frames": len(energies),
-    }
-    return refined, report
-
+# --- ASR Data Handling & Resegmentation Logic ---
 
 def _safe_float(value: Any) -> Optional[float]:
     try:
@@ -556,12 +520,10 @@ def build_segments(
     )
     return split_long_segments(initial_segments, max_segment_s)
 
+# --- Main File Processing Logic ---
 
 def backup_json_file(json_path: Path) -> Path:
-    """
-    Create a backup of the JSON file with .json.bak extension.
-    If a backup already exists, create a numbered version (.bak_2, .bak_3, etc.).
-    """
+    """Creates a backup of the JSON file, handling existing backups."""
     base_backup_str = str(json_path.with_suffix(".json.bak"))
     backup_path = Path(base_backup_str)
 
@@ -576,10 +538,10 @@ def backup_json_file(json_path: Path) -> Path:
             
     try:
         shutil.copy2(json_path, backup_path)
-        logging.info(f"Biztonsági mentés létrehozva: {backup_path.name}")
+        logging.info(f"Backup created: {backup_path.name}")
         return backup_path
     except Exception as exc:
-        logging.error(f"Hiba a biztonsági mentés létrehozásakor ({json_path}): {exc}")
+        logging.error(f"Failed to create backup for {json_path}: {exc}")
         raise
 
 
@@ -589,7 +551,7 @@ def load_json_file(json_path: Path) -> dict:
         with json_path.open("r", encoding="utf-8") as fp:
             return json.load(fp)
     except (FileNotFoundError, json.JSONDecodeError) as exc:
-        logging.error(f"Hiba a JSON fájl betöltésekor ({json_path}): {exc}")
+        logging.error(f"Error loading JSON file {json_path}: {exc}")
         raise
 
 
@@ -602,45 +564,41 @@ def create_resegmented_json(
     *,
     source_label: str,
     audio_path: Optional[Path],
-    energy_refine: bool,
+    mfa_refine: bool,
     word_by_word: bool,
 ) -> dict:
     """Create new JSON with resegmented data."""
     word_segments = extract_word_segments(original_data)
     
     if not word_segments:
-        logging.warning("Nincsenek szó szegmensek a JSON fájlban")
+        logging.warning(f"No word segments found in {source_label}")
         return original_data
 
-    energy_report: Optional[Dict[str, Any]] = None
-    if energy_refine:
+    alignment_report: Optional[Dict[str, Any]] = None
+    if mfa_refine:
         if audio_path:
-            refined_segments, energy_report = refine_word_segments_with_energy(
+            refined_segments, alignment_report = refine_word_segments_with_mfa(
                 word_segments,
                 audio_path,
             )
-            if "applied" in energy_report.get("status", ""):
+            if "applied" in alignment_report.get("status", ""):
                 word_segments = refined_segments
-                logging.debug(
-                    "Energia alapú korrekció alkalmazva (%s)",
-                    audio_path.name,
-                )
             else:
                 logging.info(
-                    "Energia alapú korrekció kihagyva (%s): %s",
+                    "MFA refinement skipped for %s: %s",
                     audio_path.name,
-                    energy_report.get("status"),
+                    alignment_report.get("status"),
                 )
         else:
-            energy_report = {
+            alignment_report = {
                 "status": "skipped_audio_missing",
                 "audio": None,
             }
-            logging.warning("Nem található hangfájl energiabecsléshez (JSON: %s).", source_label)
+            logging.warning(f"No associated audio file found for MFA refinement (JSON: {source_label}).")
 
     segments: List[dict]
     if word_by_word:
-        logging.info("Egyszavas szegmensek létrehozása a '--word-by-word-segments' kapcsoló miatt.")
+        logging.info("Creating word-by-word segments due to '--word-by-word-segments' flag.")
         segments = []
         for word in word_segments:
             segment = {
@@ -661,9 +619,9 @@ def create_resegmented_json(
             enforce_single_speaker=enforce_single_speaker,
         )
 
-    ### ÚJ SZŰRÉSI LOGIKA ###
-    # A zárójeles (pl. [zene]) szegmensek eltávolítása a végső kimenetből.
-    # A word_segments listában megmaradnak.
+    ### NEW FILTERING LOGIC ###
+    # Remove segments that are likely non-speech events (e.g., [music], [silence]).
+    # The word_segments list remains unfiltered.
     final_segments = [
         seg for seg in segments 
         if not (seg.get("text", "").strip().startswith("[") and seg.get("text", "").strip().endswith("]"))
@@ -673,7 +631,7 @@ def create_resegmented_json(
         "segments": final_segments,
         "word_segments": word_segments,
         "language": original_data.get("language"),
-        "provider": original_data.get("provider", "resegment"),
+        "provider": original_data.get("provider", "resegment_mfa"),
         "diarization": original_data.get("diarization", False),
         "original_provider": original_data.get("provider"),
         "resegment_parameters": {
@@ -681,15 +639,14 @@ def create_resegmented_json(
             "padding_s": padding_s,
             "max_segment_s": max_segment_s,
             "enforce_single_speaker": enforce_single_speaker,
-            "energy_refine": energy_refine,
-            "energy_window_ms": ENERGY_WINDOW_MS,
+            "mfa_refine": mfa_refine,
             "word_by_word_segments": word_by_word,
         }
     }
     if audio_path:
         result["audio_file"] = audio_path.name
-    if energy_report:
-        result["energy_adjustment"] = energy_report
+    if alignment_report:
+        result["alignment_adjustment"] = alignment_report
 
     return result
 
@@ -701,30 +658,30 @@ def process_json_file(
     max_segment_s: float,
     enforce_single_speaker: bool,
     backup: bool,
-    energy_refine: bool,
+    mfa_refine: bool,
     word_by_word: bool,
 ) -> None:
     """Process a single JSON file: backup, load, resegment, and save."""
-    print(f"▶  Feldolgozás: {json_path.name}")
+    print(f"▶  Processing: {json_path.name}")
     
     if backup:
         try:
             backup_json_file(json_path)
         except Exception:
-            print(f"  ✖  Sikertelen biztonsági mentés: {json_path.name}")
+            print(f"  ✖  Backup failed: {json_path.name}")
             return
 
     try:
         original_data = load_json_file(json_path)
     except Exception:
-        print(f"  ✖  Sikertelen JSON betöltés: {json_path.name}")
+        print(f"  ✖  JSON loading failed: {json_path.name}")
         return
 
     audio_path: Optional[Path] = None
-    if energy_refine:
+    if mfa_refine:
         audio_path = find_audio_for_json(json_path)
         if audio_path is None:
-            logging.warning("Nem található hozzárendelt hangfájl energiabecsléshez (%s).", json_path.name)
+            logging.warning(f"No audio file found for MFA alignment ({json_path.name}).")
 
     try:
         resegmented_data = create_resegmented_json(
@@ -735,21 +692,21 @@ def process_json_file(
             enforce_single_speaker=enforce_single_speaker,
             source_label=json_path.name,
             audio_path=audio_path,
-            energy_refine=energy_refine,
+            mfa_refine=mfa_refine,
             word_by_word=word_by_word,
         )
     except Exception as exc:
-        logging.error(f"Hiba a szegmentálás során ({json_path}): {exc}", exc_info=True)
-        print(f"  ✖  Szegmentálási hiba: {json_path.name}")
+        logging.error(f"Error during resegmentation of {json_path}: {exc}", exc_info=True)
+        print(f"  ✖  Resegmentation error: {json_path.name}")
         return
 
     try:
         with json_path.open("w", encoding="utf-8") as fp:
             json.dump(resegmented_data, fp, indent=2, ensure_ascii=False, allow_nan=False)
-        print(f"  ✔  Mentve: {json_path.name}")
+        print(f"  ✔  Saved: {json_path.name}")
     except Exception as exc:
-        logging.error(f"Hiba a mentés során ({json_path}): {exc}")
-        print(f"  ✖  Mentési hiba: {json_path.name}")
+        logging.error(f"Error saving file {json_path}: {exc}")
+        print(f"  ✖  Save error: {json_path.name}")
 
 
 def process_directory(
@@ -759,17 +716,17 @@ def process_directory(
     max_segment_s: float,
     enforce_single_speaker: bool,
     backup: bool,
-    energy_refine: bool,
+    mfa_refine: bool,
     word_by_word: bool,
 ) -> None:
     """Process all JSON files in the directory."""
     json_files = sorted([path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() == ".json"])
 
     if not json_files:
-        print(f"Nem található JSON fájl a megadott mappában: {input_dir}")
+        print(f"No JSON files found in directory: {input_dir}")
         return
 
-    print(f"{len(json_files)} JSON fájl feldolgozása indul...")
+    print(f"Found {len(json_files)} JSON files to process...")
     for json_path in json_files:
         print("-" * 48)
         process_json_file(
@@ -779,84 +736,72 @@ def process_directory(
             max_segment_s=max_segment_s,
             enforce_single_speaker=enforce_single_speaker,
             backup=backup,
-            energy_refine=energy_refine,
+            mfa_refine=mfa_refine,
             word_by_word=word_by_word,
         )
 
+# --- Main Execution ---
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "JSON szegmensek újraformázása - ASR script által létrehozott JSON fájlok "
-            "biztonsági mentése és újraformázása különböző paraméterekkel."
+            "Resegment ASR JSON files with optional word timestamp refinement "
+            "using Montreal Forced Aligner for English."
         )
     )
     parser.add_argument(
         "-p",
         "--project-name",
         required=True,
-        help="A projekt neve (a workdir alatti mappa), amit fel kell dolgozni.",
+        help="The project name (subfolder in the workdir) to process.",
     )
     parser.add_argument(
         "--max-pause",
         type=float,
         default=DEFAULT_MAX_PAUSE_S,
-        help=f"Mondatszegmensek közti maximális szünet (mp) saját szegmentáláshoz (alapértelmezett: {DEFAULT_MAX_PAUSE_S}).",
+        help=f"Maximum pause between words to be considered a single segment (default: {DEFAULT_MAX_PAUSE_S}s).",
     )
     parser.add_argument(
         "--timestamp-padding",
         type=float,
         default=DEFAULT_PADDING_S,
-        help=f"Szó időbélyegek bővítése szegmentáláskor (mp, alapértelmezett: {DEFAULT_PADDING_S}).",
+        help=f"Padding to add around word timestamps during segmentation (default: {DEFAULT_PADDING_S}s).",
     )
     parser.add_argument(
         "--max-segment-duration",
         type=float,
         default=DEFAULT_MAX_SEGMENT_S,
-        help=f"Mondatszegmensek maximális hossza (mp, alapértelmezett: {DEFAULT_MAX_SEGMENT_S}).",
+        help=f"Maximum duration of a single text segment (default: {DEFAULT_MAX_SEGMENT_S}s).",
     )
     parser.add_argument(
         "--enforce-single-speaker",
-        dest="enforce_single_speaker",
         action="store_true",
         default=False,
-        help="Speaker diarizáció alapján szegmentálás (alapértelmezett: ki)",
-    )
-    parser.add_argument(
-        "--no-enforce-single-speaker",
-        dest="enforce_single_speaker",
-        action="store_false",
-        help="Speaker diarizáció figyelmen kívül hagyása szegmentáláskor",
-    )
-    parser.add_argument(
-        "--backup",
-        dest="backup",
-        action="store_true",
-        default=True,
-        help="JSON fájlok biztonsági mentése .json.bak kiterjesztéssel (alapértelmezett: be)",
+        help="Force segments to split on speaker change (requires diarization data).",
     )
     parser.add_argument(
         "--no-backup",
         dest="backup",
         action="store_false",
-        help="JSON fájlok biztonsági mentésének kikapcsolása",
+        help="Disable automatic backup of original JSON files.",
     )
     parser.add_argument(
-        "--skip-energy-refine",
-        dest="skip_energy_refine",
+        "--use-mfa-refine",
         action="store_true",
         default=False,
-        help="Szó időbélyegek energiabecslésen alapuló korrekciójának kihagyása.",
+        help="Enable word timestamp refinement using Montreal Forced Aligner (MFA). "
+             "Requires MFA to be installed and English models downloaded.",
     )
     parser.add_argument(
         "--word-by-word-segments",
         action="store_true",
         default=False,
-        help="Minden szót külön szegmensbe helyez, az intelligens újraegyesítés kihagyásával.",
+        help="Place each word into its own separate segment, skipping smart re-joining.",
     )
 
     add_debug_argument(parser)
     args = parser.parse_args()
+    parser.set_defaults(backup=True)
 
     log_level = configure_debug_mode(args.debug)
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
@@ -864,17 +809,16 @@ def main() -> None:
     config, project_root = load_config()
     input_dir = resolve_project_input(args.project_name, config, project_root)
     
-    print("Projekt beállítások betöltve:")
-    print(f"  - Projekt név:    {args.project_name}")
-    print(f"  - Bemeneti mappa: {input_dir}")
-    print(f"  - Max szünet:     {args.max_pause} s")
-    print(f"  - Időbélyeg padding: {args.timestamp_padding} s")
-    print(f"  - Max szegmens hossz: {args.max_segment_duration} s")
-    print(f"  - Speaker szegmentálás: {'BE' if args.enforce_single_speaker else 'KI'}")
-    print(f"  - Biztonsági mentés: {'BE' if args.backup else 'KI'}")
-    energy_enabled = not args.skip_energy_refine
-    print(f"  - Energia alapú korrekció: {'BE' if energy_enabled else 'KI'}")
-    print(f"  - Egyszavas szegmensek: {'BE' if args.word_by_word_segments else 'KI'}")
+    print("Project settings loaded:")
+    print(f"  - Project Name:    {args.project_name}")
+    print(f"  - Input Directory: {input_dir}")
+    print(f"  - Max Pause:       {args.max_pause}s")
+    print(f"  - Padding:         {args.timestamp_padding}s")
+    print(f"  - Max Segment Len: {args.max_segment_duration}s")
+    print(f"  - Speaker Split:   {'ON' if args.enforce_single_speaker else 'OFF'}")
+    print(f"  - Backup:          {'ON' if args.backup else 'OFF'}")
+    print(f"  - MFA Refinement:  {'ON' if args.use_mfa_refine else 'OFF'}")
+    print(f"  - Word-by-word:    {'ON' if args.word_by_word_segments else 'OFF'}")
 
     process_directory(
         input_dir=input_dir,
@@ -883,7 +827,7 @@ def main() -> None:
         max_segment_s=args.max_segment_duration,
         enforce_single_speaker=args.enforce_single_speaker,
         backup=args.backup,
-        energy_refine=energy_enabled,
+        mfa_refine=args.use_mfa_refine,
         word_by_word=args.word_by_word_segments,
     )
 

@@ -18,6 +18,16 @@ sudo apt update
 sudo apt install ffmpeg
 sudo apt install gcc
 sudo apt install mkvtoolnix mkvtoolnix-gui
+sudo apt install rubberband-cli
+pip install pyrubberband
+```
+
+MFA alignerhez
+```bash
+conda install -c conda-forge montreal-forced-aligner
+mfa model download acoustic english_mfa
+mfa model download dictionary english_mfa
+pip install textgrid
 ```
 
 trash:

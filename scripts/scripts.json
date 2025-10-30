@@ -290,6 +290,88 @@
   },
   {
     "enviroment": "sync",
+    "script": "ASR/resegment-mfa/resegment-mfa.py",
+    "description": "Montreal Forced Aligner segítségével finomhangolt JSON szegmentálás – szó időbélyegek pontosítása és rugalmas újraformázás angol nyelvű projektekhez.",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "max_pause",
+        "flags": [
+          "--max-pause"
+        ],
+        "type": "option",
+        "default": 0.8
+      },
+      {
+        "name": "timestamp_padding",
+        "flags": [
+          "--timestamp-padding"
+        ],
+        "type": "option",
+        "default": 0.1
+      },
+      {
+        "name": "max_segment_duration",
+        "flags": [
+          "--max-segment-duration"
+        ],
+        "type": "option",
+        "default": 11.5
+      },
+      {
+        "name": "enforce_single_speaker",
+        "flags": [
+          "--enforce-single-speaker"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "no_backup",
+        "flags": [
+          "--no-backup"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "use_mfa_refine",
+        "flags": [
+          "--use-mfa-refine"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "word_by_word_segments",
+        "flags": [
+          "--word-by-word-segments"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
     "script": "ASR/resegment/resegment.py",
     "description": "JSON szegmensek újraformázása - ASR script által létrehozott JSON fájlok biztonsági mentése és újraformázása különböző paraméterekkel.",
     "required": [
@@ -348,6 +430,14 @@
         "name": "skip_energy_refine",
         "flags": [
           "--skip-energy-refine"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "word_by_word_segments",
+        "flags": [
+          "--word-by-word-segments"
         ],
         "type": "flag",
         "default": false
@@ -495,6 +585,53 @@
         "name": "keep_channels",
         "flags": [
           "--keep_channels"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "script": "AUDIO-VIDEO/merge_chunks_with_bacground_v1.1/merge_chunks_with_background_easy.py",
+    "description": "A korábban generált szinkron darabokat összemuxolja a háttér audióval. Képes automatikusan felgyorsítani az egymásra lógó hangrészeket.",
+    "required": [
+      {
+        "name": "project_name",
+        "type": "positional",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "narrator",
+        "flags": [
+          "-narrator",
+          "--narrator"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "background_volume",
+        "flags": [
+          "--background-volume"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "time_stretching",
+        "flags": [
+          "--time-stretching"
         ],
         "type": "flag",
         "default": false

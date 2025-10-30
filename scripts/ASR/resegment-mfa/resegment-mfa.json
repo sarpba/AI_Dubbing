@@ -1,7 +1,7 @@
 {
   "enviroment": "sync",
-  "script": "ASR/resegment/resegment.py",
-  "description": "JSON szegmensek újraformázása - ASR script által létrehozott JSON fájlok biztonsági mentése és újraformázása különböző paraméterekkel.",
+  "script": "ASR/resegment-mfa/resegment-mfa.py",
+  "description": "Montreal Forced Aligner segítségével finomhangolt JSON szegmentálás – szó időbélyegek pontosítása és rugalmas újraformázás angol nyelvű projektekhez.",
   "required": [
     {
       "name": "project_name",
@@ -47,17 +47,17 @@
       "default": false
     },
     {
-      "name": "backup",
+      "name": "no_backup",
       "flags": [
-        "--backup"
+        "--no-backup"
       ],
       "type": "flag",
-      "default": true
+      "default": false
     },
     {
-      "name": "skip_energy_refine",
+      "name": "use_mfa_refine",
       "flags": [
-        "--skip-energy-refine"
+        "--use-mfa-refine"
       ],
       "type": "flag",
       "default": false
