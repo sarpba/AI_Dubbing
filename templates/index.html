@@ -216,7 +216,7 @@
                 return;
             }
 
-            fetch(`/api/delete-project/${projectName}`, { method: 'DELETE' })
+            fetch(`/api/delete-project/${encodeURIComponent(projectName)}`, { method: 'DELETE' })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {

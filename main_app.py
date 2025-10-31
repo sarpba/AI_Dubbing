@@ -75,6 +75,7 @@ def build_project_entries(projects: List[str], group_threshold: int = 3) -> List
                     'name': name
                 })
     return entries
+
 AUDIO_MIME_MAP = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
@@ -3363,6 +3364,36 @@ def get_workflow_options_api(project_name):
         if template_data and isinstance(template_data.get('steps'), list):
             defaults_workflow = copy.deepcopy(template_data['steps'])
             selected_template = template_data.get('id') or template_id
+
+        state_path = get_project_workflow_state_path(sanitized_project, config_snapshot=current_config)
+        initialize_state = state_path is None or not state_path.is_file()
+
+        if initialize_state:
+            try:
+                saved_state = save_project_workflow_state(
+                    sanitized_project,
+                    defaults_workflow,
+                    selected_template,
+                    config_snapshot=current_config,
+                    saved_at=datetime.utcnow().isoformat()
+                )
+                if saved_state:
+                    defaults_workflow = copy.deepcopy(saved_state.get('steps') or [])
+                    if saved_state.get('template_id'):
+                        selected_template = saved_state['template_id']
+            except WorkflowValidationError as exc:
+                logging.warning(
+                    "Nem sikerült alap workflow állapotot menteni (%s): %s",
+                    sanitized_project,
+                    exc
+                )
+            except Exception as exc:  # pragma: no cover - váratlan hibák naplózása
+                logging.error(
+                    "Váratlan hiba történt az alap workflow állapot mentésekor (%s): %s",
+                    sanitized_project,
+                    exc,
+                    exc_info=True
+                )
 
     defaults = {
         'workflow': mask_workflow_secret_params(defaults_workflow),
