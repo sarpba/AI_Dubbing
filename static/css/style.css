@@ -91,6 +91,24 @@ body {
   box-shadow: 0 0 0 0.25rem rgba(13, 202, 240, 0.25);
 }
 
+.form-select {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+  color: var(--text-color);
+}
+
+.form-select:focus {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 0.25rem rgba(13, 202, 240, 0.25);
+}
+
+[data-bs-theme="dark"] .form-select option {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+}
+
 .focus-ring {
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
   border-color: var(--primary-color) !important;

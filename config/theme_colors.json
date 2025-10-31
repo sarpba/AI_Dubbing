@@ -11,7 +11,7 @@
     "timeline-segment-bg": "rgba(230, 230, 250, 0.8)"
   },
   "dark": {
-    "primary-color": "#0d6efd",
+    "primary-color": "#0dcaf0",
     "secondary-color": "#6c757d",
     "success-color": "#198754",
     "background-color": "#212529",
