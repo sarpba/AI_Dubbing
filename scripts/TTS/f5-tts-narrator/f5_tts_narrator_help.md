@@ -9,9 +9,9 @@ A szkript egy narrátor referenciára építve generálja újra a projekt össze
 - `project_name` (pozícionális, alapértelmezés: nincs): A `workdir` alatt található projekt neve, amelynek szegmenseit generálni kell.
 - `norm` (`--norm`, option, alapértelmezés: nincs): A normalizálási profil azonosítója (pl. `hun`, `eng`), amelyet a szöveg előfeldolgozásához használ.
 - `narrator` (`--narrator`, option, alapértelmezés: nincs): A narrátor referencia könyvtár elérési útja; azonos nevű hang- és szövegfájlokat vár (`.wav/.mp3` + `.txt`).
-- `model_dir` (`--model_dir`, option, alapértelmezés: nincs): Az F5-TTS modell könyvtárának útvonala. Ha nincs megadva, a szkript interaktívan kérdez rá.
 
 ## Opcionális beállítások
+- `model_dir` (`--model_dir`, option, alapértelmezés: nincs): Az F5-TTS modell könyvtárának útvonala. Ha nincs megadva, a szkript interaktívan kérdez rá.
 - `speed` (`--speed`, option, alapértelmezés: `1.0`): A generált hang időskálája (0.3–2.0 tartomány). Alacsonyabb érték lassabb, magasabb gyorsabb beszédet eredményez.
 - `nfe_step` (`--nfe_step`, option, alapértelmezés: `32`): Az ODE integrátor lépésszáma. Nagyobb érték jobb minőséget adhat, de lassabb.
 - `remove_silence` (`--remove_silence`, flag, alapértelmezés: `false`): Aktiválva a generált wav fájlokról automatikusan levágja a végeken lévő csendet.

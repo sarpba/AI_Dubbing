@@ -13,14 +13,5 @@
       "default": null
     }
   ],
-  "optional": [
-    {
-      "name": "debug",
-      "flags": [
-        "--debug"
-      ],
-      "type": "flag",
-      "default": false
-    }
-  ]
+  "optional": []
 }

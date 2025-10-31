@@ -8,9 +8,9 @@ A szkript a finomhangolt F5-TTS pipeline-t használja, hogy a projekt `translate
 ## Kötelező beállítások
 - `project_name` (pozícionális, alapértelmezés: nincs): A `workdir` alatti projekt könyvtár neve, amelyet fel kell dolgozni.
 - `norm` (`--norm`, option, alapértelmezés: nincs): Normalizálási profil azonosító (pl. `hun`, `eng`) a szöveg előfeldolgozásához.
-- `model_dir` (`--model_dir`, option, alapértelmezés: nincs): A TTS modell könyvtárának útvonala. Üresen hagyva a szkript megpróbál automatikusan modellt keresni.
 
 ## Opcionális beállítások
+- `model_dir` (`--model_dir`, option, alapértelmezés: nincs): A TTS modell könyvtárának útvonala. Üresen hagyva a szkript megpróbál automatikusan modellt keresni.
 - `speed` (`--speed`, option, alapértelmezés: `1.0`): A generált hang sebessége (0.3–2.0 tartomány).
 - `nfe_step` (`--nfe_step`, option, alapértelmezés: `32`): ODE lépésszám; nagyobb érték jobb minőségért, kisebb gyorsabb futásért.
 - `remove_silence` (`--remove_silence`, flag, alapértelmezés: `false`): A generált wav-ok végeiről levágja a csendet.

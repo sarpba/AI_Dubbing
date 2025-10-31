@@ -48,6 +48,14 @@
       "default": null
     },
     {
+      "name": "no_diarize",
+      "flags": [
+        "--no-diarize"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
       "name": "debug",
       "flags": [
         "--debug"

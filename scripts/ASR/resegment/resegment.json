@@ -55,6 +55,14 @@
       "default": true
     },
     {
+      "name": "no_backup",
+      "flags": [
+        "--no-backup"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
       "name": "skip_energy_refine",
       "flags": [
         "--skip-energy-refine"

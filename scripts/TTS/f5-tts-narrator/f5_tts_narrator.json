@@ -23,7 +23,9 @@
       ],
       "type": "option",
       "default": null
-    },
+    }
+  ],
+  "optional": [
     {
       "name": "model_dir",
       "flags": [
@@ -31,9 +33,7 @@
       ],
       "type": "option",
       "default": null
-    }
-  ],
-  "optional": [
+    },
     {
       "name": "speed",
       "flags": [

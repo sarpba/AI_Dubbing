@@ -8,5 +8,5 @@ A szkript bejárja a projekt `translated` könyvtárát, begyűjti az összes `t
 ## Kötelező beállítás
 - `project_dir` (`-p`, `--project`, option, alapértelmezés: nincs): A projekt neve vagy útvonala. Ha relatív nevet adsz meg, a szkript a `config.json` alapján keresi a `workdir` alatt.
 
-## Opcionális beállítás
-- `debug` (`--debug`, flag, alapértelmezés: `false`): A JSON metaadat tartalmazza, bár a jelenlegi Python verzió nem veszi figyelembe. Ha a futtatókörnyezet automatikusan hozzáadja a flaget, a szkript csendben ignorálja.
+## Opcionális beállítások
+Jelenleg nincs további parancssori kapcsoló; a szkript minden egyéb viselkedést a konfigurációs fájl alapján határoz meg.

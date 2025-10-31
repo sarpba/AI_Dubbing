@@ -147,6 +147,14 @@
         "default": null
       },
       {
+        "name": "no_diarize",
+        "flags": [
+          "--no-diarize"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
         "name": "debug",
         "flags": [
           "--debug"
@@ -427,6 +435,14 @@
         "default": true
       },
       {
+        "name": "no_backup",
+        "flags": [
+          "--no-backup"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
         "name": "skip_energy_refine",
         "flags": [
           "--skip-energy-refine"
@@ -626,7 +642,7 @@
           "--background-volume"
         ],
         "type": "option",
-        "default": null
+        "default": 100
       },
       {
         "name": "time_stretching",
@@ -673,7 +689,7 @@
           "--background-volume"
         ],
         "type": "option",
-        "default": null
+        "default": 100
       },
       {
         "name": "debug",
@@ -712,7 +728,7 @@
           "--background-volume"
         ],
         "type": "option",
-        "default": null
+        "default": 100
       },
       {
         "name": "max_speedup",
@@ -1314,16 +1330,7 @@
         "default": null
       }
     ],
-    "optional": [
-      {
-        "name": "debug",
-        "flags": [
-          "--debug"
-        ],
-        "type": "flag",
-        "default": false
-      }
-    ]
+    "optional": []
   },
   {
     "enviroment": "sync",
@@ -1487,7 +1494,9 @@
         ],
         "type": "option",
         "default": null
-      },
+      }
+    ],
+    "optional": [
       {
         "name": "model_dir",
         "flags": [
@@ -1495,9 +1504,7 @@
         ],
         "type": "option",
         "default": null
-      }
-    ],
-    "optional": [
+      },
       {
         "name": "speed",
         "flags": [
@@ -1653,7 +1660,9 @@
         ],
         "type": "option",
         "default": null
-      },
+      }
+    ],
+    "optional": [
       {
         "name": "model_dir",
         "flags": [
@@ -1661,9 +1670,7 @@
         ],
         "type": "option",
         "default": null
-      }
-    ],
-    "optional": [
+      },
       {
         "name": "speed",
         "flags": [

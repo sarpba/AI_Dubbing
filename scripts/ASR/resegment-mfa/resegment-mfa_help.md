@@ -79,7 +79,7 @@ python scripts/ASR/resegment-mfa/resegment-mfa.py \
 {
   "segments": [...],
   "word_segments": [...],
-  "provider": "resegment-mfa",
+  "provider": "resegment_mfa",
   "resegment_parameters": {
     "max_pause_s": 0.8,
     "padding_s": 0.1,
@@ -87,7 +87,7 @@ python scripts/ASR/resegment-mfa/resegment-mfa.py \
     "enforce_single_speaker": false,
     "mfa_refine": true
   },
-  "mfa_alignment": {
+  "alignment_adjustment": {
     "status": "applied_mfa_alignment",
     "audio": "clip.wav"
   }
