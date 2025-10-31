@@ -97,17 +97,45 @@
                     <div class="card-body">
                         <div class="mb-4">
                             <h5>Meglévő projektek</h5>
-                            {% if projects %}
+                            {% if project_entries %}
                                 <div class="list-group mb-3">
-                                    {% for project in projects %}
-                                        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                                            <a href="{{ url_for('show_project', project_name=project) }}" class="text-decoration-none flex-grow-1">
-                                                {{ project }}
-                                            </a>
-                                            <button class="btn btn-sm btn-danger" onclick="deleteProject('{{ project }}')">
-                                                Törlés
-                                            </button>
-                                        </div>
+                                    {% for entry in project_entries %}
+                                        {% if entry.type == 'group' %}
+                                            <details class="list-group-item project-folder">
+                                                <summary class="project-folder-summary">
+                                                    <div class="project-folder-header">
+                                                        <span class="project-folder-icon" aria-hidden="true">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                                                                <path d="M9.828 3a.5.5 0 0 1 .39.188l1.5 1.8A.5.5 0 0 1 11.5 5.5H14a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2.5A1 1 0 0 1 2 1.5h4.586a.5.5 0 0 1 .353.146l1.146 1.146H9.828z"/>
+                                                            </svg>
+                                                        </span>
+                                                        <span class="project-folder-title">{{ entry.key }}</span>
+                                                    </div>
+                                                    <span class="badge bg-secondary">{{ entry.count }}</span>
+                                                </summary>
+                                                <div class="project-folder-items">
+                                                    {% for project in entry.projects %}
+                                                        <div class="project-folder-item">
+                                                            <a href="{{ url_for('show_project', project_name=project) }}" class="text-decoration-none flex-grow-1">
+                                                                {{ project }}
+                                                            </a>
+                                                            <button class="btn btn-sm btn-danger" onclick="deleteProject({{ project|tojson }})">
+                                                                Törlés
+                                                            </button>
+                                                        </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </details>
+                                        {% else %}
+                                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                                <a href="{{ url_for('show_project', project_name=entry.name) }}" class="text-decoration-none flex-grow-1">
+                                                    {{ entry.name }}
+                                                </a>
+                                                <button class="btn btn-sm btn-danger" onclick="deleteProject({{ entry.name|tojson }})">
+                                                    Törlés
+                                                </button>
+                                            </div>
+                                        {% endif %}
                                     {% endfor %}
                                 </div>
                             {% else %}

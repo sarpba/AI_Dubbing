@@ -53,6 +53,94 @@ body {
   color: var(--text-color);
 }
 
+.project-folder {
+  border-radius: 0.75rem;
+  transition: background-color 0.2s ease;
+}
+
+.project-folder[open] {
+  background-color: rgba(13, 110, 253, 0.08);
+}
+
+[data-bs-theme="dark"] .project-folder[open] {
+  background-color: rgba(13, 202, 240, 0.12);
+}
+
+.project-folder-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.project-folder-summary:focus {
+  outline: none;
+}
+
+.project-folder summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.project-folder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.4rem;
+  background-color: rgba(13, 110, 253, 0.12);
+  color: var(--primary-color);
+}
+
+[data-bs-theme="dark"] .project-folder-icon {
+  background-color: rgba(13, 202, 240, 0.18);
+  color: var(--primary-color);
+}
+
+.project-folder-title {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.project-folder-items {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.project-folder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 0.5rem;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+}
+
+.project-folder-item a {
+  color: var(--text-color);
+  text-decoration: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.project-folder-item .btn {
+  flex-shrink: 0;
+}
+
 .btn {
   border-radius: 0.5rem;
   transition: all 0.2s ease;

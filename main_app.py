@@ -19,6 +19,7 @@ from werkzeug.utils import secure_filename
 from pydub import AudioSegment
 import wave
 import math
+from collections import OrderedDict
 
 app = Flask(__name__)
 
@@ -38,6 +39,42 @@ AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac'}
 VIDEO_EXTENSIONS = {
     '.mp4', '.mkv', '.avi', '.mov', '.webm', '.wmv', '.flv', '.mts', '.m2ts', '.mpg', '.mpeg'
 }
+
+
+def derive_project_prefix(name: str) -> str:
+    tokens = [part for part in re.split(r'[._-]+', name) if part]
+    if not tokens:
+        return name or 'Egyéb'
+    prefix = tokens[0]
+    if len(tokens) >= 2 and len(prefix) <= 3:
+        prefix = f"{prefix}_{tokens[1]}"
+    return prefix
+
+
+def build_project_entries(projects: List[str], group_threshold: int = 3) -> List[Dict[str, Any]]:
+    grouped: "OrderedDict[str, List[str]]" = OrderedDict()
+    for project in projects:
+        key = derive_project_prefix(project)
+        if key not in grouped:
+            grouped[key] = []
+        grouped[key].append(project)
+
+    entries: List[Dict[str, Any]] = []
+    for key, names in grouped.items():
+        if len(names) >= group_threshold:
+            entries.append({
+                'type': 'group',
+                'key': key,
+                'projects': names,
+                'count': len(names)
+            })
+        else:
+            for name in names:
+                entries.append({
+                    'type': 'project',
+                    'name': name
+                })
+    return entries
 AUDIO_MIME_MAP = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
@@ -1756,9 +1793,12 @@ def index():
     # Meglévő projektek listázása
     projects = []
     if os.path.exists('workdir'):
-        projects = [d for d in os.listdir('workdir') 
-                   if os.path.isdir(os.path.join('workdir', d))]
-    return render_template('index.html', projects=projects)
+        projects = sorted(
+            (d for d in os.listdir('workdir') if os.path.isdir(os.path.join('workdir', d))),
+            key=str.lower
+        )
+    project_entries = build_project_entries(projects)
+    return render_template('index.html', projects=projects, project_entries=project_entries)
 
 
 @app.route('/template-editor')
