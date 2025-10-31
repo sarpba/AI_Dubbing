@@ -1581,6 +1581,29 @@
             return summary.join(' • ');
         }
 
+        function formatScriptDirectoryName(script, step) {
+            const rawPath = (script && script.script) || (step && step.script) || '';
+            if (typeof rawPath === 'string' && rawPath) {
+                const normalized = rawPath.replace(/\\/g, '/');
+                const segments = normalized.split('/').filter(Boolean);
+                if (segments.length >= 2) {
+                    const parentDir = segments[segments.length - 2];
+                    if (parentDir) {
+                        return parentDir.replace(/_/g, ' ');
+                    }
+                } else if (segments.length === 1) {
+                    return segments[0].replace(/_/g, ' ');
+                }
+            }
+            if (script && script.display_name) {
+                return script.display_name;
+            }
+            if (step && typeof step.script === 'string') {
+                return step.script.replace(/_/g, ' ');
+            }
+            return 'Ismeretlen script';
+        }
+
         function updateMissingBadge() {
             const badge = document.getElementById('workflowMissingBadge');
             if (!badge) return;
@@ -2389,7 +2412,7 @@
                     titleRow.className = 'd-flex align-items-center gap-2 flex-wrap';
                     const title = document.createElement('div');
                     title.className = 'fw-semibold mb-0';
-                    title.textContent = (script && script.display_name) || step.script;
+                    title.textContent = formatScriptDirectoryName(script, step);
                     titleRow.append(title);
                     if (script && script.api) {
                         const apiBadge = document.createElement('span');
@@ -2404,13 +2427,6 @@
                         desc.className = 'small text-muted';
                         desc.textContent = script.description;
                         titleWrap.append(desc);
-                    }
-
-                    if (script && script.script) {
-                        const scriptPath = document.createElement('div');
-                        scriptPath.className = 'small text-muted';
-                        scriptPath.textContent = script.script;
-                        titleWrap.append(scriptPath);
                     }
 
                     infoCell.append(titleWrap);
