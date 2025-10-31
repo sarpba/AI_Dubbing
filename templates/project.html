@@ -515,6 +515,10 @@
             };
         }
 
+        function hasEnabledScriptStep(steps) {
+            return (steps || []).some(step => step && step.type !== 'widget' && step.enabled !== false);
+        }
+
         function resetWorkflowAutoSave() {
             if (workflowAutoSaveTimer) {
                 clearTimeout(workflowAutoSaveTimer);
@@ -554,6 +558,12 @@
             const snapshot = buildWorkflowSnapshot();
             const snapshotKey = JSON.stringify(snapshot);
             if (snapshotKey === workflowLastSavedSnapshot) {
+                workflowAutoSavePending = false;
+                return;
+            }
+
+            if (!hasEnabledScriptStep(snapshot.steps)) {
+                workflowLastSavedSnapshot = snapshotKey;
                 workflowAutoSavePending = false;
                 return;
             }
@@ -1818,18 +1828,14 @@
             if (templateSelect) {
                 templateSelect.addEventListener('change', event => {
                     const value = event.target.value || '';
-                    currentTemplateId = value || null;
-                    markWorkflowDirty();
-                });
-            }
-
-            const loadTemplateBtn = document.getElementById('loadWorkflowTemplateBtn');
-            if (loadTemplateBtn) {
-                loadTemplateBtn.addEventListener('click', () => {
-                    if (!currentTemplateId) {
-                        alert('Előbb válassz egy workflow sablont a listából.');
+                    if (!value) {
+                        currentTemplateId = null;
                         return;
                     }
+                    if (value === currentTemplateId) {
+                        return;
+                    }
+                    currentTemplateId = value;
                     loadWorkflowTemplateById(currentTemplateId);
                 });
             }
@@ -4625,7 +4631,6 @@
                     <div class="d-flex flex-wrap align-items-center gap-2">
                         <label for="workflowTemplateSelect" class="form-label mb-0">Mentett workflow</label>
                         <select class="form-select form-select-sm" id="workflowTemplateSelect" style="min-width: 220px;"></select>
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="loadWorkflowTemplateBtn">Betöltés</button>
                         <button type="button" class="btn btn-outline-success btn-sm" id="saveWorkflowBtn">Mentés sablonként</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="resetWorkflowBtn">Alapértelmezés visszaállítása</button>
                     </div>
@@ -4751,8 +4756,66 @@
             </div>
         </div>
 
-        <div class="d-flex justify-content-end my-3">
+        <div class="d-flex justify-content-end gap-2 my-3">
+            <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#projectHelpModal">
+                Súgó
+            </button>
             <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+        </div>
+    </div>
+
+    <div class="modal fade" id="projectHelpModal" tabindex="-1" aria-labelledby="projectHelpModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="projectHelpModalLabel">AI Dubbing projektoldal súgó</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        Ez az oldal a projekt teljes kezelését biztosítja: itt állíthatod össze és futtathatod a workflow-kat, követheted az állapotukat, és hozzáférsz a projektfájlokhoz.
+                    </p>
+                    <h6 class="fw-bold">Általános munkafolyamat</h6>
+                    <ul class="mb-4">
+                        <li>Válaszd ki a futtatni kívánt lépéseket a moduláris workflow táblázatban.</li>
+                        <li>Töltsd ki a szükséges paramétereket a lépsekhez kapcsolódó űrlapokon.</li>
+                        <li>Használd a futtatási vezérlőket a folyamat indításához, megállításához vagy folytatásához.</li>
+                        <li>Ellenőrizd a naplókat és az állapotjelzőket, hogy nyomon kövesd a végrehajtást.</li>
+                    </ul>
+                    <h6 class="fw-bold">Widgetek részletes leírása</h6>
+                    <ul class="mb-4">
+                        <li>
+                            <strong>Review + Continue</strong>: Megállítja a futást egy ellenőrzési pontnál, ahol áttekintheted a korábbi lépéseket, módosíthatod a paramétereket, majd a megfelelő gombbal folytathatod vagy újrafuttathatod a workflow-t. A widget folyamata addig szünetel, amíg döntést nem hozol.
+                        </li>
+                        <li>
+                            <strong>Ciklus</strong>: Ismétlődő futtatást tesz lehetővé. A beállított ismétlésszám szerint egymás után újra lefuttatja az előtte szereplő, engedélyezett szkripteket. A "Visszalépés lépéseinek száma" értékkel adhatod meg, hány korábbi futtatható lépést építsen vissza a ciklusba. Ideális olyan feladatoknál, ahol többször kell azonos előkészítést vagy feldolgozást végezni.
+                        </li>
+                    </ul>
+                    <h6 class="fw-bold">Workflow szekció</h6>
+                    <ul class="mb-4">
+                        <li>A badge jelzi, fut-e aktív feladat; a segítő szöveg összegzi az aktuális teendőt.</li>
+                        <li>A sablonválasztóval betöltheted mentett workflow-kat, a gombokkal pedig elmentheted vagy visszaállíthatod az alapértelmezett lépéslistát.</li>
+                        <li>A táblázatban kapcsolhatod az egyes lépéseket, megadhatod az execution környezetet és dönthetsz arról, mi történjen hiba esetén.</li>
+                        <li>A táblázat melletti vezérlők indítják, leállítják vagy folytatják a futtatást, továbbá itt érhetők el a napló- és státusznézetek.</li>
+                        <li>A workflow paraméterpanelen megjelenő figyelmeztetések segítenek a kötelező mezők kitöltésében.</li>
+                    </ul>
+                    <h6 class="fw-bold">Projektfájlok</h6>
+                    <ul class="mb-4">
+                        <li>A fájlkezelő a projekt könyvtárának teljes struktúráját mutatja, a kijelzett jelölések pedig a fordított szegmenseket emelik ki.</li>
+                        <li>Az eszköztárból tölthetsz fel új fájlokat a gyökérbe, illetve frissítheted a listát a háttérben végzett módosítások után.</li>
+                        <li>Az egyes elemeknél gyorsműveletek érhetők el: megnyitás új lapon, törlés vagy – ahol elérhető – áthelyezés a fordított tartományba.</li>
+                    </ul>
+                    <h6 class="fw-bold">Előnézeti és segédablakok</h6>
+                    <ul class="mb-0">
+                        <li>Az audió, videó és JSON előnézetek külön modális ablakban jelennek meg, ahol a trim funkciókkal testre szabhatod a fájlokat vagy áttekintheted a tartalmat.</li>
+                        <li>A "Szétválasztás" és "Beolvasás" párbeszédablakok a feldolgozási paraméterek megadását segítik, és a projekt nevével együtt készítik elő a futtatható feladatot.</li>
+                        <li>A workflow mentésekor, API kulcsok megadásakor vagy paraméterek összeállításakor ugyanilyen modális felület segít a strukturált adatbevitelben.</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
         </div>
     </div>
 
