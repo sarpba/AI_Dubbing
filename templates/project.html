@@ -4604,7 +4604,10 @@
     </div>
 
     <div class="container mt-4">
-        <h1 class="mb-4">Projekt: {{ project.name }}</h1>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+            <h1 class="mb-0">Projekt: {{ project.name }}</h1>
+            <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+        </div>
 
         <div class="card mb-4">
             <div class="card-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
@@ -4748,7 +4751,9 @@
             </div>
         </div>
 
-        <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+        <div class="d-flex justify-content-end my-3">
+            <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+        </div>
     </div>
 
     <!-- File Preview Modals -->
