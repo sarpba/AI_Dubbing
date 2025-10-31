@@ -4347,179 +4347,6 @@
         }
 
 
-        function showTranscribeModal(projectName, fileName) {
-            document.getElementById('transcribeProjectName').value = projectName;
-            document.getElementById('transcribeFileName').value = fileName;
-            const modal = new bootstrap.Modal(document.getElementById('transcribeModal'));
-            modal.show();
-        }
-
-        function runTranscription() {
-            const modal = bootstrap.Modal.getInstance(document.getElementById('transcribeModal'));
-            modal.hide();
-
-            const payload = {
-                auto_chunk: document.getElementById('autoChunk').checked,
-                chunk_seconds: document.getElementById('chunkSeconds').value,
-                max_pause: document.getElementById('maxPause').value,
-                timestamp_padding: document.getElementById('timestampPadding').value,
-                max_segment_duration: document.getElementById('maxSegmentDuration').value,
-                diarization: document.getElementById('enableDiarization').checked,
-                language: document.getElementById('transcribeLanguage').value,
-                temperature: document.getElementById('temperature').value,
-                beam_size: document.getElementById('beamSize').value,
-                device: document.getElementById('transcribeDevice').value
-            };
-
-            const projectName = document.getElementById('transcribeProjectName').value;
-            const buttonId = 'transcribeBtn';
-            setButtonLoading(buttonId, true);
-
-            fetch(`/api/transcribe/${projectName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Sikeres beolvasás!');
-                    location.reload();
-                } else {
-                    alert('Hiba: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Hiba:', error);
-                alert('Hiba történt a beolvasás során');
-            })
-            .finally(() => {
-                setButtonLoading(buttonId, false);
-            });
-        }
-
-        function setButtonLoading(buttonId, isLoading) {
-            const btn = document.getElementById(buttonId);
-            if (btn) {
-                if (isLoading) {
-                    btn.classList.add('btn-loading');
-                    btn.disabled = true;
-                } else {
-                    btn.classList.remove('btn-loading');
-                    btn.disabled = false;
-                    btn.classList.remove('btn-processing');
-                }
-            }
-        }
-
-        function runAudioExtraction(projectName, button) {
-            if (!button.classList.contains('btn-processing')) {
-                button.classList.add('btn-processing');
-            }
-
-            const keepChannelsToggle = document.getElementById('extractKeepChannels');
-            const keepChannels = keepChannelsToggle ? keepChannelsToggle.checked : false;
-
-            fetch(`/api/extract-audio/${projectName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    keep_channels: keepChannels
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                button.classList.remove('btn-processing');
-                if (data.success) {
-                    alert('Sikeres audio kivonás!');
-                    location.reload();
-                } else {
-                    alert('Hiba: ' + data.error);
-                }
-            })
-            .catch(error => {
-                button.classList.remove('btn-processing');
-                console.error('Hiba:', error);
-                alert('Hiba történt az audio kivonás során');
-            });
-        }
-
-        function handleTranscribeClick(projectName, button) {
-            if (!button.classList.contains('btn-processing')) {
-                button.classList.add('btn-processing');
-            }
-
-            const audioElements = document.querySelectorAll('#speechAudioList audio source');
-            if (audioElements.length > 0) {
-                const fileName = audioElements[0].src.split('/').pop();
-                showTranscribeModal(projectName, fileName);
-            } else {
-                button.classList.remove('btn-processing');
-                alert('Nincs audió fájl a listában!');
-            }
-        }
-
-        function showSeparateModal(projectName, fileName, button) {
-            document.getElementById('separateProjectName').value = projectName;
-            const modalElement = document.getElementById('separateModal');
-            const modal = new bootstrap.Modal(modalElement);
-
-            modal.show();
-
-            modalElement.addEventListener('hidden.bs.modal', function () {
-                if (button) {
-                    button.classList.remove('btn-processing');
-                }
-            }, { once: true });
-        }
-
-        function runSeparation() {
-            const projectName = document.getElementById('separateProjectName').value;
-            const device = document.getElementById('separateDevice').value;
-            const keepFullAudio = document.getElementById('keepFullAudio').checked;
-            const nonSpeechSilence = document.getElementById('nonSpeechSilence').checked;
-            const chunkSize = document.getElementById('chunkSize').value;
-            const model = document.getElementById('separateModel').value;
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('separateModal'));
-            modal.hide();
-
-            fetch(`/api/separate-audio/${projectName}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    device: device,
-                    keep_full_audio: keepFullAudio,
-                    non_speech_silence: nonSpeechSilence,
-                    chunk_size: chunkSize,
-                    model: model
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Sikeres szétválasztás!');
-                    location.reload();
-                } else {
-                    alert('Hiba: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Hiba:', error);
-                alert('Hiba történt a szétválasztás során');
-            });
-        }
-
-        function runAudioSeparation(projectName, fileName, button) {
-            showSeparateModal(projectName, fileName, button || document.getElementById('separateBtn'));
-        }
-
         document.addEventListener('DOMContentLoaded', () => {
             initPreviewModals();
             if (window.AudioTrimmer && typeof AudioTrimmer.init === 'function') {
@@ -4808,8 +4635,7 @@
                     <h6 class="fw-bold">Előnézeti és segédablakok</h6>
                     <ul class="mb-0">
                         <li>Az audió, videó és JSON előnézetek külön modális ablakban jelennek meg, ahol a trim funkciókkal testre szabhatod a fájlokat vagy áttekintheted a tartalmat.</li>
-                        <li>A "Szétválasztás" és "Beolvasás" párbeszédablakok a feldolgozási paraméterek megadását segítik, és a projekt nevével együtt készítik elő a futtatható feladatot.</li>
-                        <li>A workflow mentésekor, API kulcsok megadásakor vagy paraméterek összeállításakor ugyanilyen modális felület segít a strukturált adatbevitelben.</li>
+                        <li>A workflow mentésekor, API kulcsok megadásakor vagy paraméterek összeállításakor modális felület segít a strukturált adatbevitelben.</li>
                     </ul>
                 </div>
                 <div class="modal-footer">
@@ -4894,136 +4720,42 @@
         </div>
     </div>
 
-    <!-- Separate Audio Modal -->
-    <div class="modal fade" id="separateModal" tabindex="-1" aria-hidden="true">
+    <!-- Workflow Save Modal -->
+    <div class="modal fade" id="workflowSaveModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Szétválasztás paraméterei</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <h5 class="modal-title">Workflow sablon mentése</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="separateForm">
-                        <input type="hidden" id="separateProjectName">
-                        <div class="mb-3">
-                            <label for="separateDevice" class="form-label">Eszköz</label>
-                            <select class="form-select" id="separateDevice">
-                                <option value="cuda">CUDA (GPU)</option>
-                                <option value="cpu">CPU</option>
-                            </select>
-                        </div>
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="keepFullAudio">
-                            <label class="form-check-label" for="keepFullAudio">Teljes audio fájl megtartása</label>
-                        </div>
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="nonSpeechSilence">
-                            <label class="form-check-label" for="nonSpeechSilence">Csak csend a non_speech fájlban</label>
-                        </div>
-                        <div class="mb-3">
-                            <label for="chunkSize" class="form-label">Darabolás hossza (perc)</label>
-                            <input type="number" class="form-control" id="chunkSize" value="5" min="1">
-                        </div>
-                        <div class="mb-3">
-                            <label for="separateModel" class="form-label">Modell</label>
-                            <select class="form-select" id="separateModel">
-                                <option value="htdemucs_ft" selected>htdemucs_ft</option>
-                                <option value="htdemucs">htdemucs</option>
-                                <option value="hdemucs_mmi">hdemucs_mmi</option>
-                                <option value="mdx">mdx</option>
-                                <option value="mdx_extra">mdx_extra</option>
-                            </select>
-                        </div>
-                    </form>
+                    <div id="workflowSaveError" class="alert alert-danger small d-none"></div>
+                    <div class="mb-3">
+                        <label for="workflowSaveName" class="form-label">Sablon neve</label>
+                        <input type="text" class="form-control" id="workflowSaveName" placeholder="Pl. Alap beállítások">
+                    </div>
+                    <div class="mb-3">
+                        <label for="workflowSaveDescription" class="form-label">Leírás (opcionális)</label>
+                        <textarea class="form-control" id="workflowSaveDescription" rows="2" placeholder="Rövid megjegyzés a sablonhoz"></textarea>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input type="checkbox" class="form-check-input" id="workflowSaveOverwrite">
+                        <label class="form-check-label" for="workflowSaveOverwrite">Aktuális sablon felülírása</label>
+                    </div>
+                    <div class="small text-muted d-none" id="workflowSaveOverwriteInfo"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
-                    <button type="button" class="btn btn-primary" onclick="runSeparation()">Futtatás</button>
+                    <button type="button" class="btn btn-primary" id="workflowSaveConfirmBtn">Mentés</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Transcribe Modal -->
-    <div class="modal fade" id="transcribeModal" tabindex="-1" aria-hidden="true">
+    <!-- Workflow API Keys Modal -->
+    <div class="modal fade" id="workflowKeysModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Beolvasás paraméterei</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="transcribeForm">
-                        <input type="hidden" id="transcribeProjectName">
-                        <input type="hidden" id="transcribeFileName">
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" class="form-check-input" id="autoChunk" checked>
-                            <label class="form-check-label" for="autoChunk">Automatikus chunk-méret kalibráció</label>
-                        </div>
-                        <div class="mb-3">
-                            <label for="chunkSeconds" class="form-label">Fix chunk-méret (másodperc)</label>
-                            <input type="number" class="form-control" id="chunkSeconds" value="30" min="1">
-                            <small class="text-muted">Csak akkor kerül felhasználásra, ha az automatikus kalibráció ki van kapcsolva.</small>
-                        </div>
-                        <div class="mb-3">
-                            <label for="maxPause" class="form-label">Maximális szünet a mondatok között (másodperc)</label>
-                            <input type="number" class="form-control" id="maxPause" value="0.6" min="0" step="0.1">
-                        </div>
-                        <div class="mb-3">
-                            <label for="timestampPadding" class="form-label">Időbélyeg kiterjesztés (másodperc)</label>
-                            <input type="number" class="form-control" id="timestampPadding" value="0.2" min="0" step="0.1">
-                        </div>
-                        <div class="mb-3">
-                            <label for="maxSegmentDuration" class="form-label">Mondatszegmens maximális hossza (másodperc)</label>
-                            <input type="number" class="form-control" id="maxSegmentDuration" value="11.5" min="0" step="0.5">
-                            <small class="text-muted">Állítsd 0-ra, ha nem szeretnéd korlátozni a szegmens hosszát.</small>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
-                    <button type="button" class="btn btn-primary" onclick="runTranscription()">Futtatás</button>
-                </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Workflow Save Modal -->
-        <div class="modal fade" id="workflowSaveModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Workflow sablon mentése</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div id="workflowSaveError" class="alert alert-danger small d-none"></div>
-                        <div class="mb-3">
-                            <label for="workflowSaveName" class="form-label">Sablon neve</label>
-                            <input type="text" class="form-control" id="workflowSaveName" placeholder="Pl. Alap beállítások">
-                        </div>
-                        <div class="mb-3">
-                            <label for="workflowSaveDescription" class="form-label">Leírás (opcionális)</label>
-                            <textarea class="form-control" id="workflowSaveDescription" rows="2" placeholder="Rövid megjegyzés a sablonhoz"></textarea>
-                        </div>
-                        <div class="form-check mb-2">
-                            <input type="checkbox" class="form-check-input" id="workflowSaveOverwrite">
-                            <label class="form-check-label" for="workflowSaveOverwrite">Aktuális sablon felülírása</label>
-                        </div>
-                        <div class="small text-muted d-none" id="workflowSaveOverwriteInfo"></div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
-                        <button type="button" class="btn btn-primary" id="workflowSaveConfirmBtn">Mentés</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Workflow API Keys Modal -->
-        <div class="modal fade" id="workflowKeysModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">API kulcsok megadása</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
