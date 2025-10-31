@@ -1,45 +1,27 @@
 {
-  "name": "Latest Workflow",
+  "name": "Vibevocice Magyar szinkron készítés. Félautomata. SRT célnyelvi felirat szükséges.",
   "steps": [
     {
       "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
-      "script": "ASR/elevenlabs/elevenlabs.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "language": "eng"
-      }
-    },
-    {
-      "script": "ASR/resegment/resegment.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "backup": false,
-        "enforce_single_speaker": true,
-        "max_pause": "0.3"
-      }
-    },
-    {
       "script": "ASR/paraket-eng/parakeet-tdt-0.6b-v2.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
@@ -51,7 +33,7 @@
     },
     {
       "script": "NORMALIZER_HELPER/collect_normalized_translations.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
@@ -61,24 +43,14 @@
       "enabled": true
     },
     {
-      "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+      "script": "TTS/vibevoice/vibevoice-tts_v1.1.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "enable_pitch_check": true,
-        "model_dir": "/home/sarpba/VibeVoice/merged_large_3200_bf16",
         "norm": "hun",
+        "model_path": "/home/sarpba/AI_Dubbing/TTS/VibeVoice-large-hun",
+        "max_retries": "2",
         "save_failures": true
-      }
-    },
-    {
-      "script": "TTS/f5-tts/f5_tts_easy_EQ.py",
-      "enabled": false,
-      "halt_on_fail": true,
-      "params": {
-        "eq_config": "/home/sarpba/AI_Dubbing/scripts/TTS/EQ.json",
-        "model_dir": "/home/sarpba/AI_Dubbing/TTS/hun_v1_v3",
-        "norm": "hun"
       }
     },
     {
@@ -102,6 +74,5 @@
       }
     }
   ],
-  "saved_at": "2025-10-28T19:42:29.429719",
-  "template_id": "default"
+  "description": "A widgetnél lehetőség van a szegmensek és a fordítás felülvizsgálatára."
 }

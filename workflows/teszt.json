@@ -1,5 +1,5 @@
 {
-  "name": "Teszt",
+  "name": "Teszt. Semmi fontos.",
   "steps": [
     {
       "script": "TTS/vibevoice-narrator/vibevoice-tts_narrator.py",

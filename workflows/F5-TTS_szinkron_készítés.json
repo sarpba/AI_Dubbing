@@ -1,5 +1,5 @@
 {
-  "name": "Szinkron készítés Vibevocice-al. Félautomata. SRT célnyelvi felirat szükséges.",
+  "name": " F5-TTS. Magyar szinkron készítés Félautomata. SRT célnyelvi felirat szükséges.",
   "steps": [
     {
       "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
@@ -43,14 +43,13 @@
       "enabled": true
     },
     {
-      "script": "TTS/vibevoice/vibevoice-tts_v1.1.py",
+      "script": "TTS/f5-tts/f5_tts_easy_EQ.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {
         "norm": "hun",
-        "model_path": "/home/sarpba/AI_Dubbing/TTS/VibeVoice-large-hun",
-        "max_retries": "2",
-        "save_failures": true
+        "model_dir": "",
+        "eq_config": ""
       }
     },
     {

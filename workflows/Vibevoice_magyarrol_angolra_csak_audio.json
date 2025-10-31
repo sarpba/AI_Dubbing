@@ -1,5 +1,5 @@
 {
-  "name": "Magyar audio file angolra fordítása",
+  "name": "VibeVoice. Magyar audio file angolra fordítása",
   "steps": [
     {
       "script": "AUDIO-VIDEO/audio_copy_helper/audio-copy-helper.py",
@@ -24,7 +24,7 @@
       "enabled": false,
       "halt_on_fail": true,
       "params": {
-        "auth_key": "base64:ODc3ZGNmYmQtZDY1Ny1mNGRhLWIyM2EtNDFhNWY5YWQ5MGQ2OmZ4",
+        "auth_key": "",
         "input_language": "HU",
         "output_language": "EN-GB"
       }

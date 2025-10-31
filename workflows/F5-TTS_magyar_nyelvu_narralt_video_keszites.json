@@ -1,5 +1,5 @@
 {
-  "name": "Magyar nyelvű narrált videó készítés",
+  "name": "F5-TTS. Magyar nyelvű narrált videó készítés.",
   "steps": [
     {
       "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
