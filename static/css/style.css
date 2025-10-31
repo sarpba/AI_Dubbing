@@ -266,6 +266,7 @@ body {
 
 .workflow-row-missing {
   background-color: rgba(255, 193, 7, 0.18);
+  box-shadow: inset 4px 0 0 #ffc107;
 }
 
 .workflow-row-missing:hover {
@@ -278,15 +279,6 @@ body {
 
 [data-bs-theme="dark"] .workflow-row-missing:hover {
   background-color: rgba(255, 193, 7, 0.28);
-}
-
-.workflow-row-missing::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-left: 4px solid #ffc107;
-  border-radius: inherit;
-  pointer-events: none;
 }
 
 .workflow-row-missing.workflow-row-disabled {
