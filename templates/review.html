@@ -143,6 +143,7 @@
             console.log('[DEBUG 02] DOMContentLoaded event handler started.');
             
             const audioUrl = "{{audio_url|safe if audio_url else ''}}";
+            const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
             let segmentsDataString = '{{segments_data|tojson if segments_data else "[]"}}';
             let segmentsData = JSON.parse(segmentsDataString);
             function sanitizeSegmentTexts(segments) {
@@ -158,6 +159,7 @@
                             segment[key] = segment[key].replace(/\\"/g, '"');
                         }
                     });
+                    segment.has_translated_split = Boolean(segment.has_translated_split);
                 });
             }
             sanitizeSegmentTexts(segmentsData);
@@ -306,9 +308,10 @@
             function debounce(func, wait) {
                 let timeout;
                 return function executedFunction(...args) {
+                    const context = this;
                     const later = () => {
                         clearTimeout(timeout);
-                        func(...args);
+                        func.apply(context, args);
                     };
                     clearTimeout(timeout);
                     timeout = setTimeout(later, wait);
@@ -397,6 +400,7 @@
                         segmentContainer.style.top = `${position.top}px`;
                         segmentContainer.style.width = `${position.width}px`;
                         segmentContainer.dataset.segmentIndex = index;
+                        const hasTranslatedSplit = Boolean(segment.has_translated_split);
 
                         const originalTextarea = document.createElement('textarea');
                         originalTextarea.className = 'timeline-segment form-control form-control-sm original-text';
@@ -413,13 +417,12 @@
                         translatedTextarea.style.resize = 'none';
                         translatedTextarea.style.overflowY = 'hidden';
                         translatedTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
-                        
+
                         segmentContainer.appendChild(originalTextarea);
                         segmentContainer.appendChild(translatedTextarea);
 
                         // Audio player hozzáadása
-                        const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
-                        if (translatedSplitsDir) {
+                        if (translatedSplitsDir && hasTranslatedSplit) {
                             const startTimeFormatted = formatTimeForFilename(segment.start);
                             const endTimeFormatted = formatTimeForFilename(segment.end);
                             const wavFilename = `${startTimeFormatted}_${endTimeFormatted}.wav`;
@@ -617,6 +620,7 @@
                 }
                 
                 const originalSegment = JSON.parse(JSON.stringify(segmentsData[segmentIndex]));
+                const previousHasSplit = Boolean(originalSegment.has_translated_split);
                 const payload = {
                     json_file_name: currentJsonFileName,
                     segment_index: segmentIndex,
@@ -657,6 +661,14 @@
                         invalidateSegmentPositionCache();
                         createTimelineSegments(wavesurfer.options.minPxPerSec);
                     } else {
+                        if (typeof data.segment_index === 'number' && data.segment_index === segmentIndex && data.segment) {
+                            sanitizeSegmentTexts([data.segment]);
+                            segmentsData[segmentIndex].has_translated_split = data.segment.has_translated_split;
+                        } else {
+                            segmentsData[segmentIndex].has_translated_split = Boolean(segmentsData[segmentIndex].has_translated_split);
+                        }
+                        sanitizeSegmentTexts([segmentsData[segmentIndex]]);
+                        const hasSplitChanged = previousHasSplit !== Boolean(segmentsData[segmentIndex].has_translated_split);
                         // Sikeres mentés esetén frissítjük a látható elemeket
                         if (visibleSegments.has(segmentIndex)) {
                             const element = segmentElementsCache.get(segmentIndex);
@@ -669,7 +681,20 @@
                                 if (translatedTextarea && translatedTextarea.value !== newTranslatedText) {
                                     translatedTextarea.value = newTranslatedText;
                                 }
+                                const audioElement = element.querySelector('.segment-audio-player');
+                                if (segmentsData[segmentIndex].has_translated_split) {
+                                    if (audioElement && translatedSplitsDir) {
+                                        const startTimeFormatted = formatTimeForFilename(segmentsData[segmentIndex].start);
+                                        const endTimeFormatted = formatTimeForFilename(segmentsData[segmentIndex].end);
+                                        audioElement.src = `/workdir/${currentProjectName}/${translatedSplitsDir}/${startTimeFormatted}_${endTimeFormatted}.wav`;
+                                    }
+                                } else if (audioElement) {
+                                    audioElement.remove();
+                                }
                             }
+                        }
+                        if (hasSplitChanged) {
+                            fullRefreshUI();
                         }
                     }
                 })

@@ -93,6 +93,108 @@ def sanitize_segment_strings(segments: Any) -> Any:
                 segment[key] = value.replace('\\"', '"')
     return segments
 
+
+def format_time_for_filename(time_in_seconds: Any) -> str:
+    """
+    Convert a time value (seconds) into the HH-MM-SS-mmm pattern used for split filenames.
+    """
+    try:
+        time_float = float(time_in_seconds)
+    except (TypeError, ValueError):
+        return "00-00-00-000"
+
+    total_milliseconds = int(round(time_float * 1000))
+    if total_milliseconds < 0:
+        total_milliseconds = 0
+
+    hours = total_milliseconds // 3_600_000
+    minutes = (total_milliseconds % 3_600_000) // 60_000
+    seconds = (total_milliseconds % 60_000) // 1_000
+    milliseconds = total_milliseconds % 1_000
+
+    return f"{hours:02d}-{minutes:02d}-{seconds:02d}-{milliseconds:03d}"
+
+
+def annotate_segments_with_translated_splits(project_dir: str, segments: List[Dict[str, Any]]) -> None:
+    """
+    Mark each segment with a flag indicating whether a translated split WAV exists.
+    """
+    try:
+        project_subdirs = config.get('PROJECT_SUBDIRS') if isinstance(config, dict) else {}
+    except NameError:
+        project_subdirs = {}
+
+    translated_splits_subdir = (project_subdirs or {}).get('translated_splits')
+    base_dir = Path(project_dir) / translated_splits_subdir if translated_splits_subdir else None
+    base_dir_exists = base_dir.exists() if base_dir else False
+
+    for segment in segments:
+        has_split = False
+        if isinstance(segment, dict):
+            start = segment.get('start')
+            end = segment.get('end')
+            if (
+                base_dir_exists
+                and isinstance(start, (int, float))
+                and isinstance(end, (int, float))
+            ):
+                filename = f"{format_time_for_filename(start)}_{format_time_for_filename(end)}.wav"
+                has_split = (base_dir / filename).is_file()
+        segment['has_translated_split'] = has_split
+
+
+def prepare_segments_for_response(project_dir: str, segments: Any) -> List[Dict[str, Any]]:
+    """
+    Return a sanitized, annotated copy of the segment list for front-end consumption.
+    """
+    if not isinstance(segments, list):
+        return []
+    prepared_segments: List[Dict[str, Any]] = copy.deepcopy(segments)
+    sanitize_segment_strings(prepared_segments)
+    annotate_segments_with_translated_splits(project_dir, prepared_segments)
+    return prepared_segments
+
+
+def delete_translated_split_file(project_dir: str, start: Any, end: Any) -> bool:
+    """
+    Delete the translated split WAV file for the provided time window, if it exists.
+    """
+    try:
+        project_subdirs = config.get('PROJECT_SUBDIRS') if isinstance(config, dict) else {}
+    except NameError:
+        project_subdirs = {}
+
+    translated_splits_subdir = (project_subdirs or {}).get('translated_splits')
+    if not translated_splits_subdir:
+        return False
+
+    try:
+        start_float = float(start)
+        end_float = float(end)
+    except (TypeError, ValueError):
+        return False
+
+    base_dir = Path(project_dir) / translated_splits_subdir
+    if not base_dir.exists():
+        return False
+
+    filename = f"{format_time_for_filename(start_float)}_{format_time_for_filename(end_float)}.wav"
+    file_path = (base_dir / filename).resolve()
+    project_root = Path(project_dir).resolve()
+
+    if not is_subpath(str(file_path), str(project_root)):
+        logging.warning("Skipping translated split deletion outside project scope: %s", file_path)
+        return False
+
+    try:
+        if file_path.exists() and file_path.is_file():
+            file_path.unlink()
+            logging.info("Deleted translated split file: %s", file_path)
+            return True
+    except OSError as exc:
+        logging.warning("Failed to delete translated split file %s: %s", file_path, exc)
+    return False
+
 AUDIO_MIME_MAP = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
@@ -2417,7 +2519,7 @@ def review_project(project_name):
                         segments_data = [] # Hiba esetén üres lista
                     break # Első páros megtalálva
     
-    segments_data = sanitize_segment_strings(segments_data)
+    segments_data = prepare_segments_for_response(project_dir, segments_data)
 
     audio_url = None
     if audio_file_name:
@@ -2658,6 +2760,24 @@ def update_segment_api(project_name):
                 return jsonify({'success': False, 'error': f'New end time {new_end} overlaps with next segment start {next_segment_start}'}), 400
 
 
+        original_segment = transcription_data['segments'][segment_index] if segment_index < len(transcription_data['segments']) else {}
+        original_start = original_segment.get('start')
+        original_end = original_segment.get('end')
+        original_text = original_segment.get('text')
+        original_translated = original_segment.get('translated_text')
+
+        def _time_changed(original_value: Any, new_value: Any) -> bool:
+            try:
+                return not math.isclose(float(original_value), float(new_value), rel_tol=1e-6, abs_tol=1e-6)
+            except (TypeError, ValueError):
+                return original_value != new_value
+
+        start_changed = _time_changed(original_start, new_start)
+        end_changed = _time_changed(original_end, new_end)
+        text_changed = (new_text is not None and new_text != original_text)
+        translated_changed = (new_translated_text is not None and new_translated_text != original_translated)
+        should_delete_split = start_changed or end_changed or text_changed or translated_changed
+
         transcription_data['segments'][segment_index]['start'] = new_start
         transcription_data['segments'][segment_index]['end'] = new_end
         if new_text is not None: # Csak akkor frissítjük a szöveget, ha kaptunk újat
@@ -2678,7 +2798,19 @@ def update_segment_api(project_name):
         with open(json_full_path, 'w', encoding='utf-8') as f:
             json.dump(transcription_data, f, indent=2, ensure_ascii=False)
 
-        return jsonify({'success': True, 'message': 'Segment updated successfully'})
+        if should_delete_split and original_start is not None and original_end is not None:
+            delete_translated_split_file(project_dir, original_start, original_end)
+
+        prepared_segments = prepare_segments_for_response(project_dir, transcription_data['segments'])
+        prepared_segment = prepared_segments[segment_index] if 0 <= segment_index < len(prepared_segments) else None
+        response_payload: Dict[str, Any] = {'success': True, 'message': 'Segment updated successfully'}
+        if prepared_segment is not None:
+            response_payload.update({
+                'segment_index': segment_index,
+                'segment': prepared_segment,
+            })
+
+        return jsonify(response_payload)
 
     except Exception as e:
         # Log the full error for debugging
@@ -2774,7 +2906,9 @@ def add_segment_api(project_name):
         with open(json_full_path, 'w', encoding='utf-8') as f:
             json.dump(transcription_data, f, indent=2, ensure_ascii=False)
 
-        return jsonify({'success': True, 'message': 'Segment added successfully', 'segments': transcription_data['segments']})
+        prepared_segments = prepare_segments_for_response(project_dir, transcription_data['segments'])
+
+        return jsonify({'success': True, 'message': 'Segment added successfully', 'segments': prepared_segments})
 
     except Exception as e:
         app.logger.error(f"Error adding segment for project {project_name}: {e}", exc_info=True)
@@ -2828,6 +2962,10 @@ def delete_segment_api(project_name):
         if not (isinstance(segment_index, int) and 0 <= segment_index < len(transcription_data['segments'])):
             return jsonify({'success': False, 'error': f'Invalid segment index: {segment_index}'}), 400
 
+        segment_to_delete = transcription_data['segments'][segment_index]
+        original_start = segment_to_delete.get('start') if isinstance(segment_to_delete, dict) else None
+        original_end = segment_to_delete.get('end') if isinstance(segment_to_delete, dict) else None
+
         # Szegmens törlése
         del transcription_data['segments'][segment_index]
         
@@ -2841,7 +2979,12 @@ def delete_segment_api(project_name):
         with open(json_full_path, 'w', encoding='utf-8') as f:
             json.dump(transcription_data, f, indent=2, ensure_ascii=False)
 
-        return jsonify({'success': True, 'message': 'Segment deleted successfully', 'segments': transcription_data['segments']})
+        if original_start is not None and original_end is not None:
+            delete_translated_split_file(project_dir, original_start, original_end)
+
+        prepared_segments = prepare_segments_for_response(project_dir, transcription_data['segments'])
+
+        return jsonify({'success': True, 'message': 'Segment deleted successfully', 'segments': prepared_segments})
 
     except Exception as e:
         app.logger.error(f"Error deleting segment for project {project_name}: {e}", exc_info=True)
