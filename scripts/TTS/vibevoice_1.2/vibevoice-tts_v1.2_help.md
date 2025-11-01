@@ -30,6 +30,7 @@
 - `tolerance_factor` (`--tolerance_factor`, option, alapértelmezés: `1.0`) és `min_tolerance` (`--min_tolerance`, option, alapértelmezés: `2`): A Levenshtein-távolság megengedett mértékét szabályozzák (szó-mennyiség * faktor, minimum érték).
 - `whisper_model` (`--whisper_model`, option, alapértelmezés: `openai/whisper-large-v3`) és `beam_size` (`--beam_size`, option, alapértelmezés: `5`): A visszaellenőrzéshez használt ASR modell és beamszélesség.
 - `seed` (`--seed`, option, alapértelmezés: `-1`): Véletlenmag. `-1` esetén véletlenszerűen indul, Whisperrel visszaellenőriz, és szükség esetén újra próbálkozik. Pozitív értéknél determinisztikus (visszaellenőrzés nélkül).
+- `input_directory_override` (`--input_directory_override`, flag, alapértelmezés: `false`): A `translated` helyett a `temp` alkönyvtárból olvassa be a forrás JSON-okat (kimenet továbbra is `translated_splits`).
 - `save_failures` (`--save_failures`, flag, alapértelmezés: `false`): Sikertelen kimenetek és metaadatok mentése a `failed_generations` mappába; pitch ellenőrzésnél a mentett wav fájl neve tartalmazza az eltérés nagyságát.
 - `keep_best_over_tolerance` (`--keep_best_over_tolerance`, flag, alapértelmezés: `false`): Ha nincs tolerancián belüli találat, a legjobb (legkisebb távolságú) próbálkozást akkor is megtartja.
 - `max_segments` (`--max_segments`, option, alapértelmezés: nincs): Debug célra limitálja a feldolgozott szegmensek számát.
@@ -37,8 +38,15 @@
 - `overwrite` (`--overwrite`, flag, alapértelmezés: `false`): Létező kimeneti wav fájlok felülírása.
 - `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás a `tools.debug_utils` modul segítségével.
 
-## Bemeneti könyvtár felülbírálása
-- `input_directory_override` (`--input_directory_override`, option, alapértelmezés: `HAGYD_URESEN_ALAPERTELMEZESKENT`): Opcionálisan megadható könyvtár, ahonnan az első `.wav` és `.json` fájlokat keresi.
-- Az alapértelmezett sztring azt jelzi, hogy hagyd üresen/érintetlenül, így a projekt `workdir` struktúrájából dolgozik továbbra is.
-- Abszolút és projektgyökérhez viszonyított útvonal is megadható; utóbbi automatikusan a teljes elérési útra egészül ki.
-- Nem létező könyvtár esetén figyelmeztetést naplóz, majd visszavált az alapértelmezett mappákra.
+## Könyvtárhasználat
+- Bemeneti audió: `PROJECT_SUBDIRS.separated_audio_speech`.
+- Bemeneti JSON: alaphelyzetben `PROJECT_SUBDIRS.translated`; a `--input_directory_override` flaggel a `PROJECT_SUBDIRS.temp` értéke lép érvénybe (ha létezik).
+- Kimeneti szegmensek: mindig `PROJECT_SUBDIRS.translated_splits`.
+- Zaj szegmensek: `PROJECT_SUBDIRS.noice_splits`.
+- Hibák mentése: `PROJECT_SUBDIRS.failed_generations`.
+- Log fájlok: `PROJECT_SUBDIRS.logs`.
+- Ha a `temp` kulcs hiányzik, figyelmeztetést ír ki, és marad a `translated` bemeneti mappa.
+
+## Szegmensek szűrése
+- A JSON-ból betöltött szegmensek közül kihagyja azokat, ahol nincs kitöltve a `translated_text` (vagy `translates_text`) mező.
+- A kihagyott szegmensek számáról tájékoztató üzenetet ír a naplóba.

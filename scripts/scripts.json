@@ -2454,8 +2454,9 @@
         "flags": [
           "--input_directory_override"
         ],
-        "type": "option",
-        "default": "HAGYD_URESEN_ALAPERTELMEZESKENT"
+        "type": "flag",
+        "default": false,
+        "description": "A translated helyett a temp alkönyvtárból olvassa a forrás JSON-okat."
       },
       {
         "name": "max_segments",

@@ -76,7 +76,6 @@ PROJECT_ROOT = find_project_root()
 DEFAULT_EQ_CONFIG_PATH = PROJECT_ROOT / "scripts" / "TTS" / "EQ.json"
 NORMALIZER_TO_WHISPER_LANG = {"hun": "hu", "eng": "en"}
 WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
-INPUT_DIR_OVERRIDE_PLACEHOLDER = "HAGYD_URESEN_ALAPERTELMEZESKENT"
 
 
 def extract_cuda_index(device: str) -> int:
@@ -768,9 +767,8 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input_directory_override",
-        type=str,
-        default=INPUT_DIR_OVERRIDE_PLACEHOLDER,
-        help="Opcionális könyvtár a bemeneti wav/json fájlokhoz. Hagyd üresen az alapértelmezett projektszerkezethez.",
+        action="store_true",
+        help="A translated JSON mappa helyett a temp alkönyvtárból olvassa be a forrás fájlokat.",
     )
     parser.add_argument(
         "--overwrite",
@@ -818,28 +816,23 @@ def prepare_output_directories(args: argparse.Namespace, config: Dict[str, objec
     cfg_subdirs = config["PROJECT_SUBDIRS"]
     full_project_path = (PROJECT_ROOT / cfg_dirs["workdir"]) / args.project_name
 
-    args.output_dir = str(full_project_path / cfg_subdirs["translated_splits"])
+    translated_splits_dir = cfg_subdirs["translated_splits"]
+    json_subdir = cfg_subdirs["translated"]
+    if getattr(args, "input_directory_override", False):
+        temp_dir = cfg_subdirs.get("temp")
+        if temp_dir:
+            json_subdir = temp_dir
+            logger.info(
+                "A translated JSON mappa helyett a temp (%s) kerül felhasználásra.",
+                temp_dir,
+            )
+        else:
+            logger.warning("A config nem tartalmaz 'temp' kulcsot. Marad a translated JSON mappa.")
+
+    args.output_dir = str(full_project_path / translated_splits_dir)
     args.output_dir_noise = str(full_project_path / cfg_subdirs["noice_splits"])
     args.input_wav_dir = full_project_path / cfg_subdirs["separated_audio_speech"]
-    args.input_json_dir = full_project_path / cfg_subdirs["translated"]
-
-    override_value = getattr(args, "input_directory_override", None)
-    if isinstance(override_value, str):
-        override_candidate = override_value.strip()
-        if override_candidate and override_candidate != INPUT_DIR_OVERRIDE_PLACEHOLDER:
-            candidate_path = Path(override_candidate)
-            if not candidate_path.is_absolute():
-                candidate_path = PROJECT_ROOT / candidate_path
-            if candidate_path.is_dir():
-                args.input_wav_dir = candidate_path
-                args.input_json_dir = candidate_path
-                logger.info("Bemeneti könyvtár felülbírálva: %s", candidate_path)
-            else:
-                logger.warning(
-                    "A konfigurációban megadott bemeneti könyvtár nem létezik: %s. "
-                    "Alapértelmezett útvonalakat használunk.",
-                    candidate_path,
-                )
+    args.input_json_dir = full_project_path / json_subdir
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     Path(args.output_dir_noise).mkdir(parents=True, exist_ok=True)
@@ -1480,6 +1473,25 @@ def process_project(args: argparse.Namespace) -> None:
         data = json.load(fh)
     segments = data.get("segments", [])
     segments.sort(key=lambda item: item.get("start", 0.0))
+
+    filtered_segments: List[Dict[str, object]] = []
+    skipped_segments = 0
+    for segment in segments:
+        translated_text = segment.get("translated_text")
+        if not translated_text:
+            translated_text = segment.get("translates_text")
+        if not translated_text or not str(translated_text).strip():
+            skipped_segments += 1
+            continue
+        if "translated_text" not in segment and translated_text is not None:
+            segment = dict(segment)
+            segment["translated_text"] = translated_text
+        filtered_segments.append(segment)
+
+    if skipped_segments:
+        logger.info("Fordított szöveg nélküli szegmensek kihagyva: %s db", skipped_segments)
+
+    segments = filtered_segments
 
     if args.max_segments is not None:
         original_len = len(segments)
