@@ -8,24 +8,26 @@
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
     {% if theme_colors %}
-    <style>
-        :root {
-            {% for name, value in theme_colors.light.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-        [data-bs-theme="dark"] {
-            {% for name, value in theme_colors.dark.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-    </style>
+    <script id="themeColorsData" type="application/json">
+        {{ theme_colors | tojson | safe }}
+    </script>
     {% endif %}
     <script>
         (function() {
             const root = document.documentElement;
             const storageKey = 'theme';
             const systemMedia = window.matchMedia('(prefers-color-scheme: dark)');
+            const themeColors = (() => {
+                const el = document.getElementById('themeColorsData');
+                if (!el) {
+                    return null;
+                }
+                try {
+                    return JSON.parse(el.textContent);
+                } catch {
+                    return null;
+                }
+            })();
 
             const getStoredPreference = () => localStorage.getItem(storageKey) || 'auto';
 
@@ -36,10 +38,30 @@
                 return systemMedia.matches ? 'dark' : 'light';
             };
 
+            const applyThemeColors = effectiveTheme => {
+                if (!themeColors) {
+                    return;
+                }
+
+                const lightVars = themeColors.light || {};
+                const darkVars = themeColors.dark || {};
+
+                Object.entries(lightVars).forEach(([name, value]) => {
+                    root.style.setProperty(`--${name}`, value);
+                });
+
+                if (effectiveTheme === 'dark') {
+                    Object.entries(darkVars).forEach(([name, value]) => {
+                        root.style.setProperty(`--${name}`, value);
+                    });
+                }
+            };
+
             const applyTheme = preference => {
                 const effectiveTheme = resolveTheme(preference);
                 root.setAttribute('data-bs-theme', effectiveTheme);
                 root.dataset.themePreference = preference;
+                applyThemeColors(effectiveTheme);
             };
 
             const handleSystemChange = () => {

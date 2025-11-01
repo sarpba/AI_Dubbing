@@ -52,3 +52,6 @@ conda activate sync
 cd AI_Dubbing
 python main_app.py
 ```
+## TODO
+
+- Now only the ```vibevoice_1.2``` cript working under review, need to update all TTS script, (maybe in apy style)
