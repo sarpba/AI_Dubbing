@@ -8,19 +8,46 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     {% if theme_colors %}
-    <style>
-        :root {
-            {% for name, value in theme_colors.light.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-        [data-bs-theme="dark"] {
-            {% for name, value in theme_colors.dark.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-    </style>
+    <style id="theme-variables"></style>
+    <script id="theme-config-data" type="application/json">{{ theme_colors | tojson }}</script>
     {% endif %}
+    <script>
+        (function() {
+            const styleEl = document.getElementById('theme-variables');
+            const configEl = document.getElementById('theme-config-data');
+            if (!styleEl || !configEl) {
+                return;
+            }
+
+            let themeConfig = null;
+            try {
+                themeConfig = JSON.parse(configEl.textContent) || null;
+            } catch (error) {
+                console.warn('Téma konfiguráció beolvasása sikertelen:', error);
+                return;
+            }
+
+            const lines = [];
+
+            if (themeConfig && themeConfig.light) {
+                lines.push(':root {');
+                for (const [name, value] of Object.entries(themeConfig.light)) {
+                    lines.push(`    --${name}: ${value};`);
+                }
+                lines.push('}');
+            }
+
+            if (themeConfig && themeConfig.dark) {
+                lines.push('[data-bs-theme="dark"] {');
+                for (const [name, value] of Object.entries(themeConfig.dark)) {
+                    lines.push(`    --${name}: ${value};`);
+                }
+                lines.push('}');
+            }
+
+            styleEl.textContent = lines.join('\n');
+        })();
+    </script>
     <script>
         (function() {
             const root = document.documentElement;

@@ -6,20 +6,70 @@
     <title>Projekt: {{ project.name }} | AI Dubbing</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    {% if theme_colors %}
-    <style>
-        :root {
-            {% for name, value in theme_colors.light.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-        [data-bs-theme="dark"] {
-            {% for name, value in theme_colors.dark.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-    </style>
-    {% endif %}
+    <script id="project-config-data" type="application/json">
+        {{ {
+            "projectName": project.name,
+            "themeColors": theme_colors if theme_colors is defined and theme_colors else none,
+            "secretParamNames": secret_param_names | default([]),
+            "audioExtensions": (audio_extensions | list | sort) if audio_extensions is defined else [],
+            "videoExtensions": (video_extensions | list | sort) if video_extensions is defined else []
+        } | tojson }}
+    </script>
+    <script>
+        (function() {
+            const configElement = document.getElementById('project-config-data');
+            if (!configElement) {
+                window.__PROJECT_CONFIG__ = {};
+                return;
+            }
+            try {
+                window.__PROJECT_CONFIG__ = JSON.parse(configElement.textContent) || {};
+            } catch (error) {
+                console.warn('Projekt konfiguráció beolvasása sikertelen:', error);
+                window.__PROJECT_CONFIG__ = {};
+            }
+        })();
+    </script>
+    <script>
+        (function() {
+            const config = window.__PROJECT_CONFIG__ || {};
+            const themeColors = config.themeColors;
+            if (!themeColors) {
+                return;
+            }
+            const head = document.head || document.getElementsByTagName('head')[0];
+            if (!head) {
+                return;
+            }
+            const styleId = 'dynamic-theme-colors';
+            let styleElement = document.getElementById(styleId);
+            if (!styleElement) {
+                styleElement = document.createElement('style');
+                styleElement.id = styleId;
+                head.appendChild(styleElement);
+            }
+            const buildRule = (selector, vars) => {
+                const entries = Object.entries(vars || {});
+                if (!entries.length) {
+                    return '';
+                }
+                const declarations = entries
+                    .map(([name, value]) => `    --${name}: ${value};`)
+                    .join('\n');
+                return `${selector} {\n${declarations}\n}`;
+            };
+            const rules = [];
+            const lightRule = buildRule(':root', themeColors.light || {});
+            if (lightRule) {
+                rules.push(lightRule);
+            }
+            const darkRule = buildRule('[data-bs-theme=\"dark\"]', themeColors.dark || {});
+            if (darkRule) {
+                rules.push(darkRule);
+            }
+            styleElement.textContent = rules.join('\n');
+        })();
+    </script>
     <script src="{{ url_for('static', filename='vendor/marked/marked.min.js') }}"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
@@ -325,7 +375,8 @@
         }
     </style>
     <script>
-        const PROJECT_NAME = "{{ project.name }}";
+        const PROJECT_CONFIG = window.__PROJECT_CONFIG__ || {};
+        const PROJECT_NAME = PROJECT_CONFIG.projectName || '';
         let workflowPollInterval = null;
         let workflowLogInterval = null;
         let currentWorkflowJobId = null;
@@ -365,10 +416,10 @@
             deepl: { wrapperId: 'workflowKeyFieldDeepl', inputId: 'workflowKeyDeepl', payloadKey: 'deepl_api_key' },
             huggingface: { wrapperId: 'workflowKeyFieldHuggingface', inputId: 'workflowKeyHuggingface', payloadKey: 'huggingface_token' }
         };
-        const SECRET_PARAM_NAMES = {{ secret_param_names|tojson }};
+        const SECRET_PARAM_NAMES = PROJECT_CONFIG.secretParamNames || [];
         const SECRET_VALUE_PLACEHOLDER = '***';
-        const AUDIO_EXTENSIONS = new Set({{ audio_extensions|list|sort|tojson }});
-        const VIDEO_EXTENSIONS = new Set({{ video_extensions|list|sort|tojson }});
+        const AUDIO_EXTENSIONS = new Set(PROJECT_CONFIG.audioExtensions || []);
+        const VIDEO_EXTENSIONS = new Set(PROJECT_CONFIG.videoExtensions || []);
         const TEXT_PREVIEW_EXTENSIONS = new Set(['.json', '.txt', '.bak', '.log', '.srt']);
         let videoPreviewModal = null;
         let jsonPreviewModal = null;
