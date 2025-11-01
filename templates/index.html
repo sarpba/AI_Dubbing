@@ -158,14 +158,15 @@
                                     <input type="text" class="form-control" id="projectName" name="projectName" required>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label">Forrás típusa</label>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="sourceType" id="sourceTypeUpload" value="upload" checked>
-                                        <label class="form-check-label" for="sourceTypeUpload">Videó fájl feltöltése</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="sourceType" id="sourceTypeYoutube" value="youtube">
-                                        <label class="form-check-label" for="sourceTypeYoutube">YouTube letöltés (yt-dlp)</label>
+                                    <label class="form-label d-block">Forrás típusa</label>
+                                    <input type="hidden" id="sourceTypeInput" name="sourceType" value="upload">
+                                    <div class="nav nav-tabs nav-fill" id="sourceTypeTabs" role="tablist">
+                                        <button type="button" class="nav-link active source-type-tab" id="sourceTypeUploadTab" data-source="upload" role="tab" aria-selected="true">
+                                            Videó fájl feltöltése
+                                        </button>
+                                        <button type="button" class="nav-link source-type-tab" id="sourceTypeYoutubeTab" data-source="youtube" role="tab" aria-selected="false">
+                                            YouTube letöltés (yt-dlp)
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="mb-3" id="fileInputGroup">
@@ -207,9 +208,11 @@
                         <h5 class="mb-0">Tippek</h5>
                     </div>
                     <div class="card-body">
-                        <p class="mb-2">1. Használj egyedi projektnév formátumot, hogy könnyen megtaláld a munkáidat.</p>
-                        <p class="mb-2">2. A feltöltés után az oldal automatikusan frissül, és a projekt megjelenik a listában.</p>
-                        <p class="mb-0">3. Opcionálisan tölts fel feliratot, így a workflow később könnyebben hozzárendelheti a szöveget.</p>
+                        <p class="mb-2"><strong>Projektlista:</strong> a bal oldali táblázatban látod a korábban létrehozott projekteket. A névre kattintva betöltheted a workflow-t, a mellette lévő „Törlés” gomb végleg eltávolítja a projekt mappáját.</p>
+                        <p class="mb-2"><strong>Új projekt létrehozása:</strong> add meg a projektnév mezőt, majd válaszd ki a forrás típusát a felső fülek segítségével. Videó feltöltéshez adj meg helyi fájlt, YouTube letöltéshez illeszd be a teljes hivatkozást (https://…).</p>
+                        <p class="mb-2"><strong>Feltöltési állapot:</strong> videó fájl feltöltésekor a folyamatjelző mutatja a haladást és a méretet, YouTube link esetén a letöltés automatikusan indul, és a státusz jelzi, ha a konvertálás befejeződött.</p>
+                        <p class="mb-2"><strong>Feliratok:</strong> opcionálisan tölthetsz fel .srt fájlt. Adj meg egy `_hu` vagy hasonló kiegészítést, így a rendszer a videó nevéhez illeszti a feliratot.</p>
+                        <p class="mb-0"><strong>Téma és sablon:</strong> a jobb felső sarokban válthatsz világos/sötét megjelenés között, a chat ikonra kattintva pedig megnyithatod a sablonszín szerkesztőt, ahol a teljes UI színezését testre szabhatod.</p>
                     </div>
                 </div>
             </div>
@@ -223,15 +226,15 @@
         const uploadProgressBar = document.getElementById('uploadProgressBar');
         const uploadProgressText = document.getElementById('uploadProgressText');
         const videoInput = document.getElementById('videoFile');
-        const sourceRadios = document.querySelectorAll('input[name="sourceType"]');
         const youtubeUrlInput = document.getElementById('youtubeUrl');
         const fileInputGroup = document.getElementById('fileInputGroup');
         const youtubeInputGroup = document.getElementById('youtubeInputGroup');
         const projectDeleteButtons = document.querySelectorAll('.project-delete-btn');
+        const sourceTypeInput = document.getElementById('sourceTypeInput');
+        const sourceTabs = document.querySelectorAll('.source-type-tab');
 
         function getSelectedSource() {
-            const selected = document.querySelector('input[name="sourceType"]:checked');
-            return selected ? selected.value : 'upload';
+            return sourceTypeInput.value || 'upload';
         }
 
         function updateSourceVisibility() {
@@ -241,8 +244,27 @@
             videoInput.required = useUpload;
         }
 
-        sourceRadios.forEach(radio => radio.addEventListener('change', updateSourceVisibility));
-        updateSourceVisibility();
+        function activateSourceTab(source) {
+            sourceTabs.forEach(tab => {
+                const isActive = tab.dataset.source === source;
+                tab.classList.toggle('active', isActive);
+                tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            sourceTypeInput.value = source;
+            updateSourceVisibility();
+        }
+
+        sourceTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const source = tab.dataset.source;
+                if (!source || tab.classList.contains('active')) {
+                    return;
+                }
+                activateSourceTab(source);
+            });
+        });
+
+        activateSourceTab(getSelectedSource());
 
         projectDeleteButtons.forEach(button => {
             button.addEventListener('click', async event => {
