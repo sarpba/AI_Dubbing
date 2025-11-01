@@ -1003,7 +1003,7 @@ def process_segment(
 ) -> Tuple[bool, Optional[str]]:
     start_time = segment.get("start")
     end_time = segment.get("end")
-    original_gen_text = (segment.get("translated_text") or segment.get("text") or "").strip()
+    original_gen_text = (segment.get("translated_text") or "").strip()
 
     if not all(isinstance(value, (int, float)) for value in (start_time, end_time)):
         return False, "Hiányzó vagy érvénytelen időbélyeg."
@@ -1411,7 +1411,7 @@ def run_segments_on_device(
             failed_segments_info.append(
                 {
                     "filename": filename,
-                    "text": segment.get("translated_text") or segment.get("text") or "",
+                    "text": segment.get("translated_text") or "",
                     "reason": error_msg or "",
                 }
             )
