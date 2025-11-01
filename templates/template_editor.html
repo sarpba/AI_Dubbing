@@ -6,20 +6,9 @@
     <title>Színsablon szerkesztő | AI Dubbing</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    {% if theme_colors %}
-    <style id="themeVariables">
-        :root {
-            {% for name, value in theme_colors.light.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-        [data-bs-theme="dark"] {
-            {% for name, value in theme_colors.dark.items() %}
-            --{{ name }}: {{ value }};
-            {% endfor %}
-        }
-    </style>
-    {% endif %}
+    <style id="themeVariables"></style>
+    <script id="initial-theme-colors" type="application/json">{{ (theme_colors or {}) | tojson | safe }}</script>
+    <script id="default-theme-colors" type="application/json">{{ (default_theme_colors or {}) | tojson | safe }}</script>
     <script>
         (function() {
             const root = document.documentElement;
@@ -196,13 +185,51 @@
             const restoreDefaultBtn = document.getElementById('restoreDefaultBtn');
             const apiUrl = "{{ url_for('theme_colors_api') }}";
 
-            const initialColors = {{ theme_colors | tojson }};
-            const defaultColors = {{ default_theme_colors | tojson }};
-            let lastSavedColors = cloneColors(initialColors);
+            function emptyColors() {
+                return { light: {}, dark: {} };
+            }
+
+            function normalizeColors(source) {
+                if (!source || typeof source !== 'object') {
+                    return emptyColors();
+                }
+                return {
+                    light: { ...(source.light || {}) },
+                    dark: { ...(source.dark || {}) }
+                };
+            }
+
+            function mergeColors(base, override) {
+                const normalizedBase = normalizeColors(base);
+                const normalizedOverride = normalizeColors(override);
+                return {
+                    light: { ...normalizedBase.light, ...normalizedOverride.light },
+                    dark: { ...normalizedBase.dark, ...normalizedOverride.dark }
+                };
+            }
+
+            function readColors(scriptId) {
+                const holder = document.getElementById(scriptId);
+                if (!holder) {
+                    return emptyColors();
+                }
+                try {
+                    const parsed = JSON.parse(holder.textContent || '{}');
+                    return normalizeColors(parsed);
+                } catch (error) {
+                    console.warn('Nem sikerült beolvasni a színeket a következő elemről:', scriptId, error);
+                    return emptyColors();
+                }
+            }
 
             function cloneColors(source) {
-                return JSON.parse(JSON.stringify(source));
+                return JSON.parse(JSON.stringify(normalizeColors(source)));
             }
+
+            const defaultColors = readColors('default-theme-colors');
+            const storedColors = readColors('initial-theme-colors');
+            const initialColors = mergeColors(defaultColors, storedColors);
+            let lastSavedColors = cloneColors(initialColors);
 
             function showStatus(message, type = 'success') {
                 statusEl.innerHTML = '<div class="alert alert-' + type + ' mb-0" role="alert">' + message + '</div>';
@@ -241,27 +268,33 @@
                 });
             }
 
+            function buildStyleText(colors) {
+                const normalized = normalizeColors(colors);
+                const lines = [
+                    ':root {',
+                    ...Object.entries(normalized.light).map(([key, value]) => '    --' + key + ': ' + value + ';'),
+                    '}',
+                    '[data-bs-theme="dark"] {',
+                    ...Object.entries(normalized.dark).map(([key, value]) => '    --' + key + ': ' + value + ';'),
+                    '}'
+                ];
+                return lines.join('\n');
+            }
+
             function updateStyle(colors) {
                 if (!styleEl) {
                     return;
                 }
-                const lines = [
-                    ':root {',
-                    ...Object.entries(colors.light).map(([key, value]) => '    --' + key + ': ' + value + ';'),
-                    '}',
-                    '[data-bs-theme="dark"] {',
-                    ...Object.entries(colors.dark).map(([key, value]) => '    --' + key + ': ' + value + ';'),
-                    '}'
-                ];
-                styleEl.textContent = lines.join('\\n');
+                styleEl.textContent = buildStyleText(colors);
             }
 
             function applyColors(colors) {
+                const normalized = normalizeColors(colors);
                 inputs.forEach(input => {
                     const mode = input.dataset.mode;
                     const key = input.dataset.key;
-                    if (colors[mode] && typeof colors[mode][key] !== 'undefined') {
-                        input.value = colors[mode][key];
+                    if (normalized[mode] && typeof normalized[mode][key] !== 'undefined') {
+                        input.value = normalized[mode][key];
                     }
                 });
                 updatePreviews();
@@ -325,8 +358,7 @@
                 showStatus('Alapértelmezett színek visszaállítva. Mentsd a változtatásokat a véglegesítéshez.', 'info');
             });
 
-            updatePreviews();
-            updateStyle(buildColorsFromInputs());
+            applyColors(initialColors);
             loadFromServer();
         });
     </script>
