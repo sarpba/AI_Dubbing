@@ -1945,6 +1945,40 @@ def index():
     return render_template('index.html', projects=projects, project_entries=project_entries)
 
 
+@app.route('/api/project/<project_name>', methods=['DELETE'])
+def delete_project(project_name):
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    workdir_abs = os.path.abspath(workdir_path)
+    project_root = os.path.join(workdir_path, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+
+    if not is_subpath(project_root_abs, workdir_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen projekt útvonal.'}), 400
+    if not os.path.isdir(project_root_abs):
+        return jsonify({'success': False, 'error': 'A projekt nem található.'}), 404
+
+    active_statuses = {'queued', 'running', 'cancelling'}
+    active_jobs = [
+        job for job in get_project_jobs(sanitized_project)
+        if isinstance(job, dict) and job.get('status') in active_statuses
+    ]
+    if active_jobs:
+        return jsonify({'success': False, 'error': 'A projekt feldolgozása folyamatban van, törlés nem engedélyezett.'}), 409
+
+    try:
+        shutil.rmtree(project_root_abs)
+    except OSError as exc:
+        logging.exception("Nem sikerült törölni a projekt könyvtárát: %s: %s", project_root_abs, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült törölni a projektet.'}), 500
+
+    return jsonify({'success': True, 'message': 'Projekt sikeresen törölve.'})
+
+
 @app.route('/template-editor')
 def template_editor():
     return render_template('template_editor.html')
@@ -2687,29 +2721,6 @@ def upload_video():
         return jsonify({
             'error': f'Upload failed: {exc}',
             'project': sanitized_project
-        }), 500
-
-@app.route('/api/delete-project/<project_name>', methods=['DELETE'])
-def delete_project(project_name):
-    try:
-        project_dir = os.path.join('workdir', secure_filename(project_name))
-        if not os.path.exists(project_dir):
-            return jsonify({'error': 'Project not found'}), 404
-            
-        # Remove the entire project directory
-        import shutil
-        shutil.rmtree(project_dir)
-        
-        return jsonify({
-            'success': True,
-            'message': 'Project deleted successfully',
-            'project': project_name
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'project': project_name
         }), 500
 
 @app.route('/api/update-segment/<project_name>', methods=['POST'])

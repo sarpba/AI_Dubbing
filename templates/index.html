@@ -6,6 +6,7 @@
     <title>AI Dubbing Szerkesztő</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     {% if theme_colors %}
     <style>
         :root {
@@ -119,7 +120,10 @@
                                                             <a href="{{ url_for('show_project', project_name=project) }}" class="text-decoration-none flex-grow-1">
                                                                 {{ project }}
                                                             </a>
-                                                            <button class="btn btn-sm btn-danger" onclick="deleteProject({{ project|tojson }})">
+                                                            <button type="button"
+                                                                class="btn btn-outline-danger btn-sm project-delete-btn"
+                                                                data-project-name="{{ project }}"
+                                                                aria-label="{{ project }} projekt törlése">
                                                                 Törlés
                                                             </button>
                                                         </div>
@@ -127,11 +131,14 @@
                                                 </div>
                                             </details>
                                         {% else %}
-                                            <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                            <div class="list-group-item list-group-item-action d-flex align-items-center gap-2">
                                                 <a href="{{ url_for('show_project', project_name=entry.name) }}" class="text-decoration-none flex-grow-1">
                                                     {{ entry.name }}
                                                 </a>
-                                                <button class="btn btn-sm btn-danger" onclick="deleteProject({{ entry.name|tojson }})">
+                                                <button type="button"
+                                                    class="btn btn-outline-danger btn-sm project-delete-btn"
+                                                    data-project-name="{{ entry.name }}"
+                                                    aria-label="{{ entry.name }} projekt törlése">
                                                     Törlés
                                                 </button>
                                             </div>
@@ -178,7 +185,7 @@
                                 <div class="mb-3">
                                     <label for="subtitleSuffix" class="form-label">Felirat kiegészítés (pl. _hu, _en)</label>
                                     <input type="text" class="form-control" id="subtitleSuffix" name="subtitleSuffix" placeholder="_hu">
-                                    <small class="text-muted">Formátum: egy aláhúzás és két betűs nyelvi kód (pl. _hu). A mentett felirat neve a videó bázisnév + kiegészítés lesz.</small>
+                                    <small class="text-muted">Formátum: egy aláhúzás és két betűs nyelvi kód (pl. _hu vagy _en). A mentett felirat neve a videó bázisnév + kiegészítés lesz.</small>
                                 </div>
                                 <div class="mb-3 d-none" id="uploadProgressContainer">
                                     <label class="form-label">Feltöltés állapota</label>
@@ -211,27 +218,6 @@
 
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <script>
-        function deleteProject(projectName) {
-            if (!confirm(`Biztosan törölni szeretnéd a(z) ${projectName} projektet?`)) {
-                return;
-            }
-
-            fetch(`/api/delete-project/${encodeURIComponent(projectName)}`, { method: 'DELETE' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`Projekt törölve: ${projectName}`);
-                        location.reload();
-                    } else {
-                        alert(`Hiba: ${data.error || 'Ismeretlen hiba történt.'}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Hiba:', error);
-                    alert('Hiba történt a törlés során.');
-                });
-        }
-
         const uploadForm = document.getElementById('uploadForm');
         const uploadProgressContainer = document.getElementById('uploadProgressContainer');
         const uploadProgressBar = document.getElementById('uploadProgressBar');
@@ -241,6 +227,7 @@
         const youtubeUrlInput = document.getElementById('youtubeUrl');
         const fileInputGroup = document.getElementById('fileInputGroup');
         const youtubeInputGroup = document.getElementById('youtubeInputGroup');
+        const projectDeleteButtons = document.querySelectorAll('.project-delete-btn');
 
         function getSelectedSource() {
             const selected = document.querySelector('input[name="sourceType"]:checked');
@@ -256,6 +243,49 @@
 
         sourceRadios.forEach(radio => radio.addEventListener('change', updateSourceVisibility));
         updateSourceVisibility();
+
+        projectDeleteButtons.forEach(button => {
+            button.addEventListener('click', async event => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const projectName = (button.dataset.projectName || '').trim();
+                if (!projectName) {
+                    return;
+                }
+
+                const confirmed = confirm(`Biztosan törölni szeretnéd a(z) "${projectName}" projektet? A teljes könyvtár véglegesen törlődik.`);
+                if (!confirmed) {
+                    return;
+                }
+
+                const originalContent = button.innerHTML;
+                button.disabled = true;
+                button.setAttribute('aria-disabled', 'true');
+                button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+
+                try {
+                    const response = await fetch(`/api/project/${encodeURIComponent(projectName)}`, {
+                        method: 'DELETE'
+                    });
+                    const payload = await response.json().catch(() => ({}));
+                    if (!response.ok || payload.success === false) {
+                        throw new Error(payload.error || 'Nem sikerült törölni a projektet.');
+                    }
+                    button.dataset.deletionComplete = 'true';
+                    location.reload();
+                } catch (error) {
+                    console.error('Projekt törlési hiba:', error);
+                    alert(error.message || 'Nem sikerült törölni a projektet.');
+                } finally {
+                    if (button.dataset.deletionComplete !== 'true') {
+                        button.innerHTML = originalContent;
+                        button.disabled = false;
+                        button.removeAttribute('aria-disabled');
+                    }
+                }
+            });
+        });
 
         uploadForm.addEventListener('submit', function(event) {
             event.preventDefault();
@@ -292,12 +322,16 @@
                 return;
             }
 
-            const subtitleSuffix = document.getElementById('subtitleSuffix').value.trim();
+            const subtitleSuffixInput = document.getElementById('subtitleSuffix');
+            const subtitleSuffixRaw = subtitleSuffixInput.value.trim();
+            const subtitleSuffix = subtitleSuffixRaw.toLowerCase();
+            subtitleSuffixInput.value = subtitleSuffix;
+
             if (subtitleInput.files.length && !subtitleSuffix) {
                 alert('Adj meg felirat kiegészítést (pl. _hu) a feltöltött felirathoz.');
                 return;
             }
-            if (subtitleSuffix && !/^_[A-Za-z]{2}$/.test(subtitleSuffix)) {
+            if (subtitleSuffix && !/^_[a-z]{2}$/.test(subtitleSuffix)) {
                 alert('A felirat kiegészítés formátuma: aláhúzás + két betűs nyelvi kód (pl. _hu).');
                 return;
             }

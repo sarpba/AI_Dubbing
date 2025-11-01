@@ -43,19 +43,18 @@
       "enabled": true
     },
     {
-      "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
-      "enabled": true,
-      "halt_on_fail": true,
-      "params": {
-        "norm": "hun",
-        "model_path": "/home/sarpba/AI_Dubbing/TTS/VibeVoice-large-hun"
-      }
-    },
-    {
       "script": "AUDIO-VIDEO/normalize_and_cut_tts_files_old_version/normalise_and_cut_json_easy.py",
       "enabled": true,
       "halt_on_fail": true,
       "params": {}
+    },
+    {
+      "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "norm": "hun"
+      }
     },
     {
       "script": "AUDIO-VIDEO/merge_chunks_with_background/merge_chunks_with_background_easy.py",
