@@ -32,6 +32,8 @@ workflow_jobs = {}
 workflow_threads = {}
 workflow_events = {}
 
+CONFIG_FILE_PATH = Path(app.root_path) / 'config.json'
+CONFIG_MTIME: Optional[float] = None
 KEYHOLDER_PATH = os.path.join(app.root_path, 'keyholder.json')
 CONDA_PYTHON_CACHE = {}
 
@@ -1603,20 +1605,28 @@ def serve_workdir(filename):
     return send_from_directory('workdir', filename)
 
 # Konfiguráció betöltése
-with open('config.json') as config_file:
+with CONFIG_FILE_PATH.open('r', encoding='utf-8') as config_file:
     config = json.load(config_file)
+CONFIG_MTIME = CONFIG_FILE_PATH.stat().st_mtime
 
 def get_config_copy():
+    global config, CONFIG_MTIME
     with config_lock:
+        current_mtime = CONFIG_FILE_PATH.stat().st_mtime
+        if CONFIG_MTIME is None or current_mtime != CONFIG_MTIME:
+            with CONFIG_FILE_PATH.open('r', encoding='utf-8') as config_file:
+                config = json.load(config_file)
+            CONFIG_MTIME = current_mtime
         return copy.deepcopy(config)
 
 
 def persist_config(updated_config):
-    global config
+    global config, CONFIG_MTIME
     with config_lock:
         config = updated_config
-        with open('config.json', 'w', encoding='utf-8') as config_file:
+        with CONFIG_FILE_PATH.open('w', encoding='utf-8') as config_file:
             json.dump(config, config_file, indent=2, ensure_ascii=False)
+        CONFIG_MTIME = CONFIG_FILE_PATH.stat().st_mtime
 
 def update_workflow_job(job_id, **kwargs):
     with workflow_lock:
@@ -2556,17 +2566,19 @@ def upload_video():
     if not sanitized_project:
         return jsonify({'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
 
+    current_config = get_config_copy()
+
     # Almappák létrehozása a projektben
     project_dir = os.path.join('workdir', sanitized_project)
     try:
         os.makedirs(project_dir, exist_ok=True)
-        for subdir in config['PROJECT_SUBDIRS'].values():
+        for subdir in current_config['PROJECT_SUBDIRS'].values():
             os.makedirs(os.path.join(project_dir, subdir), exist_ok=True)
     except OSError as exc:
         logging.exception("Nem sikerült létrehozni a projekt mappáit: %s", exc)
         return jsonify({'error': 'Nem sikerült létrehozni a projekt könyvtárát.'}), 500
 
-    upload_dir = os.path.join(project_dir, config['PROJECT_SUBDIRS']['upload'])
+    upload_dir = os.path.join(project_dir, current_config['PROJECT_SUBDIRS']['upload'])
     subtitle_file = request.files.get('subtitleFile')
     subtitle_suffix_raw = request.form.get('subtitleSuffix', '').strip()
     subtitle_filename = None
