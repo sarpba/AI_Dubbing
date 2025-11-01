@@ -76,6 +76,23 @@ def build_project_entries(projects: List[str], group_threshold: int = 3) -> List
                 })
     return entries
 
+
+def sanitize_segment_strings(segments: Any) -> Any:
+    """
+    Remove stray escape sequences that break JSON loading on the front-end.
+    """
+    if not isinstance(segments, list):
+        return segments
+
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        for key in ('text', 'translated_text'):
+            value = segment.get(key)
+            if isinstance(value, str):
+                segment[key] = value.replace('\\"', '"')
+    return segments
+
 AUDIO_MIME_MAP = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
@@ -2400,6 +2417,8 @@ def review_project(project_name):
                         segments_data = [] # Hiba esetén üres lista
                     break # Első páros megtalálva
     
+    segments_data = sanitize_segment_strings(segments_data)
+
     audio_url = None
     if audio_file_name:
         audio_url = url_for('serve_workdir', filename=f"{secure_filename(project_name)}/{config['PROJECT_SUBDIRS']['separated_audio_speech']}/{audio_file_name}")

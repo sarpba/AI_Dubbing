@@ -145,6 +145,22 @@
             const audioUrl = "{{audio_url|safe if audio_url else ''}}";
             let segmentsDataString = '{{segments_data|tojson if segments_data else "[]"}}';
             let segmentsData = JSON.parse(segmentsDataString);
+            function sanitizeSegmentTexts(segments) {
+                if (!Array.isArray(segments)) {
+                    return;
+                }
+                segments.forEach(segment => {
+                    if (!segment || typeof segment !== 'object') {
+                        return;
+                    }
+                    ['text', 'translated_text'].forEach(key => {
+                        if (typeof segment[key] === 'string') {
+                            segment[key] = segment[key].replace(/\\"/g, '"');
+                        }
+                    });
+                });
+            }
+            sanitizeSegmentTexts(segmentsData);
             const positionsCache = new Map();
 
             function invalidateSegmentPositionCache() {
@@ -834,6 +850,7 @@
                 .then(data => {
                     if (data.success && data.segments) {
                         segmentsData = data.segments;
+                        sanitizeSegmentTexts(segmentsData);
                         fullRefreshUI();
                     } else {
                         alert(`Hiba az új szegmens hozzáadásakor: ${data.error}`);
@@ -852,6 +869,7 @@
                 .then(data => {
                     if (data.success && data.segments) {
                         segmentsData = data.segments;
+                        sanitizeSegmentTexts(segmentsData);
                         fullRefreshUI();
                     } else {
                         alert(`Hiba a szegmens törlésekor: ${data.error}`);
