@@ -36,3 +36,9 @@
 - `max_workers` (`--max_workers`, option, alapértelmezés: automatikus): Több GPU esetén limitálja a párhuzamos workerek számát.
 - `overwrite` (`--overwrite`, flag, alapértelmezés: `false`): Létező kimeneti wav fájlok felülírása.
 - `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás a `tools.debug_utils` modul segítségével.
+
+## Bemeneti könyvtár felülbírálása
+- `input_directory_override` (`--input_directory_override`, option, alapértelmezés: `HAGYD_URESEN_ALAPERTELMEZESKENT`): Opcionálisan megadható könyvtár, ahonnan az első `.wav` és `.json` fájlokat keresi.
+- Az alapértelmezett sztring azt jelzi, hogy hagyd üresen/érintetlenül, így a projekt `workdir` struktúrájából dolgozik továbbra is.
+- Abszolút és projektgyökérhez viszonyított útvonal is megadható; utóbbi automatikusan a teljes elérési útra egészül ki.
+- Nem létező könyvtár esetén figyelmeztetést naplóz, majd visszavált az alapértelmezett mappákra.

@@ -134,7 +134,27 @@
         <ul>
             <li id="menu-insert-segment">Szegmens beszúrása mögé</li>
             <li id="menu-delete-segment">Szegmens törlése</li>
+            <li id="menu-regenerate-segment">Regenerálás (TTS)</li>
         </ul>
+    </div>
+
+    <!-- Regeneráció napló modal -->
+    <div class="modal fade" id="regenerateLogModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">TTS regeneráció napló</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás" id="regenerateLogCloseBtn"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="log-modal-status mb-2" id="regenerateLogStatus">Feldolgozás előkészítése...</div>
+                    <pre class="log-modal-pre" id="regenerateLogContent">Log inicializálása...</pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -146,6 +166,21 @@
             const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
             let segmentsDataString = '{{segments_data|tojson if segments_data else "[]"}}';
             let segmentsData = JSON.parse(segmentsDataString);
+            const regenerateLogModalElement = document.getElementById('regenerateLogModal');
+            let regenerateLogModal = null;
+            let regenerateLogContent = document.getElementById('regenerateLogContent');
+            let regenerateLogStatusText = document.getElementById('regenerateLogStatus');
+            let regenerateLogPollTimer = null;
+            let regenerateActiveJobId = null;
+            let regenerateAutoCloseTimeout = null;
+            let regenerateHasRefreshed = false;
+
+            if (regenerateLogModalElement && typeof bootstrap !== 'undefined') {
+                regenerateLogModal = new bootstrap.Modal(regenerateLogModalElement, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+            }
             function sanitizeSegmentTexts(segments) {
                 if (!Array.isArray(segments)) {
                     return;
@@ -167,6 +202,122 @@
 
             function invalidateSegmentPositionCache() {
                 positionsCache.clear();
+            }
+
+            function stopRegeneratePolling() {
+                if (regenerateLogPollTimer) {
+                    clearInterval(regenerateLogPollTimer);
+                    regenerateLogPollTimer = null;
+                }
+                if (regenerateAutoCloseTimeout) {
+                    clearTimeout(regenerateAutoCloseTimeout);
+                    regenerateAutoCloseTimeout = null;
+                }
+                regenerateActiveJobId = null;
+                regenerateHasRefreshed = false;
+            }
+
+            if (regenerateLogModalElement) {
+                regenerateLogModalElement.addEventListener('hidden.bs.modal', () => {
+                    stopRegeneratePolling();
+                });
+            }
+
+            function updateRegenerateStatus(status, message) {
+                const statusMap = {
+                    queued: 'Feladat sorban áll...',
+                    running: 'Feldolgozás folyamatban...',
+                    cancelling: 'Megszakítás folyamatban...',
+                    cancelled: 'Feladat megszakítva.',
+                    completed: 'Feldolgozás sikeresen befejeződött.',
+                    failed: 'Feldolgozás sikertelen.'
+                };
+                const statusLabel = statusMap[status] || 'Állapot frissítése...';
+                const combined = message ? `${statusLabel} ${message}` : statusLabel;
+                if (regenerateLogStatusText) {
+                    regenerateLogStatusText.textContent = combined;
+                }
+            }
+
+            function startRegeneratePolling(jobId) {
+                stopRegeneratePolling();
+                regenerateActiveJobId = jobId;
+                if (regenerateLogContent) {
+                    regenerateLogContent.textContent = 'Log inicializálása...';
+                }
+                updateRegenerateStatus('queued', '');
+                const poll = () => pollRegenerateJob();
+                poll();
+                regenerateLogPollTimer = setInterval(poll, 3000);
+            }
+
+            function pollRegenerateJob() {
+                if (!regenerateActiveJobId) {
+                    return;
+                }
+                fetch(`/api/workflow-log/${regenerateActiveJobId}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data.success) {
+                            if (regenerateLogContent) {
+                                regenerateLogContent.textContent = `Log lekérdezési hiba: ${data.error || 'Ismeretlen hiba'}`;
+                            }
+                            updateRegenerateStatus('failed', '');
+                            stopRegeneratePolling();
+                            return;
+                        }
+                        if (regenerateLogContent) {
+                            if (data.log_available && data.log) {
+                                regenerateLogContent.textContent = data.log;
+                                regenerateLogContent.scrollTop = regenerateLogContent.scrollHeight;
+                            } else if (!data.log_available) {
+                                regenerateLogContent.textContent = 'A log előkészítése folyamatban...';
+                            }
+                        }
+                        updateRegenerateStatus(data.status, data.message);
+                        if (data.completed) {
+                            stopRegeneratePolling();
+                            if (!regenerateHasRefreshed) {
+                                regenerateHasRefreshed = true;
+                                refreshSegmentsFromServer();
+                            }
+                            if (data.status === 'completed' && regenerateLogModal) {
+                                regenerateAutoCloseTimeout = setTimeout(() => {
+                                    regenerateLogModal.hide();
+                                }, 2000);
+                            }
+                        }
+                    })
+                    .catch(err => {
+                        if (regenerateLogContent) {
+                            regenerateLogContent.textContent = `Log lekérdezési hiba: ${err.message}`;
+                        }
+                        updateRegenerateStatus('failed', '');
+                        stopRegeneratePolling();
+                    });
+            }
+
+            function refreshSegmentsFromServer() {
+                if (currentJsonFileName === null || currentJsonFileName === undefined) {
+                    return;
+                }
+                fetch(`/api/get-segments/${currentProjectName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ json_file_name: currentJsonFileName })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success || !Array.isArray(data.segments)) {
+                        console.warn('Nem sikerült frissíteni a szegmenseket:', data.error);
+                        return;
+                    }
+                    segmentsData = data.segments;
+                    sanitizeSegmentTexts(segmentsData);
+                    invalidateSegmentPositionCache();
+                    fullRefreshUI();
+                })
+                .catch(err => console.error('Szegmens frissítés hiba:', err));
             }
 
             function getSegmentPositions(currentPxPerSec) {
@@ -903,6 +1054,52 @@
                 .catch(err => alert(`Hiba: ${err.message}`));
             }
 
+            function regenerateSegmentOnServer(segmentIndex) {
+                if (currentJsonFileName === null || currentJsonFileName === undefined) {
+                    alert('Hiányzik a JSON fájlnév, a regenerálás nem indítható.');
+                    return;
+                }
+                const payload = {
+                    json_file_name: currentJsonFileName,
+                    segment_index: segmentIndex
+                };
+                fetch(`/api/regenerate-segment/${currentProjectName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (!data.success) {
+                        alert(`Regenerálás sikertelen: ${data.error}`);
+                        return;
+                    }
+                    const message = data.message || 'Regeneráció elindítva.';
+                    if (regenerateLogModal) {
+                        if (regenerateLogContent) {
+                            regenerateLogContent.textContent = 'Log inicializálása...';
+                        }
+                        updateRegenerateStatus('queued', message);
+                        regenerateLogModal.show();
+                    } else {
+                        alert(message);
+                    }
+                    if (data.job_id) {
+                        startRegeneratePolling(data.job_id);
+                    } else if (regenerateLogModal) {
+                        if (regenerateAutoCloseTimeout) {
+                            clearTimeout(regenerateAutoCloseTimeout);
+                            regenerateAutoCloseTimeout = null;
+                        }
+                        regenerateLogContent.textContent = `${message}\nNincs naplózható feladat azonosító.`;
+                        regenerateAutoCloseTimeout = setTimeout(() => {
+                            regenerateLogModal.hide();
+                        }, 2000);
+                    }
+                })
+                .catch(err => alert(`Regenerálás hiba: ${err.message}`));
+            }
+
             document.getElementById('menu-insert-segment').addEventListener('click', () => {
                 if (currentContextMenuSegmentIndex !== -1) insertNewSegmentAfter(currentContextMenuSegmentIndex);
                 contextMenu.style.display = 'none';
@@ -911,6 +1108,13 @@
             document.getElementById('menu-delete-segment').addEventListener('click', () => {
                 if (currentContextMenuSegmentIndex !== -1 && confirm(`Biztosan törli a(z) ${currentContextMenuSegmentIndex + 1}. szegmenst?`)) {
                     deleteSegmentOnServer(currentContextMenuSegmentIndex);
+                }
+                contextMenu.style.display = 'none';
+            });
+
+            document.getElementById('menu-regenerate-segment').addEventListener('click', () => {
+                if (currentContextMenuSegmentIndex !== -1) {
+                    regenerateSegmentOnServer(currentContextMenuSegmentIndex);
                 }
                 contextMenu.style.display = 'none';
             });

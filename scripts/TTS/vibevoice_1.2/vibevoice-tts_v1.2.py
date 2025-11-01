@@ -76,6 +76,7 @@ PROJECT_ROOT = find_project_root()
 DEFAULT_EQ_CONFIG_PATH = PROJECT_ROOT / "scripts" / "TTS" / "EQ.json"
 NORMALIZER_TO_WHISPER_LANG = {"hun": "hu", "eng": "en"}
 WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
+INPUT_DIR_OVERRIDE_PLACEHOLDER = "HAGYD_URESEN_ALAPERTELMEZESKENT"
 
 
 def extract_cuda_index(device: str) -> int:
@@ -766,6 +767,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Opcionális limit a feldolgozandó szegmensek számára (debughoz).",
     )
     parser.add_argument(
+        "--input_directory_override",
+        type=str,
+        default=INPUT_DIR_OVERRIDE_PLACEHOLDER,
+        help="Opcionális könyvtár a bemeneti wav/json fájlokhoz. Hagyd üresen az alapértelmezett projektszerkezethez.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Létező kimeneti fájlok felülírása újragenerálás esetén.",
@@ -815,6 +822,24 @@ def prepare_output_directories(args: argparse.Namespace, config: Dict[str, objec
     args.output_dir_noise = str(full_project_path / cfg_subdirs["noice_splits"])
     args.input_wav_dir = full_project_path / cfg_subdirs["separated_audio_speech"]
     args.input_json_dir = full_project_path / cfg_subdirs["translated"]
+
+    override_value = getattr(args, "input_directory_override", None)
+    if isinstance(override_value, str):
+        override_candidate = override_value.strip()
+        if override_candidate and override_candidate != INPUT_DIR_OVERRIDE_PLACEHOLDER:
+            candidate_path = Path(override_candidate)
+            if not candidate_path.is_absolute():
+                candidate_path = PROJECT_ROOT / candidate_path
+            if candidate_path.is_dir():
+                args.input_wav_dir = candidate_path
+                args.input_json_dir = candidate_path
+                logger.info("Bemeneti könyvtár felülbírálva: %s", candidate_path)
+            else:
+                logger.warning(
+                    "A konfigurációban megadott bemeneti könyvtár nem létezik: %s. "
+                    "Alapértelmezett útvonalakat használunk.",
+                    candidate_path,
+                )
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     Path(args.output_dir_noise).mkdir(parents=True, exist_ok=True)

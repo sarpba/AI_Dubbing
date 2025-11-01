@@ -157,6 +157,19 @@ def prepare_segments_for_response(project_dir: str, segments: Any) -> List[Dict[
     return prepared_segments
 
 
+def find_matching_audio_file(base_name: str, directory: str) -> Optional[str]:
+    """
+    Find the first audio file in directory whose stem matches base_name.
+    Preference order follows PREFERRED_AUDIO_EXTENSIONS.
+    """
+    for extension in PREFERRED_AUDIO_EXTENSIONS:
+        candidate = base_name + extension
+        candidate_path = Path(directory) / candidate
+        if candidate_path.is_file():
+            return candidate
+    return None
+
+
 def delete_translated_split_file(project_dir: str, start: Any, end: Any) -> bool:
     """
     Delete the translated split WAV file for the provided time window, if it exists.
@@ -218,6 +231,7 @@ VIDEO_MIME_MAP = {
     '.mpg': 'video/mpeg',
     '.mpeg': 'video/mpeg'
 }
+PREFERRED_AUDIO_EXTENSIONS = ['.wav', '.mp3', '.ogg', '.flac']
 
 SCRIPTS_DIR = Path(app.root_path) / 'scripts'
 SCRIPTS_CONFIG_PATH = SCRIPTS_DIR / 'scripts.json'
@@ -3002,6 +3016,258 @@ def delete_segment_api(project_name):
         app.logger.error(f"Error deleting segment for project {project_name}: {e}", exc_info=True)
         return jsonify({'success': False, 'error': 'An unexpected error occurred on the server while deleting segment.'}), 500
 
+
+@app.route('/api/get-segments/<project_name>', methods=['POST'])
+def get_segments_api(project_name):
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'Érvénytelen projektnév.'}), 400
+
+    payload = request.get_json() or {}
+    json_file_name = payload.get('json_file_name')
+    if not json_file_name or not isinstance(json_file_name, str):
+        return jsonify({'success': False, 'error': 'Hiányzó vagy érvénytelen JSON fájlnév.'}), 400
+
+    current_config = get_config_copy()
+    workdir_path = current_config['DIRECTORIES']['workdir']
+    project_dir = os.path.join(workdir_path, sanitized_project)
+    if not os.path.isdir(project_dir):
+        return jsonify({'success': False, 'error': 'A projekt könyvtára nem található.'}), 404
+
+    project_subdirs = current_config.get('PROJECT_SUBDIRS', {})
+    translated_subdir = project_subdirs.get('translated')
+    speech_subdir = project_subdirs.get('separated_audio_speech')
+    if not translated_subdir or not speech_subdir:
+        return jsonify({'success': False, 'error': 'A konfiguráció nem tartalmazza a szükséges almappákat.'}), 500
+
+    translated_dir_path = os.path.join(project_dir, translated_subdir)
+    speech_dir_path = os.path.join(project_dir, speech_subdir)
+
+    translated_json_path = os.path.join(translated_dir_path, json_file_name)
+    speech_json_path = os.path.join(speech_dir_path, json_file_name)
+    if os.path.isfile(translated_json_path):
+        json_full_path = translated_json_path
+    elif os.path.isfile(speech_json_path):
+        json_full_path = speech_json_path
+    else:
+        return jsonify({'success': False, 'error': f'A megadott JSON fájl nem található: {json_file_name}'}), 404
+
+    try:
+        with open(json_full_path, 'r', encoding='utf-8') as fp:
+            transcription_data = json.load(fp)
+    except (OSError, json.JSONDecodeError) as exc:
+        app.logger.error("Nem sikerült beolvasni a JSON fájlt a szegmens lekérdezéshez: %s", exc, exc_info=True)
+        return jsonify({'success': False, 'error': 'Nem sikerült beolvasni a JSON fájlt.'}), 500
+
+    segments = transcription_data.get('segments', [])
+    prepared_segments = prepare_segments_for_response(project_dir, segments)
+    return jsonify({'success': True, 'segments': prepared_segments})
+
+
+@app.route('/api/regenerate-segment/<project_name>', methods=['POST'])
+def regenerate_segment_api(project_name):
+    app.logger.info("Regenerate segment requested for project: %s", project_name)
+    payload = request.get_json() or {}
+    json_file_name = payload.get('json_file_name')
+    segment_index = payload.get('segment_index')
+
+    if not json_file_name or not isinstance(json_file_name, str):
+        return jsonify({'success': False, 'error': 'Hiányzó vagy érvénytelen JSON fájlnév.'}), 400
+    if not isinstance(segment_index, int):
+        return jsonify({'success': False, 'error': 'Hiányzó vagy érvénytelen szegmens index.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'Érvénytelen projektnév.'}), 400
+
+    current_config = get_config_copy()
+    workdir_path = current_config['DIRECTORIES']['workdir']
+    project_dir = os.path.join(workdir_path, sanitized_project)
+    if not os.path.isdir(project_dir):
+        return jsonify({'success': False, 'error': 'A projekt könyvtára nem található.'}), 404
+
+    project_subdirs = current_config.get('PROJECT_SUBDIRS', {})
+    translated_subdir = project_subdirs.get('translated')
+    speech_subdir = project_subdirs.get('separated_audio_speech')
+    temp_subdir = project_subdirs.get('temp')
+    if not all([translated_subdir, speech_subdir, temp_subdir]):
+        return jsonify({'success': False, 'error': 'A konfiguráció nem tartalmazza a szükséges almappákat.'}), 500
+
+    translated_dir_path = os.path.join(project_dir, translated_subdir)
+    speech_dir_path = os.path.join(project_dir, speech_subdir)
+    temp_dir_path = os.path.join(project_dir, temp_subdir)
+    os.makedirs(temp_dir_path, exist_ok=True)
+
+    translated_json_path = os.path.join(translated_dir_path, json_file_name)
+    speech_json_path = os.path.join(speech_dir_path, json_file_name)
+    if os.path.isfile(translated_json_path):
+        json_full_path = translated_json_path
+    elif os.path.isfile(speech_json_path):
+        json_full_path = speech_json_path
+    else:
+        return jsonify({'success': False, 'error': f'A megadott JSON fájl nem található: {json_file_name}'}), 404
+
+    try:
+        with open(json_full_path, 'r', encoding='utf-8') as source_fp:
+            transcription_data = json.load(source_fp)
+    except (OSError, json.JSONDecodeError) as exc:
+        app.logger.error("Nem sikerült beolvasni a JSON fájlt regeneráláshoz: %s", exc, exc_info=True)
+        return jsonify({'success': False, 'error': 'Nem sikerült beolvasni a JSON fájlt a regeneráláshoz.'}), 500
+
+    segments = transcription_data.get('segments')
+    if not isinstance(segments, list) or not segments:
+        return jsonify({'success': False, 'error': 'A JSON fájl nem tartalmaz szegmens listát.'}), 400
+    if not (0 <= segment_index < len(segments)):
+        return jsonify({'success': False, 'error': f'Érvénytelen szegmens index: {segment_index}'}), 400
+
+    target_segment = copy.deepcopy(segments[segment_index])
+    if isinstance(target_segment, dict):
+        target_segment.pop('words', None)
+
+    sanitize_segment_strings([target_segment])
+    regenerate_payload = {
+        'segments': [target_segment],
+        'segment_index': segment_index,
+        'source_json': json_file_name
+    }
+
+    temp_json_path = os.path.join(temp_dir_path, json_file_name)
+    try:
+        with open(temp_json_path, 'w', encoding='utf-8') as temp_fp:
+            json.dump(regenerate_payload, temp_fp, ensure_ascii=False, indent=2)
+    except OSError as exc:
+        app.logger.error("Nem sikerült létrehozni a regenerációs JSON fájlt: %s", exc, exc_info=True)
+        return jsonify({'success': False, 'error': 'Nem sikerült létrehozni a regenerációs JSON fájlt.'}), 500
+
+    base_name, _ = os.path.splitext(json_file_name)
+    matching_audio_name = find_matching_audio_file(base_name, speech_dir_path)
+    if not matching_audio_name:
+        return jsonify({'success': False, 'error': 'Nem található a JSON fájlhoz tartozó referencia WAV.'}), 404
+
+    source_audio_path = os.path.join(speech_dir_path, matching_audio_name)
+    temp_audio_path = os.path.join(temp_dir_path, matching_audio_name)
+    if not os.path.exists(temp_audio_path):
+        try:
+            os.symlink(os.path.abspath(source_audio_path), temp_audio_path)
+        except FileExistsError:
+            pass
+        except (AttributeError, NotImplementedError):
+            app.logger.error("A környezet nem támogatja a szimbolikus linket, audio fájl nem érhető el másolás nélkül.")
+            return jsonify({'success': False, 'error': 'A környezet nem támogatja a szimbolikus linkek létrehozását, a referencia WAV nem érhető el.'}), 500
+        except OSError as exc:
+            app.logger.error("Nem sikerült létrehozni a referencia WAV szimbolikus linkjét: %s", exc, exc_info=True)
+            return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a referencia WAV fájlt.'}), 500
+
+    workflow_state_path = get_project_workflow_state_path(sanitized_project, config_snapshot=current_config)
+    if not workflow_state_path or not workflow_state_path.is_file():
+        return jsonify({'success': False, 'error': 'A projekt nem tartalmaz workflow_state.json fájlt.'}), 404
+
+    try:
+        with workflow_state_path.open('r', encoding='utf-8') as workflow_fp:
+            workflow_state_raw = json.load(workflow_fp)
+    except (OSError, json.JSONDecodeError) as exc:
+        app.logger.error("Nem sikerült beolvasni a workflow_state.json fájlt: %s", exc, exc_info=True)
+        return jsonify({'success': False, 'error': 'Nem sikerült beolvasni a workflow_state.json fájlt.'}), 500
+
+    if isinstance(workflow_state_raw, dict):
+        workflow_steps = workflow_state_raw.get('steps') or []
+        template_id = workflow_state_raw.get('template_id')
+    elif isinstance(workflow_state_raw, list):
+        workflow_steps = workflow_state_raw
+        template_id = None
+    else:
+        workflow_steps = []
+        template_id = None
+
+    tts_steps = [
+        step for step in workflow_steps
+        if isinstance(step, dict) and isinstance(step.get('script'), str) and step['script'].startswith('TTS/')
+    ]
+
+    if not tts_steps:
+        return jsonify({'success': False, 'error': 'A workflow-ban nem található TTS szkript. Regenerálás nem indítható.'}), 400
+    if len(tts_steps) > 1:
+        return jsonify({'success': False, 'error': 'Egynél több TTS szkript található a workflow-ban. Csak egy TTS lépés engedélyezett a regeneráláshoz.'}), 400
+
+    original_tts_step = tts_steps[0]
+    step_params = dict(original_tts_step.get('params') or {})
+    temp_directory_override = str(Path(temp_dir_path).resolve())
+    step_params['input_directory_override'] = temp_directory_override
+    step_params['max_retries'] = '1'
+    step_params['pitch_retry'] = '1'
+    step_params['save_failures'] = True
+
+    regenerate_step = {
+        'script': original_tts_step.get('script'),
+        'enabled': True,
+        'halt_on_fail': bool(original_tts_step.get('halt_on_fail', True)),
+        'params': step_params
+    }
+
+    try:
+        normalized_steps, required_keys, _ = normalize_workflow_steps([regenerate_step])
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    with workflow_lock:
+        active_for_project = [
+            job_id for job_id, job in workflow_jobs.items()
+            if job.get('project') == sanitized_project and job.get('status') in ('queued', 'running', 'cancelling')
+        ]
+    if active_for_project:
+        return jsonify({'success': False, 'error': 'Már fut egy workflow ehhez a projekthez. Várd meg a befejezést.'}), 409
+
+    key_status = determine_workflow_key_status(required_keys)
+    missing_keys = [
+        info['label']
+        for info in key_status['keys'].values()
+        if info['required'] and not info['present']
+    ]
+    if missing_keys:
+        missing_list = ', '.join(missing_keys)
+        return jsonify({'success': False, 'error': f'Hiányzó API kulcs(ok) a TTS futtatásához: {missing_list}'}), 400
+
+    job_id = uuid.uuid4().hex
+    encoded_steps = mask_workflow_secret_params(normalized_steps)
+    job_data = {
+        'job_id': job_id,
+        'project': sanitized_project,
+        'status': 'queued',
+        'created_at': datetime.utcnow().isoformat(),
+        'message': 'Regeneráció sorban áll.',
+        'log': None,
+        'cancel_requested': False,
+        'workflow': encoded_steps,
+        'execution_steps': encoded_steps,
+        'required_keys': list(required_keys),
+        'template_id': template_id
+    }
+    register_workflow_job(job_id, job_data)
+
+    thread_payload = {
+        'steps': normalized_steps,
+        'workflow_state': normalized_steps,
+        'template_id': template_id
+    }
+    thread = threading.Thread(
+        target=run_workflow_job,
+        args=(job_id, sanitized_project, thread_payload),
+        daemon=True
+    )
+    set_workflow_thread(job_id, thread)
+    thread.start()
+
+    message = (
+        f'Szegmens regeneráció elindítva. A feldolgozás a(z) "{matching_audio_name}" referencia WAV alapján történik. '
+        'Az állapot a felülvizsgálati nézetben is követhető.'
+    )
+    return jsonify({
+        'success': True,
+        'message': message,
+        'job_id': job_id,
+        'temp_json_path': os.path.relpath(temp_json_path, project_dir)
+    })
+
 @app.route('/save-workflow-keys', methods=['POST'])
 def save_workflow_keys():
     data = request.get_json() or {}
@@ -3421,6 +3687,7 @@ def get_workflow_log(job_id):
         'log': log_text,
         'log_available': log_available,
         'status': job.get('status'),
+        'message': job.get('message'),
         'completed': completed,
         'cancel_requested': job.get('cancel_requested', False)
     })

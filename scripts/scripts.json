@@ -2450,6 +2450,14 @@
         "default": -1
       },
       {
+        "name": "input_directory_override",
+        "flags": [
+          "--input_directory_override"
+        ],
+        "type": "option",
+        "default": "HAGYD_URESEN_ALAPERTELMEZESKENT"
+      },
+      {
         "name": "max_segments",
         "flags": [
           "--max_segments"

@@ -477,6 +477,23 @@ body {
   height: 40px; /* Standard height for controls */
 }
 
+.log-modal-pre {
+  max-height: 50vh;
+  overflow-y: auto;
+  background-color: #111;
+  color: #e9ecef;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-family: "Fira Mono", "Courier New", monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.log-modal-status {
+  font-size: 0.85rem;
+  color: var(--secondary-color);
+}
+
 .theme-editor .color-preview {
   width: 3rem;
   height: 2.5rem;
