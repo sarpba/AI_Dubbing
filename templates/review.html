@@ -70,6 +70,21 @@
             applyTheme(getStoredPreference());
         })();
     </script>
+    <style>
+        .floating-help-button {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 1040;
+        }
+
+        @media (max-width: 576px) {
+            .floating-help-button {
+                bottom: 1rem;
+                right: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="theme-controls">
@@ -158,20 +173,18 @@
     </div>
 
     <div class="container-fluid mb-5 px-4">
-        <div class="card text-start">
-            <div class="card-body">
-                <h2 class="h4">Segítség a felület használatához</h2>
-                <p class="text-muted mb-3">Az alábbi összefoglaló segít eligazodni a felülvizsgálati nézet funkciói között.</p>
-                <ul class="mb-0">
-                    <li><strong>Lejátszás:</strong> A felső <em>Lejátszás</em> gombbal indítható vagy állítható meg az audió. A Wavesurfer idővonal görgethető és nagyítható.</li>
-                    <li><strong>Szegmens kiválasztása:</strong> A színes sávokra kattintva a hozzátartozó hangrészletet jelölheted ki. Jobb gombbal felugró menü érhető el szegmens beszúrására vagy törlésére.</li>
-                    <li><strong>Szöveg szerkesztése:</strong> Az eredeti és fordított szöveg mezőire kattintva azonnal megáll a lejátszás, és a mező mérete a teljes tartalomhoz igazodik. A módosítások a mező elhagyásakor mentésre kerülnek.</li>
-                    <li><strong>Billentyűparancs:</strong> Enter lenyomása szerkesztés közben lezárja a mezőt és megakadályozza az új sor felvitelét.</li>
-                    <li><strong>Hullámforma:</strong> A hullámforma feletti idővonalon a szegmensek automatikusan újrarendeződnek az átméretezés és görgetés után, biztosítva az áttekinthető elrendezést.</li>
-                </ul>
-            </div>
+        <div class="alert alert-info mb-0" role="alert">
+            Útmutatóra van szükséged? Kattints a jobb alsó sarokban lévő <strong>Súgó</strong> gombra a felülvizsgálati nézet részletes ismertetéséhez.
         </div>
     </div>
+
+    <button type="button"
+            class="btn btn-outline-info shadow floating-help-button"
+            data-bs-toggle="modal"
+            data-bs-target="#reviewHelpModal"
+            aria-label="Felülvizsgálati nézet súgója">
+        Súgó
+    </button>
 
     <script src="{{ url_for('static', filename='vendor/wavesurfer/wavesurfer.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/wavesurfer/regions.min.js') }}"></script>
@@ -183,6 +196,64 @@
             <li id="menu-delete-segment">Szegmens törlése</li>
             <li id="menu-regenerate-segment">Regenerálás (TTS)</li>
         </ul>
+    </div>
+
+    <div class="modal fade" id="reviewHelpModal" tabindex="-1" aria-labelledby="reviewHelpModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reviewHelpModalLabel">Felülvizsgálati nézet súgó</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">
+                        Ez a felület a kiválasztott projekt audió- és szöveg-szegmenseinek felülvizsgálatára szolgál. Itt ellenőrizheted, szerkesztheted és újragenerálhatod a tartalmakat, miközben folyamatosan visszajelzést kapsz az állapotokról.
+                    </p>
+                    <h6 class="fw-bold">Navigáció és fájlinformációk</h6>
+                    <ul class="mb-4">
+                        <li>A fejlécben látható az aktuális projekt neve, valamint a <em>Vissza a projekthez</em> gomb a projektoldalra ugráshoz.</li>
+                        <li>A fájlinformációs blokk jelzi, mely audió és JSON fájl van betöltve, illetve hány szegmens áll rendelkezésre.</li>
+                    </ul>
+                    <h6 class="fw-bold">Lejátszás és idővonal</h6>
+                    <ul class="mb-4">
+                        <li>A felső <strong>Lejátszás</strong> gombbal indíthatod vagy állíthatod meg az audiót; lejátszás közben <em>Szünet</em>-re vált.</li>
+                        <li>A hullámforma vízszintesen görgethető az egérgörgővel vagy az érintőpad vízszintes mozdulataival; a rendszer automatikusan alkalmazkodik a nagyobb felvételekhez.</li>
+                        <li>A kék kiemelések a Wavesurfer régiói: kattintásra az adott szakasz játszódik le, az élek húzásával pedig a szegmens kezdő- és végpontja finomhangolható. A változtatások automatikusan mentésre kerülnek.</li>
+                    </ul>
+                    <h6 class="fw-bold">Szegmens szerkesztése</h6>
+                    <ul class="mb-4">
+                        <li>Minden szegmenshez két szövegmező tartozik: az eredeti és a fordított szöveg. A mezők mérete a tartalomhoz igazodik, így könnyen áttekinthetők a hosszabb mondatok is.</li>
+                        <li>Kattintáskor a lejátszás megáll, a mező elhagyásakor (vagy Enter megnyomásával) a módosítás azonnal mentésre kerül a szerverre.</li>
+                        <li>A rendszer a virtuális görgetésnek köszönhetően nagy projektek esetén is csak a látható szegmenseket tölti be, így a felület gyors marad.</li>
+                    </ul>
+                    <h6 class="fw-bold">Szegmens műveletek</h6>
+                    <ul class="mb-4">
+                        <li>Jobb gombbal a színes idővonalsávokra kattintva megjelenik a helyi menü, ahol új szegmens beszúrása, meglévő törlése vagy TTS regenerálás indítása érhető el.</li>
+                        <li>Új szegmens beszúrásakor a rendszer automatikusan frissíti a sorszámozást, és szükség esetén lekéri az aktuális adatokat a szerverről.</li>
+                        <li>Törléskor a kapcsolódó vizuális elemek és a Wavesurfer régiók is frissülnek, így a nézet mindig a naprakész állapotot mutatja.</li>
+                    </ul>
+                    <h6 class="fw-bold">TTS és audió kezelése</h6>
+                    <ul class="mb-4">
+                        <li>A szegmensek jobb oldalán található <strong>Lejátszás</strong> gomb akkor aktív, ha a szakaszhoz tartozik legenerált TTS. Kattintva megnyílik az audió előnézet, ahol az AudioTrimmer segítségével vághatod a hangot.</li>
+                        <li>Ha még nincs TTS a szegmenshez, a gomb szürke és <em>Nincs TTS</em> feliratot kap, jelezve, hogy előbb regenerálni kell a hangot.</li>
+                        <li>A TTS regenerálás után a rendszer automatikusan frissíti a gomb állapotát és elérhetővé teszi az új hangfájlt.</li>
+                    </ul>
+                    <h6 class="fw-bold">Regenerációs folyamat követése</h6>
+                    <ul class="mb-4">
+                        <li>A <em>Regenerálás (TTS)</em> művelet indításakor megjelenik a napló modal, amely folyamatosan mutatja a feldolgozás állapotát.</li>
+                        <li>Sikeres befejezés után a napló automatikusan bezárul, szükség esetén manuálisan is zárható.</li>
+                    </ul>
+                    <h6 class="fw-bold">Hasznos tippek</h6>
+                    <ul class="mb-0">
+                        <li>Hosszú felvételeknél hagyd, hogy a görgetés pillanatnyilag betöltse a szegmenseket – a háttérben futó optimalizáció gondoskodik arról, hogy a teljesítmény ne csökkenjen.</li>
+                        <li>Hibajelzés esetén a felület visszajelzést ad, a <em>Frissítés</em> műveletek pedig újratöltik a legfrissebb adatokat a szerverről.</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Regeneráció napló modal -->

@@ -3191,7 +3191,7 @@ def regenerate_segment_api(project_name):
 
     original_tts_step = tts_steps[0]
     step_params = dict(original_tts_step.get('params') or {})
-    step_params['input_directory_override'] = 'true
+    step_params['input_directory_override'] = 'true'
     step_params['max_retries'] = '1'
     step_params['pitch_retry'] = '1'
     step_params['save_failures'] = True
