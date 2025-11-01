@@ -715,11 +715,14 @@
             state.elements.title.textContent = fileName || 'Audió szerkesztése';
         }
         prepareTrimModal(fileName, filePath);
-        const waveSurfer = initWaveSurfer();
-        if (!waveSurfer) {
-            setTrimError('A hullámforma lejátszó nem érhető el ebben a böngészőben.');
-            toggleWaveformLoading(true, 'Hullámforma nem érhető el.');
-        } else {
+
+        const loadAudioIntoWaveSurfer = () => {
+            const waveSurfer = initWaveSurfer();
+            if (!waveSurfer) {
+                setTrimError('A hullámforma lejátszó nem érhető el ebben a böngészőben.');
+                toggleWaveformLoading(true, 'Hullámforma nem érhető el.');
+                return;
+            }
             if (state.waveSurferRegions && typeof state.waveSurferRegions.clearRegions === 'function') {
                 state.waveSurferRegions.clearRegions();
             } else {
@@ -733,12 +736,31 @@
                 // ignore
             }
             waveSurfer.load(fileUrl);
+        };
+
+        if (state.modalElement && state.modalElement.classList.contains('show')) {
+            loadAudioIntoWaveSurfer();
+        } else if (state.modalElement) {
+            const handler = () => {
+                state.modalElement.removeEventListener('shown.bs.modal', handler);
+                loadAudioIntoWaveSurfer();
+            };
+            state.modalElement.addEventListener('shown.bs.modal', handler);
+        } else {
+            loadAudioIntoWaveSurfer();
         }
+
         modal.show();
     }
 
-    global.AudioTrimmer = {
+    const api = {
         init,
         showPreview: showAudioPreview
     };
-})(window);
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = api;
+    } else {
+        global.AudioTrimmer = api;
+    }
+})(typeof window !== 'undefined' ? window : globalThis);

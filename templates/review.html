@@ -80,6 +80,52 @@
         </button>
     </div>
 
+    <div class="modal fade" id="audioPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="audioPreviewTitle">Audió szerkesztése</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="audio-waveform mb-3">
+                        <div id="audioWaveform"></div>
+                        <div id="audioWaveformLoading" class="waveform-loading-overlay d-none">Betöltés...</div>
+                    </div>
+                    <div class="small text-muted">
+                        Húzd az egeret a hullámformán a kijelöléshez, vagy állítsd a csúszkákkal a kezdő és záró pontot.
+                    </div>
+                    <div class="audio-trim-info d-flex flex-wrap align-items-center gap-3 mt-3">
+                        <div>Kezdet: <span id="trimStartDisplay">—</span></div>
+                        <div>Vége: <span id="trimEndDisplay">—</span></div>
+                        <div>Hossz: <span id="trimDurationDisplay">—</span></div>
+                    </div>
+                    <div class="mt-3">
+                        <label for="trimStartRange" class="form-label mb-1">Kezdőpont</label>
+                        <input type="range" class="form-range" id="trimStartRange" min="0" max="0" step="0.01" value="0" disabled>
+                    </div>
+                    <div class="mt-3">
+                        <label for="trimEndRange" class="form-label mb-1">Végpont</label>
+                        <input type="range" class="form-range" id="trimEndRange" min="0" max="0" step="0.01" value="0" disabled>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="trimResetSelectionBtn" disabled>Teljes fájl kijelölése</button>
+                        <span class="small text-muted">Mentéskor az eredeti fájl felülíródik.</span>
+                    </div>
+                    <div class="alert alert-danger py-2 px-3 small mt-3 d-none" id="trimErrorAlert"></div>
+                </div>
+                <div class="modal-footer">
+                    <div class="me-auto d-flex align-items-center gap-2">
+                        <div class="spinner-border spinner-border-sm text-primary d-none" role="status" id="trimSaveSpinner"></div>
+                        <span class="small text-muted" id="trimStatusText"></span>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                    <button type="button" class="btn btn-primary" id="trimSaveBtn" disabled>Mentés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1>Aktív projekt: {{project_name}}</h1>
@@ -129,6 +175,7 @@
 
     <script src="{{ url_for('static', filename='vendor/wavesurfer/wavesurfer.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/wavesurfer/regions.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/audio-trimmer.js') }}"></script>
     <!-- Felugró menü HTML struktúrája -->
     <div id="segment-context-menu" class="custom-context-menu">
         <ul>
@@ -164,6 +211,7 @@
             
             const audioUrl = "{{audio_url|safe if audio_url else ''}}";
             const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
+            const currentProjectName = "{{project_name|safe}}";
             let segmentsDataString = '{{segments_data|tojson if segments_data else "[]"}}';
             let segmentsData = JSON.parse(segmentsDataString);
             const regenerateLogModalElement = document.getElementById('regenerateLogModal');
@@ -181,6 +229,77 @@
                     keyboard: false
                 });
             }
+
+            const buildWorkdirUrl = (relativePath) => {
+                const segments = [currentProjectName];
+                if (relativePath) {
+                    String(relativePath)
+                        .replace(/^\/+/, '')
+                        .split('/')
+                        .forEach(part => {
+                            if (part) {
+                                segments.push(part);
+                            }
+                        });
+                }
+                const encoded = segments.map(part => encodeURIComponent(part));
+                return `/workdir/${encoded.join('/')}`;
+            };
+
+            function ensureAudioTrimmer() {
+                if (window.AudioTrimmer && typeof window.AudioTrimmer.init === 'function') {
+                    window.AudioTrimmer.init({
+                        projectName: currentProjectName,
+                        buildWorkdirUrl,
+                        refreshDirectory: () => {},
+                        reloadFileBrowser: () => {},
+                        cssEscape: (value) => value
+                    });
+                }
+            }
+
+            function generateSegmentAudioRelativePath(segment) {
+                if (!translatedSplitsDir || !segment || !segment.has_translated_split) {
+                    return null;
+                }
+                const startTimeFormatted = formatTimeForFilename(segment.start);
+                const endTimeFormatted = formatTimeForFilename(segment.end);
+                const wavFilename = `${startTimeFormatted}_${endTimeFormatted}.wav`;
+                return `${translatedSplitsDir}/${wavFilename}`;
+            }
+
+            function openSegmentAudioModal(segment) {
+                ensureAudioTrimmer();
+                const relativePath = generateSegmentAudioRelativePath(segment);
+                if (!relativePath) {
+                    return;
+                }
+                const fileUrl = buildWorkdirUrl(relativePath);
+                const fileName = relativePath.split('/').pop();
+                if (window.AudioTrimmer && typeof window.AudioTrimmer.showPreview === 'function') {
+                    try {
+                        window.AudioTrimmer.showPreview(fileName, fileUrl, relativePath);
+                        return;
+                    } catch (error) {
+                        console.error('AudioTrimmer előnézeti hiba:', error);
+                    }
+                }
+                window.open(fileUrl, '_blank');
+            }
+
+            function configurePlaybackButton(button, segment) {
+                if (!button) {
+                    return;
+                }
+                const hasAudio = Boolean(segment && segment.has_translated_split && translatedSplitsDir);
+                button.disabled = !hasAudio;
+                button.classList.toggle('btn-outline-primary', hasAudio);
+                button.classList.toggle('btn-outline-secondary', !hasAudio);
+                button.textContent = hasAudio ? 'Lejátszás' : 'Nincs TTS';
+                button.title = hasAudio ? 'Megnyitja a szegmens audióját a modális lejátszóban' : 'Ehhez a szegmenshez még nincs TTS hang.';
+            }
+
+            ensureAudioTrimmer();
             function sanitizeSegmentTexts(segments) {
                 if (!Array.isArray(segments)) {
                     return;
@@ -315,6 +434,7 @@
                     segmentsData = data.segments;
                     sanitizeSegmentTexts(segmentsData);
                     invalidateSegmentPositionCache();
+                    ensureAudioTrimmer();
                     fullRefreshUI();
                 })
                 .catch(err => console.error('Szegmens frissítés hiba:', err));
@@ -328,7 +448,6 @@
                 return positionsCache.get(cacheKey);
             }
             
-            const currentProjectName = "{{project_name|safe}}";
             let currentJsonFileNameString = '{{json_file_name|tojson if json_file_name else "null"}}';
             let currentJsonFileName = (currentJsonFileNameString && currentJsonFileNameString !== 'null') ? JSON.parse(currentJsonFileNameString) : null;
 
@@ -572,29 +691,27 @@
                         segmentContainer.appendChild(originalTextarea);
                         segmentContainer.appendChild(translatedTextarea);
 
-                        // Audio player hozzáadása
-                        if (translatedSplitsDir && hasTranslatedSplit) {
-                            const startTimeFormatted = formatTimeForFilename(segment.start);
-                            const endTimeFormatted = formatTimeForFilename(segment.end);
-                            const wavFilename = `${startTimeFormatted}_${endTimeFormatted}.wav`;
-                            
-                            const audioPlayer = document.createElement('audio');
-                            audioPlayer.controls = true;
-                            audioPlayer.src = `/workdir/${currentProjectName}/${translatedSplitsDir}/${wavFilename}`;
-                            audioPlayer.className = 'segment-audio-player';
-                            audioPlayer.preload = 'none'; // Lazy loading
-                            audioPlayer.addEventListener('error', function(e) {
-                                console.warn(`Nem tölthető be az audio a(z) ${index}. szegmenshez: ${this.src}`);
-                                this.style.display = 'none';
-                            });
-                            
-                            segmentContainer.appendChild(audioPlayer);
-                        }
+                        const playbackWrapper = document.createElement('div');
+                        playbackWrapper.className = 'd-flex flex-wrap gap-2 align-items-center';
+
+                        const playbackButton = document.createElement('button');
+                        playbackButton.type = 'button';
+                        playbackButton.className = 'btn btn-sm btn-outline-primary segment-audio-trigger';
+                        playbackButton.addEventListener('click', () => {
+                            const latestSegment = segmentsData[index] || segment;
+                            if (latestSegment && latestSegment.has_translated_split) {
+                                openSegmentAudioModal(latestSegment);
+                            }
+                        });
+                        configurePlaybackButton(playbackButton, segment);
+                        playbackWrapper.appendChild(playbackButton);
+
+                        segmentContainer.appendChild(playbackWrapper);
 
                         autoResizeTextarea(originalTextarea);
                         autoResizeTextarea(translatedTextarea);
                         
-                        resolve({ element: segmentContainer, index, originalTextarea, translatedTextarea });
+                        resolve({ element: segmentContainer, index, originalTextarea, translatedTextarea, playbackButton });
                     });
                 });
             }
@@ -650,6 +767,8 @@
                                     cachedElement.style.left = `${position.left}px`;
                                     cachedElement.style.top = `${position.top}px`;
                                     cachedElement.style.width = `${position.width}px`;
+                                    const cachedButton = cachedElement.querySelector('.segment-audio-trigger');
+                                    configurePlaybackButton(cachedButton, segmentsData[index]);
                                     segmentsTimelineContainer.appendChild(cachedElement);
                                 }
                             }
@@ -661,9 +780,10 @@
                     
                     // Batch DOM insertion
                     const fragment = document.createDocumentFragment();
-                    newElements.forEach(({ element, index, originalTextarea, translatedTextarea }) => {
+                    newElements.forEach(({ element, index, originalTextarea, translatedTextarea, playbackButton }) => {
                         segmentElementsCache.set(index, element);
                         visibleSegments.add(index);
+                        configurePlaybackButton(playbackButton, segmentsData[index]);
                         fragment.appendChild(element);
                         
                         // Event listeners hozzáadása az új elemekhez
@@ -680,6 +800,8 @@
                             element.style.left = `${position.left}px`;
                             element.style.top = `${position.top}px`;
                             element.style.width = `${position.width}px`;
+                            const playbackButton = element.querySelector('.segment-audio-trigger');
+                            configurePlaybackButton(playbackButton, segmentsData[index]);
                         }
                     });
                     
@@ -832,16 +954,8 @@
                                 if (translatedTextarea && translatedTextarea.value !== newTranslatedText) {
                                     translatedTextarea.value = newTranslatedText;
                                 }
-                                const audioElement = element.querySelector('.segment-audio-player');
-                                if (segmentsData[segmentIndex].has_translated_split) {
-                                    if (audioElement && translatedSplitsDir) {
-                                        const startTimeFormatted = formatTimeForFilename(segmentsData[segmentIndex].start);
-                                        const endTimeFormatted = formatTimeForFilename(segmentsData[segmentIndex].end);
-                                        audioElement.src = `/workdir/${currentProjectName}/${translatedSplitsDir}/${startTimeFormatted}_${endTimeFormatted}.wav`;
-                                    }
-                                } else if (audioElement) {
-                                    audioElement.remove();
-                                }
+                                const playbackButton = element.querySelector('.segment-audio-trigger');
+                                configurePlaybackButton(playbackButton, segmentsData[segmentIndex]);
                             }
                         }
                         if (hasSplitChanged) {
