@@ -1,7 +1,9 @@
 # AI Dubbing
 
 <p align="center">
-  <img src="static/logo.png" alt="AI Dubbing logo" width="240">
+  <a href="https://youtu.be/r5vSj6TRk8Y" onclick="window.open('https://youtu.be/r5vSj6TRk8Y', 'ai_dubbing_demo', 'width=960,height=540'); return false;">
+    <img src="static/logo.png" alt="AI Dubbing logo" width="240">
+  </a>
 </p>
 
 ## Overview
