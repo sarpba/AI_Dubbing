@@ -68,6 +68,9 @@ SAMPLE_RATE = 16000
 DEFAULT_MAX_PAUSE_S = 0.6
 DEFAULT_PADDING_S = 0.2
 DEFAULT_MAX_SEGMENT_S = 11.5
+DEFAULT_MIN_SILENCE_S = 0.2
+DEFAULT_SILENCE_THRESHOLD = 1e-3
+SILENCE_LOOKBACK_S = 1.0
 
 
 def load_config_and_get_paths(project_name: str) -> str:
@@ -132,6 +135,25 @@ def _to_serializable(obj: Any) -> Any:
         except Exception:
             pass
     return repr(obj)
+
+
+def _find_silence_run(audio_segment: np.ndarray, *, threshold: float, min_run: int) -> Optional[int]:
+    """
+    Visszaadja a csend kezdetének indexét a szegmens végéhez közel, ha található min_run hosszú csend.
+    A visszatérési érték az audio_segment elejénél vett abszolút index (0 alapú).
+    """
+    if audio_segment.size < min_run:
+        return None
+    below = np.abs(audio_segment) <= threshold
+    count = 0
+    for idx in range(audio_segment.size - 1, -1, -1):
+        if below[idx]:
+            count += 1
+            if count >= min_run:
+                return idx - count + 1
+        else:
+            count = 0
+    return None
 
 
 def build_decoding_cfg(
@@ -286,23 +308,43 @@ def select_best_transcript(
 
 
 def prepare_chunks(audio: np.ndarray, chunk_len_s: int) -> List[Tuple[np.ndarray, float]]:
-    """Felvétel darabolása fix hosszú (chunk_len_s) darabokra."""
+    """Felvétel darabolása adaptív hosszú darabokra, csend határok figyelembevételével."""
     chunk_len_s = max(MIN_CHUNK_S, min(MAX_CHUNK_S, chunk_len_s))
     if audio.ndim > 1:
         # Librosa mono formátumot ad vissza, de biztos ami biztos.
         audio = np.mean(audio, axis=0)
     total_samples = len(audio)
     chunk_size = int(chunk_len_s * SAMPLE_RATE)
+    min_silence_samples = max(1, int(DEFAULT_MIN_SILENCE_S * SAMPLE_RATE))
+    lookback_samples = max(min_silence_samples, int(SILENCE_LOOKBACK_S * SAMPLE_RATE))
     chunks: List[Tuple[np.ndarray, float]] = []
-    for start in range(0, total_samples, chunk_size):
-        end = min(total_samples, start + chunk_size)
-        segment = audio[start:end]
-        if not segment.size:
-            continue
-        if np.max(np.abs(segment)) < 1e-4:
-            # Teljesen csendes rész kihagyható.
-            continue
-        chunks.append((segment, start / SAMPLE_RATE))
+    position = 0
+    while position < total_samples:
+        max_end = min(position + chunk_size, total_samples)
+        split_idx = max_end
+        if max_end < total_samples:
+            window_start = max(position, max_end - lookback_samples)
+            window = audio[window_start:max_end]
+            silence_offset = _find_silence_run(
+                window,
+                threshold=DEFAULT_SILENCE_THRESHOLD,
+                min_run=min_silence_samples,
+            )
+            if silence_offset is not None:
+                candidate_split = window_start + silence_offset
+                if candidate_split > position:
+                    split_idx = candidate_split
+        if split_idx <= position:
+            split_idx = max_end
+        segment = audio[position:split_idx]
+        if segment.size and np.max(np.abs(segment)) >= 1e-4:
+            chunks.append((segment, position / SAMPLE_RATE))
+        position = split_idx
+    # Ha maradt egy nagyon csendes, de nem üres rész a végén, hagyjuk meg utolsó chunknak.
+    if position < total_samples:
+        tail = audio[position:total_samples]
+        if tail.size:
+            chunks.append((tail, position / SAMPLE_RATE))
     return chunks
 
 

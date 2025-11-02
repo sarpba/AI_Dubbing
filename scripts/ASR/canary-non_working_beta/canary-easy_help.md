@@ -13,7 +13,7 @@ A szkript az NVIDIA Canary ASR modellt futtatja a `separated_audio_speech` mapp�
 - `batch_size` (`--batch-size`, option, alapértelmezés: `4`): Hány chunk kerüljön egyszerre GPU-ra. (Jelenleg a szóalapú időbélyegek stabilitása érdekében a szkript egydarabos batch-sel fut, így ez a kapcsoló inkább jövőbeni kompatibilitás miatt maradt meg.)
 - `beam_size` (`--beam-size`, option, alapértelmezés: `5`): Beam-search szélessége a dekóderben.
 - `len_pen` (`--len-pen`, option, alapértelmezés: `1.0`): Hossz-büntetés a dekóderben; 1 felett a rövidebb, 1 alatt a hosszabb hipotéziseket részesíti előnyben.
-- `chunk` (`--chunk`, option, alapértelmezés: `30`): A feldolgozó chunkok hossza másodpercben (10–120 mp tartomány javasolt).
+- `chunk` (`--chunk`, option, alapértelmezés: `30`): A chunk maximális hossza másodpercben (10–120 mp tartomány javasolt); a szkript a határ előtt legfeljebb 1 mp-nyi visszatekintésben keres legalább 0,2 mp tétlencsendet, és ha talál, ott vágja el a chunkot, csökkentve a szóvégek darabolását.
 - `max_pause` (`--max-pause`, option, alapértelmezés: `0.6`): A szóközi szünet, amely fölött új mondatszegmens indul a kimenetben.
 - `timestamp_padding` (`--timestamp-padding`, option, alapértelmezés: `0.2`): Ennyivel tolja ki a szegmentált szavak elejét/végét, hogy jobban fedjék a beszédet.
 - `max_segment_duration` (`--max-segment-duration`, option, alapértelmezés: `11.5`): A `segments` bejegyzések maximális hossza másodpercben (0 = nincs limit).
