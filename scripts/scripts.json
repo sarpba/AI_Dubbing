@@ -1652,7 +1652,7 @@
           "--model"
         ],
         "type": "option",
-        "default": "openai/gpt-4o"
+        "default": "google/gemini-2.0-flash-001"
       },
       {
         "name": "stream",

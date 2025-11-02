@@ -7,6 +7,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI, OpenAIError
@@ -24,6 +25,52 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_KEY_FIELD = "openrouter_api_key"
 
 logger = logging.getLogger("translate_openrouter")
+
+
+class ApiInteractionLogger:
+    """Append OpenRouter request/response pairs to a JSONL log."""
+
+    def __init__(self, log_path: Path) -> None:
+        self.log_path = log_path
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def log(self, request: Dict[str, Any], response: Optional[Any] = None, error: Optional[str] = None) -> None:
+        entry: Dict[str, Any] = {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "request": request,
+        }
+        if response is not None:
+            entry["response"] = response
+        if error is not None:
+            entry["error"] = error
+
+        with self.log_path.open("a", encoding="utf-8") as fp:
+            fp.write(json.dumps(entry, ensure_ascii=False))
+            fp.write("\n")
+
+
+def serialize_api_response(response: Any) -> Any:
+    """Best-effort conversion of an OpenAI SDK response object to built-in types."""
+    for attr in ("model_dump", "to_dict"):
+        method = getattr(response, attr, None)
+        if callable(method):
+            try:
+                return method()
+            except TypeError:
+                continue
+    json_method = getattr(response, "model_dump_json", None)
+    if callable(json_method):
+        try:
+            return json.loads(json_method())
+        except (TypeError, json.JSONDecodeError):
+            pass
+    json_attr = getattr(response, "json", None)
+    if callable(json_attr):
+        try:
+            return json.loads(json_attr())
+        except (TypeError, json.JSONDecodeError):
+            pass
+    return repr(response)
 
 
 def get_project_root() -> Path:
@@ -118,6 +165,20 @@ def resolve_project_paths(project_name: str, config: Dict[str, Any], project_roo
     return input_dir, output_dir
 
 
+def resolve_logs_dir(project_name: str, config: Dict[str, Any], project_root: Path) -> Path:
+    """Return the project-specific logs directory."""
+    try:
+        workdir = project_root / config["DIRECTORIES"]["workdir"]
+        logs_subdir = config["PROJECT_SUBDIRS"]["logs"]
+    except KeyError as exc:
+        logger.error("Hiányzó kulcs a config.json fájlban a log mappa előállításához: %s", exc)
+        sys.exit(1)
+
+    logs_dir = workdir / project_name / logs_subdir
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    return logs_dir
+
+
 def resolve_language_params(
     config: Dict[str, Any], input_language: Optional[str], output_language: Optional[str]
 ) -> Tuple[str, str]:
@@ -200,11 +261,22 @@ def build_system_prompt(
     override: Optional[str],
 ) -> str:
     """Construct the system prompt, allowing an override via CLI."""
+    input_lang_name = get_lang_name(lang_from)
+    output_lang_name = get_lang_name(lang_to)
+    replacements = {
+        "source_language": input_lang_name,
+        "target_language": output_lang_name,
+        "source_language_code": lang_from.upper(),
+        "target_language_code": lang_to.upper(),
+    }
+
     if override and override.strip():
         system_prompt = override.strip()
+        try:
+            system_prompt = system_prompt.format(**replacements)
+        except KeyError as exc:
+            logger.warning("A megadott system prompt formázása sikertelen, hiányzó kulcs: %s", exc)
     else:
-        input_lang_name = get_lang_name(lang_from)
-        output_lang_name = get_lang_name(lang_to)
         if allow_sensitive:
             system_prompt = (
                 f"You are a professional translator for tasks like film subtitling. Translate the numbered list from {input_lang_name} to {output_lang_name}. "
@@ -219,6 +291,15 @@ def build_system_prompt(
             )
     if context:
         system_prompt += f"\n\nContext: '{context}'"
+
+    normalized_prompt = system_prompt.lower()
+    extras: List[str] = []
+    if input_lang_name.lower() not in normalized_prompt and lang_from.lower() not in normalized_prompt:
+        extras.append(f"Source language: {lang_from.upper()} ({input_lang_name})")
+    if output_lang_name.lower() not in normalized_prompt and lang_to.lower() not in normalized_prompt:
+        extras.append(f"Target language: {lang_to.upper()} ({output_lang_name})")
+    if extras:
+        system_prompt += "\n\n" + "\n".join(extras)
     return system_prompt
 
 
@@ -229,6 +310,7 @@ def translate_or_subdivide_batch(
     model: str,
     stream: bool,
     batch_id_str: str,
+    api_logger: ApiInteractionLogger,
 ) -> Optional[List[str]]:
     """Translate a batch of segments, splitting recursively on failure."""
     if not batch_segments:
@@ -239,18 +321,25 @@ def translate_or_subdivide_batch(
     numbered_texts = [f"{i + 1}. {seg['text']}" for i, seg in enumerate(batch_segments)]
     text_block = "\n".join(numbered_texts)
 
+    request_payload: Dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": text_block},
+        ],
+        "temperature": 0.1,
+    }
+
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": text_block}],
-            temperature=0.1,
-        )
+        response = client.chat.completions.create(**request_payload)
+        api_logger.log(request=request_payload, response=serialize_api_response(response))
         translated_lines_raw = [
             line.strip()
             for line in response.choices[0].message.content.strip().split("\n")
             if line.strip()
         ]
     except OpenAIError as exc:
+        api_logger.log(request=request_payload, error=str(exc))
         logger.error("  HIBA: API hiba történt a(z) [%s] csoportnál: %s", batch_id_str, exc)
         return None
 
@@ -287,13 +376,13 @@ def translate_or_subdivide_batch(
     second_half = batch_segments[mid_point:]
 
     first_half_results = translate_or_subdivide_batch(
-        client, first_half, system_prompt, model, stream, f"{batch_id_str}-A"
+        client, first_half, system_prompt, model, stream, f"{batch_id_str}-A", api_logger
     )
     if first_half_results is None:
         return None
 
     second_half_results = translate_or_subdivide_batch(
-        client, second_half, system_prompt, model, stream, f"{batch_id_str}-B"
+        client, second_half, system_prompt, model, stream, f"{batch_id_str}-B", api_logger
     )
     if second_half_results is None:
         return None
@@ -343,12 +432,17 @@ def main(
     client = build_openrouter_client(auth_key)
 
     input_dir_path, output_dir_path = resolve_project_paths(project_name, config, project_root)
+    logs_dir_path = resolve_logs_dir(project_name, config, project_root)
     input_lang_resolved, output_lang_resolved = resolve_language_params(config, input_lang, output_lang)
+
+    api_log_path = logs_dir_path / f"openrouter_api_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+    api_logger = ApiInteractionLogger(api_log_path)
 
     logger.info("Projekt beállítások:")
     logger.info("  - Projekt név:           %s", project_name)
     logger.info("  - Bemeneti mappa:        %s", input_dir_path)
     logger.info("  - Kimeneti mappa:        %s", output_dir_path)
+    logger.info("  - API log fájl:          %s", api_log_path)
     logger.info("  - Bemeneti nyelv kód:    %s", input_lang_resolved)
     logger.info("  - Kimeneti nyelv kód:    %s", output_lang_resolved)
     logger.info("  - Modell:                %s", model)
@@ -410,7 +504,7 @@ def main(
         for idx, batch in enumerate(batches, start=1):
             logger.info("[%s/%s] fő csoport feldolgozása...", idx, len(batches))
             translated_batch_lines = translate_or_subdivide_batch(
-                client, batch, system_prompt_final, model, stream, str(idx)
+                client, batch, system_prompt_final, model, stream, str(idx), api_logger
             )
             if translated_batch_lines is None:
                 logger.error(

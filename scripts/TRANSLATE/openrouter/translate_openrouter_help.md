@@ -16,7 +16,7 @@ Ez a modul a projekt `config.json` beállításai alapján megtalálja a szétv�
 - `-model/--model`: Használt OpenRouter modell neve. Alapértelmezés: `google/gemini-2.0-flash-001`.
 - `-stream/--stream`: Ha megadod, a script soronként kiírja a fordítási előrehaladást. Alapértelmezés: `false`.
 - `-allow_sensitive_content/--allow-sensitive-content`: Speciális system promptot engedélyez kényes tartalmakhoz. Alapértelmezés: `false`.
-- `-systemprompt/--systemprompt`: Egyedi system prompt szöveg. Alapértelmezés: `"You are an expert translator. Translate the numbered list from the source language to the target language. Your response MUST be a numbered list with the exact same number of items. Format: \`1. [translation]\`."`
+- `-systemprompt/--systemprompt`: Egyedi system prompt szöveg. Alapértelmezés: `"You are an expert translator. Translate the numbered list from the source language to the target language. Your response MUST be a numbered list with the exact same number of items. Format: \`1. [translation]\`."` A promptban használhatók a `{source_language}`, `{target_language}`, `{source_language_code}` és `{target_language_code}` helyőrzők, amelyeket a script automatikusan kitölt.
 - `--debug`: Debug mód, amely részletesebb naplózást ad. Alapértelmezés: `false`.
 
 ## Outputs
