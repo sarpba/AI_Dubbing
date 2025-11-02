@@ -56,6 +56,30 @@
         "default": 30
       },
       {
+        "name": "max_pause",
+        "flags": [
+          "--max-pause"
+        ],
+        "type": "option",
+        "default": 0.6
+      },
+      {
+        "name": "timestamp_padding",
+        "flags": [
+          "--timestamp-padding"
+        ],
+        "type": "option",
+        "default": 0.2
+      },
+      {
+        "name": "max_segment_duration",
+        "flags": [
+          "--max-segment-duration"
+        ],
+        "type": "option",
+        "default": 11.5
+      },
+      {
         "name": "source_lang",
         "flags": [
           "--source-lang"

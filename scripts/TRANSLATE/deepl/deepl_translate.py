@@ -14,6 +14,7 @@ for candidate in Path(__file__).resolve().parents:
         break
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
+from tools.json_sanitizer import sanitize_translation_fields
 
 
 def get_project_root() -> Path:
@@ -218,6 +219,11 @@ def main(project_name: str, input_lang: Optional[str], output_lang: Optional[str
                 segment.setdefault('translated_text', '')
             json.dump(data, f, ensure_ascii=False, indent=2)
         print(f"A fájl (módosítás nélkül) átmásolva ide: {output_filepath}")
+        try:
+            sanitize_translation_fields(output_filepath)
+            print("Speciális karakterek eltávolítva a lefordított JSON fájlból.")
+        except Exception as exc:
+            print(f"Figyelmeztetés: A speciális karakterek eltávolítása nem sikerült: {exc}")
         return
 
     # A szegmensek összefűzése egyetlen szöveggé
@@ -258,6 +264,11 @@ def main(project_name: str, input_lang: Optional[str], output_lang: Optional[str
         json.dump(data, f, ensure_ascii=False, indent=2)
 
     print(f"\nFordítás befejezve. A kiegészített fájl a(z) '{output_filepath}' helyre mentve.")
+    try:
+        sanitize_translation_fields(output_filepath)
+        print("Speciális karakterek eltávolítva a lefordított JSON fájlból.")
+    except Exception as exc:
+        print(f"Figyelmeztetés: A speciális karakterek eltávolítása nem sikerült: {exc}")
 
 
 if __name__ == '__main__':

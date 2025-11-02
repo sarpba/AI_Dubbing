@@ -17,12 +17,14 @@ import json
 import math
 import sys
 import warnings
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple, TypeVar
+from typing import Any, Iterable, List, Optional, Sequence, Tuple, TypeVar
 
 import numpy as np
 import torch
+from copy import deepcopy
 
 for candidate in Path(__file__).resolve().parents:
     if (candidate / "tools").is_dir():
@@ -36,7 +38,7 @@ try:
     import librosa
     import soundfile as sf
     from nemo.collections.asr.models import ASRModel
-    from omegaconf import DictConfig
+    from omegaconf import DictConfig, open_dict
 except ImportError as exc:
     print(f"Hiányzó ASR függőség: {exc}")
     print("Aktiváld a Canary‑képes conda/env környezetet (nemo_toolkit, torch, librosa, soundfile).")
@@ -63,6 +65,9 @@ DEFAULT_CHUNK_S = 30
 MIN_CHUNK_S = 10
 MAX_CHUNK_S = 120
 SAMPLE_RATE = 16000
+DEFAULT_MAX_PAUSE_S = 0.6
+DEFAULT_PADDING_S = 0.2
+DEFAULT_MAX_SEGMENT_S = 11.5
 
 
 def load_config_and_get_paths(project_name: str) -> str:
@@ -104,17 +109,60 @@ def chunked(iterable: Sequence[T], size: int) -> Iterable[List[T]]:
         yield list(iterable[idx : idx + size])
 
 
-def build_decoding_cfg(beam_size: int, len_pen: float, need_full_hypotheses: bool) -> DictConfig:
-    """Beam-search dekóder konfiguráció létrehozása."""
-    beam_cfg = {
-        "strategy": "beam",
-        "beam": {
-            "beam_size": max(1, beam_size),
-            "len_pen": len_pen,
-            "return_best_hypothesis": not need_full_hypotheses,
-        },
-    }
-    return DictConfig(beam_cfg)
+def _to_serializable(obj: Any) -> Any:
+    """Konvertálja az ismeretlen objektumokat JSON-barát struktúrára."""
+    if isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    if isinstance(obj, dict):
+        return {str(key): _to_serializable(value) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_to_serializable(item) for item in obj]
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().tolist()
+    if hasattr(obj, "to_dict"):
+        try:
+            return _to_serializable(obj.to_dict())
+        except Exception:
+            pass
+    if hasattr(obj, "__dict__"):
+        try:
+            return _to_serializable(vars(obj))
+        except Exception:
+            pass
+    return repr(obj)
+
+
+def build_decoding_cfg(
+    asr_model: ASRModel,
+    beam_size: int,
+    len_pen: float,
+    need_full_hypotheses: bool,
+) -> DictConfig:
+    """Beam-search dekóder konfiguráció létrehozása a modell meglévő beállításainak megőrzésével."""
+    base_cfg = getattr(asr_model, "cfg", None)
+    decoding_cfg = getattr(base_cfg, "decoding", None) if base_cfg is not None else None
+    decoding_cfg = deepcopy(decoding_cfg) if isinstance(decoding_cfg, DictConfig) else DictConfig({})
+
+    with open_dict(decoding_cfg):
+        decoding_cfg.strategy = "beam"
+        if "beam" not in decoding_cfg or decoding_cfg.beam is None:
+            decoding_cfg.beam = DictConfig({})
+        with open_dict(decoding_cfg.beam):
+            decoding_cfg.beam.beam_size = max(1, beam_size)
+            decoding_cfg.beam.len_pen = float(len_pen)
+            decoding_cfg.beam.return_best_hypothesis = not need_full_hypotheses
+        decoding_cfg.preserve_alignments = True
+        decoding_cfg.compute_timestamps = True
+        decoding_cfg.word_seperator = " "
+        # Biztosítsuk, hogy a confidenciák is elérhetők legyenek szavanként.
+        if "confidence_cfg" in decoding_cfg and decoding_cfg.confidence_cfg is not None:
+            with open_dict(decoding_cfg.confidence_cfg):
+                decoding_cfg.confidence_cfg.preserve_word_confidence = True
+                decoding_cfg.confidence_cfg.preserve_token_confidence = True
+        decoding_cfg.compute_langs = False
+    return decoding_cfg
 
 
 @dataclass
@@ -258,6 +306,128 @@ def prepare_chunks(audio: np.ndarray, chunk_len_s: int) -> List[Tuple[np.ndarray
     return chunks
 
 
+def adjust_word_timestamps(word_segments: List[dict], padding_s: float) -> List[dict]:
+    """Finomhangolja a szavak időbélyegeit kis mértékben, hogy jobban fedjék a beszédet."""
+    if not word_segments or padding_s <= 0:
+        return word_segments
+
+    adjusted_segments = [word.copy() for word in word_segments]
+    for idx in range(len(adjusted_segments) - 1):
+        current = adjusted_segments[idx]
+        nxt = adjusted_segments[idx + 1]
+        if "start" not in nxt or "end" not in current:
+            continue
+        gap = nxt["start"] - current["end"]
+        if gap > (padding_s * 2):
+            adjustment = min(padding_s, gap / 2.0)
+            current["end"] += adjustment
+            nxt["start"] -= adjustment
+
+    first = adjusted_segments[0]
+    last = adjusted_segments[-1]
+    if "start" in first:
+        first["start"] = max(0.0, first["start"] - padding_s)
+    if "end" in last:
+        last["end"] += padding_s
+
+    for word in adjusted_segments:
+        if "start" in word:
+            word["start"] = round(word["start"], 3)
+        if "end" in word:
+            word["end"] = round(word["end"], 3)
+    return adjusted_segments
+
+
+def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
+    if not words:
+        return None
+    text = " ".join(w.get("word", "") for w in words).strip()
+    text = text.replace(" .", ".").replace(" !", "!").replace(" ?", "?")
+    return {
+        "start": words[0].get("start", 0.0),
+        "end": words[-1].get("end", 0.0),
+        "text": text,
+        "words": words,
+    }
+
+
+def sentence_segments_from_words(words: List[dict], max_pause_s: float) -> List[dict]:
+    """Szólistát mondatokra bont a szünetek és írásjelek alapján."""
+    if not words:
+        return []
+    segments: List[dict] = []
+    current: List[dict] = []
+
+    for word in words:
+        if current:
+            prev_end = current[-1].get("end")
+            start = word.get("start")
+            if prev_end is not None and start is not None and (start - prev_end) > max_pause_s:
+                if new_seg := _create_segment_from_words(current):
+                    segments.append(new_seg)
+                current = []
+
+        current.append(word)
+
+        token = word.get("word", "").strip()
+        if token and (token in {".", "!", "?"} or token[-1] in {".", "!", "?"}):
+            if new_seg := _create_segment_from_words(current):
+                segments.append(new_seg)
+            current = []
+
+    if new_seg := _create_segment_from_words(current):
+        segments.append(new_seg)
+    return segments
+
+
+def split_long_segments(segments: List[dict], max_duration_s: float) -> List[dict]:
+    """Felhasítja a túl hosszú mondatszegmenseket."""
+    if max_duration_s <= 0:
+        return segments
+
+    final_segments: List[dict] = []
+    for segment in segments:
+        words_to_process = segment.get("words") or []
+        if not words_to_process:
+            final_segments.append(segment)
+            continue
+
+        remaining = list(words_to_process)
+        while remaining:
+            first_start = remaining[0].get("start", 0.0)
+            last_end = remaining[-1].get("end", first_start)
+            duration = last_end - first_start
+            if duration <= max_duration_s:
+                if new_seg := _create_segment_from_words(remaining):
+                    final_segments.append(new_seg)
+                break
+
+            candidate_words = [
+                w for w in remaining if w.get("end", first_start) - first_start <= max_duration_s
+            ]
+            if not candidate_words:
+                candidate_words = remaining[:1]
+
+            best_split_idx = len(candidate_words) - 1
+            if len(candidate_words) > 1:
+                max_gap = -1.0
+                for idx in range(len(candidate_words) - 1):
+                    cur_end = candidate_words[idx].get("end")
+                    nxt_start = candidate_words[idx + 1].get("start")
+                    if cur_end is None or nxt_start is None:
+                        continue
+                    gap = nxt_start - cur_end
+                    if gap >= max_gap:
+                        max_gap = gap
+                        best_split_idx = idx
+
+            new_segment_words = remaining[: best_split_idx + 1]
+            if new_seg := _create_segment_from_words(new_segment_words):
+                final_segments.append(new_seg)
+            remaining = remaining[best_split_idx + 1 :]
+    return final_segments
+
+
 def transcribe_audio_file(
     audio_path: Path,
     *,
@@ -266,26 +436,45 @@ def transcribe_audio_file(
     chunk_len_s: int,
     source_lang: Optional[str],
     target_lang: Optional[str],
+    max_pause_s: float,
+    padding_s: float,
+    max_segment_s: float,
     alt_limit: int,
-) -> Optional[dict]:
+) -> Tuple[Optional[dict], str]:
     """Egyetlen hangfájl feldolgozása Canary modellel."""
     try:
         audio, _ = librosa.load(str(audio_path), sr=SAMPLE_RATE, mono=True)
     except Exception as exc:
         warnings.warn(f"Betöltési hiba '{audio_path.name}': {exc}")
-        return None
+        raw_dump_text = json.dumps(
+            {
+                "chunks": [],
+                "errors": [
+                    {
+                        "chunk": "n/a",
+                        "offset": "n/a",
+                        "type": exc.__class__.__name__,
+                        "message": str(exc),
+                        "traceback": traceback.format_exc(),
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        return None, raw_dump_text
 
     chunks_with_offset = prepare_chunks(audio, chunk_len_s)
     if not chunks_with_offset:
         warnings.warn(f"Nincs feldolgozható rész: {audio_path.name}")
-        return None
+        return None, ""
 
     print(f"  - {audio_path.name}: {len(chunks_with_offset)} darab, chunk={chunk_len_s}s")
 
     from tempfile import TemporaryDirectory
 
     transcribe_kwargs = {
-        "batch_size": min(batch_size, max(1, len(chunks_with_offset))),
+        "batch_size": 1,
         "verbose": False,
         "return_hypotheses": True,
         "timestamps": True,
@@ -295,10 +484,9 @@ def transcribe_audio_file(
     if target_lang and target_lang.lower() not in {"", "auto"}:
         transcribe_kwargs["target_lang"] = target_lang
 
-    chunk_payloads: List[dict] = []
-    texts: List[str] = []
     all_words: List[dict] = []
-    all_segments: List[dict] = []
+    raw_structured_chunks: List[dict] = []
+    raw_error_entries: List[dict] = []
 
     with TemporaryDirectory() as tmpdir:
         tmp_chunks: List[dict] = []
@@ -319,12 +507,14 @@ def transcribe_audio_file(
 
         if not tmp_chunks:
             warnings.warn(f"Nem sikerült ideiglenes chunkokat létrehozni: {audio_path.name}")
-            return None
+            raw_dump_text = json.dumps({"chunks": [], "errors": raw_error_entries}, ensure_ascii=False, indent=2)
+            return None, raw_dump_text
 
         for batch in chunked(tmp_chunks, transcribe_kwargs["batch_size"]):
             try:
                 call_kwargs = dict(transcribe_kwargs)
-                call_kwargs["batch_size"] = max(1, min(len(batch), call_kwargs["batch_size"]))
+                # A Canary modell stabilabb időbélyeges kimenetet ad egydarabos batch-sel.
+                call_kwargs["batch_size"] = 1
                 hypotheses_batch = asr_model.transcribe(
                     audio=[str(item["path"]) for item in batch],
                     **call_kwargs,
@@ -332,89 +522,92 @@ def transcribe_audio_file(
             except torch.cuda.OutOfMemoryError:
                 torch.cuda.empty_cache()
                 warnings.warn("CUDA memória elfogyott. Csökkentsd a batch-méretet.")
-                return None
+                raw_error_entries.append(
+                    {
+                        "chunk": batch[0]["path"].name if batch else "n/a",
+                        "offset": batch[0]["offset"] if batch else "n/a",
+                        "type": "OutOfMemoryError",
+                        "message": "CUDA memória elfogyott. Csökkentsd a batch-méretet.",
+                    }
+                )
+                raw_dump_text = json.dumps({"chunks": raw_structured_chunks, "errors": raw_error_entries}, ensure_ascii=False, indent=2)
+                return None, raw_dump_text
             except Exception as exc:
                 warnings.warn(f"Transzkripciós hiba ({audio_path.name}): {exc}")
+                raw_error_entries.append(
+                    {
+                        "chunk": batch[0]["path"].name if batch else "n/a",
+                        "offset": batch[0]["offset"] if batch else "n/a",
+                        "type": exc.__class__.__name__,
+                        "message": str(exc),
+                        "traceback": traceback.format_exc(),
+                    }
+                )
                 continue
 
             if len(hypotheses_batch) != len(batch):
                 warnings.warn("A Canary visszatérési hossza eltér a batch méretétől.")
 
             for item, hypotheses in zip(batch, hypotheses_batch):
-                result = select_best_transcript(hypotheses, alt_limit=alt_limit)
+                serialized_hyp = _to_serializable(hypotheses)
+                raw_structured_chunks.append(
+                    {
+                        "chunk_index": tmp_chunks.index(item),
+                        "offset": item["offset"],
+                        "duration": item["duration"],
+                        "hypotheses_raw": serialized_hyp,
+                    }
+                )
+                try:
+                    result = select_best_transcript(hypotheses, alt_limit=alt_limit)
+                except Exception as exc:
+                    raw_error_entries.append(
+                        {
+                            "chunk": Path(item["path"]).name,
+                            "offset": item["offset"],
+                            "type": exc.__class__.__name__,
+                            "message": str(exc),
+                            "traceback": traceback.format_exc(),
+                        }
+                    )
+                    continue
                 if not result.best_text:
                     continue
-                texts.append(result.best_text)
-                chunk_payload = {
-                    "offset_start": round(item["offset"], 3),
-                    "offset_end": round(item["offset"] + item["duration"], 3),
-                    "transcript": result.best_text,
-                }
                 # Adjust word timestamps with chunk offset.
-                chunk_words: List[dict] = []
                 for word in result.best_words:
                     adjusted = dict(word)
-                    if "start" in adjusted:
-                        adjusted["start"] = round(adjusted["start"] + item["offset"], 3)
-                    if "end" in adjusted:
-                        adjusted["end"] = round(adjusted["end"] + item["offset"], 3)
-                    chunk_words.append(adjusted)
-                if chunk_words:
-                    chunk_payload["words"] = chunk_words
-                    all_words.extend(chunk_words)
+                    start_val = adjusted.get("start")
+                    end_val = adjusted.get("end")
+                    if start_val is None or end_val is None:
+                        continue
+                    try:
+                        start_f = float(start_val)
+                        end_f = float(end_val)
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isnan(start_f) or math.isnan(end_f):
+                        continue
+                    adjusted["start"] = round(start_f + item["offset"], 3)
+                    adjusted["end"] = round(end_f + item["offset"], 3)
+                    all_words.append(adjusted)
 
-                chunk_segments: List[dict] = []
-                for segment in result.best_segments:
-                    adjusted_seg = dict(segment)
-                    adjusted_seg["start"] = round(segment.get("start", 0.0) + item["offset"], 3)
-                    adjusted_seg["end"] = round(segment.get("end", 0.0) + item["offset"], 3)
-                    chunk_segments.append(adjusted_seg)
-                if chunk_segments:
-                    chunk_payload["segments"] = chunk_segments
-                    all_segments.extend(chunk_segments)
+    raw_dump_text = json.dumps({"chunks": raw_structured_chunks, "errors": raw_error_entries}, ensure_ascii=False, indent=2)
 
-                if result.alternatives:
-                    adjusted_alts: List[dict] = []
-                    for alt in result.alternatives:
-                        new_alt = dict(alt)
-                        alt_words = new_alt.get("words")
-                        if isinstance(alt_words, list):
-                            adjusted_words = []
-                            for word in alt_words:
-                                adjusted_word = dict(word)
-                                if "start" in adjusted_word:
-                                    adjusted_word["start"] = round(adjusted_word["start"] + item["offset"], 3)
-                                if "end" in adjusted_word:
-                                    adjusted_word["end"] = round(adjusted_word["end"] + item["offset"], 3)
-                                adjusted_words.append(adjusted_word)
-                            new_alt["words"] = adjusted_words
-                        alt_segments = new_alt.get("segments")
-                        if isinstance(alt_segments, list):
-                            adjusted_segments = []
-                            for segment in alt_segments:
-                                adjusted_segment = dict(segment)
-                                adjusted_segment["start"] = round(segment.get("start", 0.0) + item["offset"], 3)
-                                adjusted_segment["end"] = round(segment.get("end", 0.0) + item["offset"], 3)
-                                adjusted_segments.append(adjusted_segment)
-                            new_alt["segments"] = adjusted_segments
-                        adjusted_alts.append(new_alt)
-                    chunk_payload["alternatives"] = adjusted_alts
-                chunk_payloads.append(chunk_payload)
-
-    if not texts:
-        warnings.warn(f"Üres eredmény: {audio_path.name}")
-        return None
+    if not all_words:
+        warnings.warn(f"Üres vagy időbélyeg nélküli eredmény: {audio_path.name}")
+        return None, raw_dump_text
 
     all_words.sort(key=lambda w: w.get("start", 0.0))
-    all_segments.sort(key=lambda s: s.get("start", 0.0))
+    processed_words = adjust_word_timestamps(all_words, padding_s=padding_s)
+    # Re-sort after padding adjustments.
+    processed_words.sort(key=lambda w: w.get("start", 0.0))
+    initial_segments = sentence_segments_from_words(processed_words, max_pause_s=max_pause_s)
+    final_segments = split_long_segments(initial_segments, max_duration_s=max_segment_s)
 
-    combined_text = " ".join(texts)
     return {
-        "transcript": combined_text.strip(),
-        "chunks": chunk_payloads,
-        "word_segments": all_words,
-        "segments": all_segments,
-    }
+        "word_segments": processed_words,
+        "segments": final_segments,
+    }, raw_dump_text
 
 
 def transcribe_directory(
@@ -425,6 +618,9 @@ def transcribe_directory(
     chunk_len_s: int,
     source_lang: Optional[str],
     target_lang: Optional[str],
+    max_pause_s: float,
+    padding_s: float,
+    max_segment_s: float,
     alt_limit: int,
     overwrite: bool,
 ) -> None:
@@ -446,31 +642,41 @@ def transcribe_directory(
             print(f"  ↷ Kihagyva (létezik): {output_path.name}")
             continue
 
-        result = transcribe_audio_file(
+        result, raw_dump = transcribe_audio_file(
             audio_path,
             asr_model=asr_model,
             batch_size=batch_size,
             chunk_len_s=chunk_len_s,
             source_lang=source_lang,
             target_lang=target_lang,
+            max_pause_s=max_pause_s,
+            padding_s=padding_s,
+            max_segment_s=max_segment_s,
             alt_limit=alt_limit,
         )
+
+        raw_output_path = audio_path.with_suffix(".raw.txt")
+        try:
+            with open(raw_output_path, "w", encoding="utf-8") as raw_fp:
+                raw_fp.write(raw_dump or "")
+        except Exception as exc:
+            warnings.warn(f"Nem sikerült menteni a nyers kimenetet ({raw_output_path.name}): {exc}")
 
         if not result:
             print(f"  ✖ Sikertelen vagy üres transzkripció: {audio_path.name}")
             continue
 
+        language_hint = target_lang or source_lang or "auto"
+        if isinstance(language_hint, str):
+            language_hint = language_hint.strip() or "auto"
+        else:
+            language_hint = "auto"
+
         payload = {
-            "transcript": result["transcript"],
-            "language": target_lang or source_lang or "auto",
-            "model": asr_model.cfg.get("init_params", {}).get("model_name", DEFAULT_MODEL_NAME),
-            "chunk_length": chunk_len_s,
-            "chunks": result.get("chunks", []),
+            "segments": result.get("segments", []),
+            "word_segments": result.get("word_segments", []),
+            "language": language_hint,
         }
-        if result.get("word_segments"):
-            payload["word_segments"] = result["word_segments"]
-        if result.get("segments"):
-            payload["segments"] = result["segments"]
 
         try:
             with open(output_path, "w", encoding="utf-8") as fp:
@@ -490,6 +696,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--beam-size", type=int, default=DEFAULT_BEAM_SIZE, help="Beam-search szélessége.")
     parser.add_argument("--len-pen", type=float, default=DEFAULT_LEN_PENALTY, help="Hossz büntetés a dekóderben.")
     parser.add_argument("--chunk", type=int, default=DEFAULT_CHUNK_S, help="Chunk hossza másodpercben (10-120).")
+    parser.add_argument("--max-pause", type=float, default=DEFAULT_MAX_PAUSE_S, help="Mondatok közti maximális szünet (mp, alapértelmezés: 0.6).")
+    parser.add_argument("--timestamp-padding", type=float, default=DEFAULT_PADDING_S, help="Szavak időbélyegének finomhangolása (mp, alapértelmezés: 0.2).")
+    parser.add_argument("--max-segment-duration", type=float, default=DEFAULT_MAX_SEGMENT_S, help="Szegmensek maximális hossza (mp, 0 = kikapcsolva, alapértelmezés: 11.5).")
     parser.add_argument("--source-lang", type=str, default="auto", help="Forrásnyelv (auto = automatikus detektálás).")
     parser.add_argument("--target-lang", type=str, default=None, help="Célnyelv (None = csak átírás).")
     parser.add_argument("--keep-alternatives", type=int, default=DEFAULT_ALT_LIMIT, help="Hány alternatív hipotézist mentsen el chunkonként.")
@@ -507,11 +716,10 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"\nModell betöltése: {args.model_name} ({device})")
 
-    need_full_hypotheses = True  # Alternatívák miatt szükség van a teljes listára.
-    decoding_cfg = build_decoding_cfg(args.beam_size, args.len_pen, need_full_hypotheses)
-
+    need_full_hypotheses = False  # Csak a legjobb hipotézist kérjük a stabil időbélyegekhez.
     try:
         asr_model = ASRModel.from_pretrained(model_name=args.model_name)
+        decoding_cfg = build_decoding_cfg(asr_model, args.beam_size, args.len_pen, need_full_hypotheses)
         asr_model.change_decoding_strategy(decoding_cfg)
         asr_model.to(device)
         asr_model.eval()
@@ -527,6 +735,9 @@ def main() -> None:
         chunk_len_s=max(MIN_CHUNK_S, min(MAX_CHUNK_S, args.chunk)),
         source_lang=args.source_lang,
         target_lang=args.target_lang,
+        max_pause_s=max(0.0, args.max_pause),
+        padding_s=max(0.0, args.timestamp_padding),
+        max_segment_s=max(0.0, args.max_segment_duration),
         alt_limit=max(0, args.keep_alternatives),
         overwrite=args.overwrite,
     )

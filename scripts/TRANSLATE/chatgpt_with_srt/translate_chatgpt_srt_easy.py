@@ -21,6 +21,7 @@ for candidate in Path(__file__).resolve().parents:
         break
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
+from tools.json_sanitizer import sanitize_translation_fields
 
 # --- KONFIGURÁCIÓ ÉS KULCSKEZELÉS -------------------------------------------------
 
@@ -889,6 +890,11 @@ def main(
     with open(output_filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print(f"\nFeldolgozás befejezve. A kiegészített fájl a(z) '{output_filepath}' helyre mentve.")
+    try:
+        sanitize_translation_fields(output_filepath)
+        print("Speciális karakterek eltávolítva a lefordított JSON fájlból.")
+    except Exception as exc:
+        print(f"Figyelmeztetés: A speciális karakterek eltávolítása nem sikerült: {exc}")
 
     if os.path.exists(progress_filepath):
         os.remove(progress_filepath)
