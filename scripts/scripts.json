@@ -1359,6 +1359,105 @@
   {
     "enviroment": "sync",
     "api": "chatgpt",
+    "script": "TRANSLATE/chatgpt/translate_chatgpt.py",
+    "description": "Projekt-alapú JSON fordítás ChatGPT segítségével, intelligens csoportosítással és folytatható futással.",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "auth_key",
+        "flags": [
+          "-auth_key",
+          "--auth-key"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "input_language",
+        "flags": [
+          "-input_language",
+          "--input-language"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "output_language",
+        "flags": [
+          "-output_language",
+          "--output-language"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "context",
+        "flags": [
+          "-context",
+          "--context"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "model",
+        "flags": [
+          "-model",
+          "--model"
+        ],
+        "type": "option",
+        "default": "gpt-4o"
+      },
+      {
+        "name": "stream",
+        "flags": [
+          "-stream",
+          "--stream"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "allow_sensitive_content",
+        "flags": [
+          "-allow_sensitive_content",
+          "--allow-sensitive-content"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "systemprompt",
+        "flags": [
+          "-systemprompt",
+          "--systemprompt"
+        ],
+        "type": "option",
+        "default": "You are an expert translator. Translate the numbered list from the source language to the target language. Your response MUST be a numbered list with the exact same number of items. Format: `1. [translation]`."
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "api": "chatgpt",
     "script": "TRANSLATE/chatgpt_with_srt/translate_chatgpt_srt_easy.py",
     "description": "A beolvasott időzített transcripciót a rendelkezésre álló feliratot felhasználva lefordítja a kívánt nyelvre a ChatGPT segítségével.",
     "required": [
@@ -1482,6 +1581,105 @@
         ],
         "type": "option",
         "default": null
+      },
+      {
+        "name": "debug",
+        "flags": [
+          "--debug"
+        ],
+        "type": "flag",
+        "default": false
+      }
+    ]
+  },
+  {
+    "enviroment": "sync",
+    "api": "openrouter",
+    "script": "TRANSLATE/openrouter/translate_openrouter.py",
+    "description": "Projekt-alapú JSON fordítás OpenRouter kompatibilis modellekkel, intelligens csoportosítással és folytatható futással.",
+    "required": [
+      {
+        "name": "project_name",
+        "flags": [
+          "-p",
+          "--project-name"
+        ],
+        "type": "option",
+        "default": null
+      }
+    ],
+    "optional": [
+      {
+        "name": "auth_key",
+        "flags": [
+          "-auth_key",
+          "--auth-key"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "input_language",
+        "flags": [
+          "-input_language",
+          "--input-language"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "output_language",
+        "flags": [
+          "-output_language",
+          "--output-language"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "context",
+        "flags": [
+          "-context",
+          "--context"
+        ],
+        "type": "option",
+        "default": null
+      },
+      {
+        "name": "model",
+        "flags": [
+          "-model",
+          "--model"
+        ],
+        "type": "option",
+        "default": "openai/gpt-4o"
+      },
+      {
+        "name": "stream",
+        "flags": [
+          "-stream",
+          "--stream"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "allow_sensitive_content",
+        "flags": [
+          "-allow_sensitive_content",
+          "--allow-sensitive-content"
+        ],
+        "type": "flag",
+        "default": false
+      },
+      {
+        "name": "systemprompt",
+        "flags": [
+          "-systemprompt",
+          "--systemprompt"
+        ],
+        "type": "option",
+        "default": "You are an expert translator. Translate the numbered list from the source language to the target language. Your response MUST be a numbered list with the exact same number of items. Format: `1. [translation]`."
       },
       {
         "name": "debug",

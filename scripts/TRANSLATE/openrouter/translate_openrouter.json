@@ -1,0 +1,99 @@
+{
+  "enviroment": "sync",
+  "api": "openrouter",
+  "script": "TRANSLATE/openrouter/translate_openrouter.py",
+  "description": "Projekt-alapú JSON fordítás OpenRouter kompatibilis modellekkel, intelligens csoportosítással és folytatható futással.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "auth_key",
+      "flags": [
+        "-auth_key",
+        "--auth-key"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "input_language",
+      "flags": [
+        "-input_language",
+        "--input-language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "output_language",
+      "flags": [
+        "-output_language",
+        "--output-language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "context",
+      "flags": [
+        "-context",
+        "--context"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "model",
+      "flags": [
+        "-model",
+        "--model"
+      ],
+      "type": "option",
+      "default": "google/gemini-2.0-flash-001"
+    },
+    {
+      "name": "stream",
+      "flags": [
+        "-stream",
+        "--stream"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "allow_sensitive_content",
+      "flags": [
+        "-allow_sensitive_content",
+        "--allow-sensitive-content"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "systemprompt",
+      "flags": [
+        "-systemprompt",
+        "--systemprompt"
+      ],
+      "type": "option",
+      "default": "You are an expert translator. Translate the numbered list from the source language to the target language. Your response MUST be a numbered list with the exact same number of items. Format: `1. [translation]`."
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}
