@@ -1,7 +1,7 @@
 [
   {
     "enviroment": "nemo",
-    "script": "ASR/canary-non_working_beta/canary-easy.py",
+    "script": "ASR/canary/canary-easy.py",
     "description": "A Canary ASR modell használata a beszéd szöveggé alakítására.",
     "required": [
       {
@@ -12,6 +12,22 @@
         ],
         "type": "option",
         "default": null
+      },
+      {
+        "name": "source_lang",
+        "flags": [
+          "--source-lang"
+        ],
+        "type": "option",
+        "default": ""
+      },
+      {
+        "name": "target_lang",
+        "flags": [
+          "--target-lang"
+        ],
+        "type": "option",
+        "default": ""
       }
     ],
     "optional": [
@@ -78,22 +94,6 @@
         ],
         "type": "option",
         "default": 11.5
-      },
-      {
-        "name": "source_lang",
-        "flags": [
-          "--source-lang"
-        ],
-        "type": "option",
-        "default": "auto"
-      },
-      {
-        "name": "target_lang",
-        "flags": [
-          "--target-lang"
-        ],
-        "type": "option",
-        "default": null
       },
       {
         "name": "keep_alternatives",
