@@ -9,12 +9,11 @@ narrator/*
 keyholder.json
 
 # Kizárt scriptek és eszközök
-*extract.sh
-*whisx_simple_old.py
 TTS/*/
 
 # Naplófájlok (log)
 *.log
+*.err
 
 # Audiofájlok
 *.aac
