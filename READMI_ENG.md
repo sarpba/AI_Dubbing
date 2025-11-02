@@ -18,13 +18,15 @@ The `main_app.py` Flask front-end reads `scripts/scripts.json` to expose every m
    - [f5-tts-linux setup guide](ENVIROMENTS/f5-tts-linux.md) – for F5-TTS models and the related normalization helpers.
    - [vibevoice-linux setup guide](ENVIROMENTS/vibevoice-linux.md) – for running the VibeVoice TTS pipeline.
    - [demucs-linux setup guide](ENVIROMENTS/demucs-linux.md) – for Demucs/MDX speech–background separation.
-3. Keep `sync` active for the UI and most orchestration; switch to the matching environment right before launching the specialized scripts.
+3. Always launch `main_app.py` from the `sync` environment; the remaining specialized environments are activated automatically by the application when needed.
 
 ## Model and API Preparation
 - Update `/anaconda3/envs/whisperx/lib/python3.10/site-packages/whisperx/alignment.py` to point to more accurate default alignment models; this improves timeline precision during transcription.
-- Copy your `model.pt`, `vocab.txt`, and `model_conf.json` into the appropriate `TTS/XXX` subdirectory. Configuration templates are available in the `TTS` folder.
+- For F5-TTS, copy your `model.pt`, `vocab.txt`, and `model_conf.json` into the appropriate `TTS/XXX` subdirectory. Configuration templates are available in the `TTS` folder.
+- For VibeVoice, change into the `TTS` directory and clone the desired Hugging Face repository (for example: `git clone https://huggingface.co/sarpba/VibeVoice-large-HUN`).
 - (Optional) Create a Hugging Face account, accept the Pyannote Speaker Diarization 3.1 license, and securely store a read-only API token: https://huggingface.co/pyannote/speaker-diarization-3.1
 - Register for a DeepL account, enable the free API tier, and generate an API key (500,000 characters/month, roughly 10–20 hours of video).
+- Create an ElevenLabs account to access the ASR module; the free tier provides roughly 2–3 hours of credits per month.
 
 ## Pipeline Modules and Script Catalog
 

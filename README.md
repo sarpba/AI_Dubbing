@@ -19,13 +19,15 @@ Az `main_app.py` Flask-alapú vezérlőfelület, amely a `scripts/scripts.json` 
    - [f5-tts-linux telepítési útmutató](ENVIROMENTS/f5-tts-linux.md) – F5-TTS modellekhez és a kapcsolódó normalizáló segédszkriptekhez.
    - [vibevoice-linux telepítési útmutató](ENVIROMENTS/vibevoice-linux.md) – VibeVoice TTS pipeline futtatásához.
    - [demucs-linux telepítési útmutató](ENVIROMENTS/demucs-linux.md) – Demucs/MDX-alapú beszéd–háttér szétválasztáshoz.
-3. Több környezet használata esetén a `sync` legyen aktív az UI és a legtöbb automatizált lépés indításakor; az adott modul futtatása előtt válts át a hozzá tartozó környezetre.
+3. A `main_app.py` indítását mindig a `sync` környezetből végezd; a többi specializált környezetet a rendszer futás közben automatikusan kezeli.
 
 ## Modell- és API-előkészítés (HU)
 - Frissítsd a `/anaconda3/envs/whisperx/lib/python3.10/site-packages/whisperx/alignment.py` fájlt, és állíts be pontosabb alapértelmezett igazítási modelleket, hogy javuljon az időzítés pontossága.
-- Másold a saját `model.pt`, `vocab.txt` és `model_conf.json` fájljaidat a megfelelő `TTS/XXX` alkönyvtárba; sablonfájlokat a `TTS` mappában találsz.
+- F5-TTS használatához másold a saját `model.pt`, `vocab.txt` és `model_conf.json` fájljaidat a megfelelő `TTS/XXX` alkönyvtárba; sablonfájlokat a `TTS` mappában találsz.
+- VibeVoice esetén lépj a `TTS` mappába, és klónozd a szükséges Hugging Face repót (például: `git clone https://huggingface.co/sarpba/VibeVoice-large-HUN`).
 - (Opcionális) Hozz létre Hugging Face fiókot, fogadd el a Pyannote Speaker Diarization 3.1 licencét, majd generálj és tárolj biztonságosan egy olvasási API-kulcsot: https://huggingface.co/pyannote/speaker-diarization-3.1
 - Regisztrálj DeepL fiókot, aktiváld az ingyenes API-előfizetést, és készíts API-kulcsot (kb. 500 000 karakter/hó, ~10–20 óra videó).
+- Regisztrálj ElevenLabs fiókot az ASR modul használatához; havi kb. 2–3 óra ingyenes kredit áll rendelkezésre.
 
 ## Pipeline modulok és szkript katalógus
 
