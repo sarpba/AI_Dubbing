@@ -1,6 +1,6 @@
 {
   "enviroment": "nemo",
-  "script": "ASR/canary-non_working_beta/canary-easy.py",
+  "script": "canary-easy.py",
   "description": "A Canary ASR modell használata a beszéd szöveggé alakítására.",
   "required": [
     {

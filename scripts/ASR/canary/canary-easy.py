@@ -65,7 +65,7 @@ DEFAULT_CHUNK_S = 30
 MIN_CHUNK_S = 10
 MAX_CHUNK_S = 120
 SAMPLE_RATE = 16000
-DEFAULT_MAX_PAUSE_S = 0.6
+DEFAULT_MAX_PAUSE_S = 0.8
 DEFAULT_PADDING_S = 0.2
 DEFAULT_MAX_SEGMENT_S = 11.5
 DEFAULT_MIN_SILENCE_S = 0.2
@@ -393,12 +393,15 @@ def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
     }
 
 
-def sentence_segments_from_words(words: List[dict], max_pause_s: float) -> List[dict]:
+def sentence_segments_from_words(words: List[dict], max_pause_s: float, max_segment_s: float) -> List[dict]:
     """Szólistát mondatokra bont a szünetek és írásjelek alapján."""
     if not words:
         return []
     segments: List[dict] = []
     current: List[dict] = []
+
+    punct_set_primary = {".", "!", "?"}
+    punct_set_secondary = {","}
 
     for word in words:
         if current:
@@ -412,10 +415,22 @@ def sentence_segments_from_words(words: List[dict], max_pause_s: float) -> List[
         current.append(word)
 
         token = word.get("word", "").strip()
-        if token and (token in {".", "!", "?"} or token[-1] in {".", "!", "?"}):
+        if not token:
+            continue
+
+        last_char = token[-1]
+        if token in punct_set_primary or last_char in punct_set_primary:
             if new_seg := _create_segment_from_words(current):
                 segments.append(new_seg)
             current = []
+        elif (token in punct_set_secondary or last_char in punct_set_secondary) and max_segment_s > 0:
+            candidate = current if current else [word]
+            if candidate and candidate[0].get("start") is not None and candidate[-1].get("end") is not None:
+                duration = candidate[-1]["end"] - candidate[0]["start"]
+                if duration >= max_segment_s:
+                    if new_seg := _create_segment_from_words(current):
+                        segments.append(new_seg)
+                    current = []
 
     if new_seg := _create_segment_from_words(current):
         segments.append(new_seg)
@@ -643,7 +658,7 @@ def transcribe_audio_file(
     processed_words = adjust_word_timestamps(all_words, padding_s=padding_s)
     # Re-sort after padding adjustments.
     processed_words.sort(key=lambda w: w.get("start", 0.0))
-    initial_segments = sentence_segments_from_words(processed_words, max_pause_s=max_pause_s)
+    initial_segments = sentence_segments_from_words(processed_words, max_pause_s=max_pause_s, max_segment_s=max_segment_s)
     final_segments = split_long_segments(initial_segments, max_duration_s=max_segment_s)
 
     return {
