@@ -24,8 +24,7 @@
       "flags": [
         "--background-volume"
       ],
-      "type": "option",
-      "default": 100
+      "type": "option"
     },
     {
       "name": "time_stretching",

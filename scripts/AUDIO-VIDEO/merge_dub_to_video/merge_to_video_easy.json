@@ -20,6 +20,14 @@
   ],
   "optional": [
     {
+      "name": "only_new_audio",
+      "flags": [
+        "--only-new-audio"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
       "name": "debug",
       "flags": [
         "--debug"

@@ -9,5 +9,6 @@ A szkript a kész szinkronhangot és – ha rendelkezésre áll – a feliratot 
 - `project_name` (pozícionális, alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 - `language` (`-lang`, `--language`, option, alapértelmezés: nincs): A muxolás során a hozzáadott audió nyelvi címkéje (pl. `hun`, `eng`). A konténer metaadataiban jelenik meg.
 
-## Opcionális beállítás
+## Opcionális beállítások
+- `only_new_audio` (`--only-new-audio`, flag, alapértelmezés: `false`): Az elkészült videóban eldobja az eredeti hangokat, és csak az új szinkron sávot hagyja meg.
 - `debug` (`--debug`, flag, alapértelmezés: `false`): Extra naplózás a futásról.

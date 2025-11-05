@@ -95,19 +95,29 @@ def demux_streams(video_file, streams, temp_dir):
     print("--- DEMUXING FINISHED ---\n")
     return demuxed_files
 
-def remux_video(demuxed_files, new_audio_file, language, output_file):
+def remux_video(demuxed_files, new_audio_file, language, output_file, include_original_audio=True):
     """Újraépíti a videót a különválasztott sávokból és az új hangból."""
     print("\n--- STARTING REMUXING (Sávok újraegyesítése) ---")
     
     cmd = ['ffmpeg', '-y']
     
+    selected_demuxed_files = []
+    for demuxed in demuxed_files:
+        stream_type = demuxed['stream_info']['codec_type']
+        if stream_type == 'audio' and not include_original_audio:
+            continue
+        selected_demuxed_files.append(demuxed)
+
+    if not include_original_audio:
+        print("Az eredeti hangsávok kihagyásra kerülnek; csak az új dub kerül a kimenetbe.")
+
     # Bemeneti fájlok hozzáadása
-    input_files = [f['path'] for f in demuxed_files] + [new_audio_file]
+    input_files = [f['path'] for f in selected_demuxed_files] + [new_audio_file]
     for file_path in input_files:
         cmd.extend(['-i', file_path])
         
     # Sávok feltérképezése (mapping)
-    num_original_streams = len(demuxed_files)
+    num_original_streams = len(selected_demuxed_files)
     for i in range(num_original_streams):
         cmd.extend(['-map', f'{i}:0'])
     cmd.extend(['-map', f'{num_original_streams}:0'])
@@ -118,7 +128,7 @@ def remux_video(demuxed_files, new_audio_file, language, output_file):
     # Metaadatok visszaállítása és beállítása
     original_audio_count = 0
     original_subtitle_count = 0
-    for i, demuxed in enumerate(demuxed_files):
+    for i, demuxed in enumerate(selected_demuxed_files):
         stream = demuxed['stream_info']
         stream_type = stream['codec_type']
         
@@ -153,6 +163,7 @@ def main():
     parser = argparse.ArgumentParser(description="Videót atomjaira szed, majd új hangsávval rakja össze a maximális stabilitás érdekében.")
     parser.add_argument('project_name', help='A feldlogozandó projekt könyvtár neve a \"workdir\"-en belül.')
     parser.add_argument('-lang', '--language', required=True, help='A hozzáadandó audiosáv nyelvi címkéje (pl. hun, eng).')
+    parser.add_argument('--only-new-audio', action='store_true', help='Csak az új hangsáv kerüljön a kimenő videóba, az eredeti audiók kihagyásával.')
     add_debug_argument(parser)
     args = parser.parse_args()
     configure_debug_mode(args.debug)
@@ -211,7 +222,8 @@ def main():
         video_name, video_ext = os.path.splitext(video_basename)
         output_file = str(output_dir / f"{video_name}_with_{args.language}_dub{video_ext}")
         
-        remux_video(demuxed_files, processed_aac_path, args.language, output_file)
+        include_original_audio = not args.only_new_audio
+        remux_video(demuxed_files, processed_aac_path, args.language, output_file, include_original_audio=include_original_audio)
 
         if os.path.exists(processed_aac_path):
             os.remove(processed_aac_path)

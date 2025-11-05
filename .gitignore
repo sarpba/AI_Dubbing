@@ -4,9 +4,12 @@ workdir/*/
 .gradio/
 .old/
 narrator/*
+docker/*
 
 # Kizárt konfigurációs és adatfájlok
 keyholder.json
+scripts/scripts.json
+docker-compose.yml
 
 # Kizárt scriptek és eszközök
 TTS/*/
