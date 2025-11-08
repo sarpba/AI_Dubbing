@@ -30,6 +30,9 @@ if [ "${AUTO_UPDATE}" = "1" ]; then
     if [ -f requirements.txt ]; then
         conda run --no-capture-output -n "${APP_ENV}" python -m pip install --upgrade -r requirements.txt
     fi
+    if [ -f docker/entrypoint.sh ]; then
+        chmod +x docker/entrypoint.sh
+    fi
 fi
 
 WHISPERX_CUDNN_PATH="$(conda run --no-capture-output -n whisperx python - <<'PY' 2>/dev/null || true
