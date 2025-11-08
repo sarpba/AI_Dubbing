@@ -27,6 +27,11 @@ sudo apt-get update
 sudo apt-get install -y nvidia-container-toolkit
 ```
 
+```bash
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+```
+
 Ha elfeküdne az ubuntu desktop akkor helyreállítás:
 ```bash
 sudo apt update
