@@ -1,0 +1,38 @@
+# Git metadata
+.git
+.gitignore
+
+# Local working directories and caches
+workdir/*/
+**/__pycache__/
+.gradio/
+.old/
+narrator/*
+TTS/*/
+
+# Docker build assets must remain available
+!docker/
+
+# Secrets and configs handled externally
+keyholder.json
+scripts/scripts.json
+docker-compose.yml
+
+# Logs
+*.log
+*.err
+
+# Audio assets
+*.aac
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.m4a
+
+# Video assets
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm

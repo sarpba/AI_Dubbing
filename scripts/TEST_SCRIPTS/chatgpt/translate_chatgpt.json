@@ -1,0 +1,139 @@
+{
+  "enviroment": "sync",
+  "api": "chatgpt",
+  "script": "TEST_SCRIPTS/chatgpt/translate_chatgpt.py",
+  "description": "Projekt-alapú JSON fordítás ChatGPT segítségével, intelligens csoportosítással és folytatható futással.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "auth_key",
+      "flags": [
+        "-auth_key",
+        "--auth-key"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "input_language",
+      "flags": [
+        "-input_language",
+        "--input-language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "output_language",
+      "flags": [
+        "-output_language",
+        "--output-language"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "context",
+      "flags": [
+        "-context",
+        "--context"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "tone",
+      "flags": [
+        "--tone"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "target_audience",
+      "flags": [
+        "--target-audience"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "platform",
+      "flags": [
+        "--platform"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "style_notes",
+      "flags": [
+        "--style-notes"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "glossary",
+      "flags": [
+        "--glossary"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "model",
+      "flags": [
+        "-model",
+        "--model"
+      ],
+      "type": "option",
+      "default": "gpt-4o"
+    },
+    {
+      "name": "stream",
+      "flags": [
+        "-stream",
+        "--stream"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "allow_sensitive_content",
+      "flags": [
+        "-allow_sensitive_content",
+        "--allow-sensitive-content"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "systemprompt",
+      "flags": [
+        "-systemprompt",
+        "--systemprompt"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}
