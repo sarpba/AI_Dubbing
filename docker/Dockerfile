@@ -90,4 +90,4 @@ EXPOSE 2018
 
 RUN chmod +x docker/entrypoint.sh
 
-ENTRYPOINT ["./docker/entrypoint.sh"]
+ENTRYPOINT ["/workspace/docker/entrypoint.sh"]
