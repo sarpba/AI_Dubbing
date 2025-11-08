@@ -4,7 +4,6 @@ workdir/*/
 .gradio/
 .old/
 narrator/*
-docker/*
 
 # Kizárt konfigurációs és adatfájlok
 keyholder.json
