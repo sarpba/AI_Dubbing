@@ -1207,6 +1207,31 @@
             return result;
         }
 
+        async function uploadFilesToTtsRequest(targetPath, files) {
+            const formData = new FormData();
+            if (targetPath) {
+                formData.append('targetPath', targetPath);
+            }
+            formData.append('modelFile', files.model);
+            formData.append('vocabFile', files.vocab);
+            formData.append('configFile', files.config);
+
+            const response = await fetch('/api/tts-upload', {
+                method: 'POST',
+                body: formData
+            });
+            let result = {};
+            try {
+                result = await response.json();
+            } catch (error) {
+                // ignore
+            }
+            if (!response.ok || !result.success) {
+                throw new Error((result && result.error) || 'Nem sikerült feltölteni a fájlt a TTS könyvtárba.');
+            }
+            return result;
+        }
+
         function extractDownloadFilename(dispositionHeader) {
             if (!dispositionHeader || typeof dispositionHeader !== 'string') {
                 return null;
@@ -1460,6 +1485,63 @@
             if (backupBtn) {
                 backupBtn.addEventListener('click', () => {
                     requestProjectBackup();
+                });
+            }
+        }
+
+        function initTtsControls() {
+            const uploadTargetInput = document.getElementById('ttsUploadTargetInput');
+            const modelInput = document.getElementById('ttsUploadModelInput');
+            const vocabInput = document.getElementById('ttsUploadVocabInput');
+            const configInput = document.getElementById('ttsUploadConfigInput');
+            const uploadBtn = document.getElementById('ttsUploadBtn');
+
+            if (uploadBtn && modelInput && vocabInput && configInput) {
+                uploadBtn.addEventListener('click', async () => {
+                    const modelFile = modelInput.files && modelInput.files[0];
+                    const vocabFile = vocabInput.files && vocabInput.files[0];
+                    const configFile = configInput.files && configInput.files[0];
+                    if (!modelFile || !vocabFile || !configFile) {
+                        alert('Válaszd ki mindhárom fájlt: modell, vocab.txt és konfiguráció.');
+                        return;
+                    }
+                    if (!vocabFile.name.toLowerCase().endsWith('.txt')) {
+                        alert('A vocab fájlnak .txt kiterjesztésűnek kell lennie.');
+                        return;
+                    }
+                    if (!configFile.name.toLowerCase().endsWith('.json')) {
+                        alert('A konfigurációs fájlnak .json kiterjesztésűnek kell lennie.');
+                        return;
+                    }
+                    const targetPath = uploadTargetInput ? uploadTargetInput.value.trim() : '';
+                    const originalLabel = uploadBtn.dataset.originalLabel || uploadBtn.textContent;
+                    uploadBtn.dataset.originalLabel = originalLabel;
+                    uploadBtn.disabled = true;
+                    modelInput.disabled = true;
+                    vocabInput.disabled = true;
+                    configInput.disabled = true;
+                    uploadBtn.textContent = 'Feltöltés...';
+                    try {
+                        const result = await uploadFilesToTtsRequest(targetPath, {
+                            model: modelFile,
+                            vocab: vocabFile,
+                            config: configFile
+                        });
+                        alert(result.message || 'Fájlok sikeresen feltöltve.');
+                        modelInput.value = '';
+                        vocabInput.value = '';
+                        configInput.value = '';
+                        setTimeout(() => location.reload(), 600);
+                    } catch (error) {
+                        console.error('TTS feltöltési hiba:', error);
+                        alert(error.message || 'Nem sikerült feltölteni a fájlokat.');
+                    } finally {
+                        uploadBtn.disabled = false;
+                        modelInput.disabled = false;
+                        vocabInput.disabled = false;
+                        configInput.disabled = false;
+                        uploadBtn.textContent = originalLabel;
+                    }
                 });
             }
         }
@@ -4499,6 +4581,7 @@
                 });
             }
             initProjectFileActions();
+            initTtsControls();
             initFileBrowser();
             initWorkflowModals();
             initWorkflowButtons();
@@ -4721,6 +4804,67 @@
                 {% else %}
                     <p class="mb-0">A projekt mappa üres.</p>
                 {% endif %}
+                <hr class="my-4">
+                <div class="tts-operations border rounded-3 p-3 bg-body-tertiary">
+                    <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
+                        <div>
+                            <h6 class="mb-1">F5-TTS modellek kezelése</h6>
+                            <p class="mb-2 small text-muted mb-lg-0">
+                                Itt tölthetsz fel F5-TTS modelleket a <code>{{ config['DIRECTORIES'].get('TTS', 'TTS') }}</code>
+                                könyvtár bármely almappájába, amit később használhatsz a TTS generáláshoz.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-semibold">TTS almappák</span>
+                            {% if tts_root_path %}
+                                <span class="small text-muted">Gyökér: {{ tts_root_path }}</span>
+                            {% endif %}
+                        </div>
+                        {% if tts_directories %}
+                            <ul class="list-group list-group-flush small mb-3">
+                                {% for directory in tts_directories %}
+                                    <li class="list-group-item px-2 py-1">
+                                        <code>{{ directory }}</code>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <div class="alert alert-secondary small mb-3">
+                                Nem találtunk almappát a TTS könyvtárban.
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="row g-2 align-items-end mt-3">
+                        <div class="col-lg-8">
+                            <label for="ttsUploadTargetInput" class="form-label mb-1">Cél almappa (opcionális)</label>
+                            <input type="text" class="form-control form-control-sm" id="ttsUploadTargetInput" placeholder="Pl.: f5_models/custom">
+                            <div class="form-text">A megadott útvonal a TTS gyökérhez képest értendő.</div>
+                        </div>
+                    </div>
+                    <div class="row g-2 align-items-end mt-1">
+                        <div class="col-md-4">
+                            <label for="ttsUploadModelInput" class="form-label mb-1">Model fájl</label>
+                            <input type="file" class="form-control form-control-sm" id="ttsUploadModelInput">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="ttsUploadVocabInput" class="form-label mb-1">vocab.txt</label>
+                            <input type="file" class="form-control form-control-sm" id="ttsUploadVocabInput" accept=".txt,text/plain">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="ttsUploadConfigInput" class="form-label mb-1">Konfiguráció (JSON)</label>
+                            <input type="file" class="form-control form-control-sm" id="ttsUploadConfigInput" accept=".json,application/json">
+                        </div>
+                    </div>
+                    <div class="row g-2 align-items-end mt-2">
+                        <div class="col-lg-3 col-md-4">
+                            <button type="button" class="btn btn-sm btn-success w-100" id="ttsUploadBtn">
+                                Model csomag feltöltése
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 

@@ -468,6 +468,34 @@ def is_subpath(child_path, parent_path):
         return False
 
 
+def sanitize_storage_relative_path(path_value: str, *, allow_empty: bool = False) -> str:
+    normalized = (path_value or '').strip().strip('/\\')
+    if not normalized:
+        if allow_empty:
+            return ''
+        raise ValueError('Adj meg érvényes almappa nevet.')
+    segments = [segment for segment in re.split(r'[\\/]+', normalized) if segment]
+    if not segments:
+        if allow_empty:
+            return ''
+        raise ValueError('Adj meg érvényes almappa nevet.')
+    sanitized_segments = []
+    for segment in segments:
+        safe_segment = secure_filename(segment)
+        if not safe_segment:
+            raise ValueError('Az útvonal érvénytelen karaktereket tartalmaz.')
+        sanitized_segments.append(safe_segment)
+    return '/'.join(sanitized_segments)
+
+
+def get_tts_root_directory(config_snapshot: Dict[str, Any]) -> Optional[str]:
+    directories = config_snapshot.get('DIRECTORIES', {}) if isinstance(config_snapshot, dict) else {}
+    tts_dir_value = directories.get('TTS')
+    if not tts_dir_value:
+        return None
+    return resolve_workspace_path(tts_dir_value)
+
+
 def safe_extract_tar(archive: tarfile.TarFile, destination: str) -> None:
     for member in archive.getmembers():
         member_name = member.name or ''
@@ -2170,10 +2198,23 @@ def show_project(project_name):
     # Új flag: van-e transzkribálható (beszéd) audio fájl
     has_transcribable_audio = any(f_info['is_audio'] for f_info in speech_files_data)
     
+    tts_root_abs = get_tts_root_directory(config)
+    tts_directories: List[str] = []
+    if tts_root_abs and os.path.isdir(tts_root_abs):
+        try:
+            for entry in sorted(os.listdir(tts_root_abs)):
+                full_path = os.path.join(tts_root_abs, entry)
+                if os.path.isdir(full_path):
+                    tts_directories.append(os.path.abspath(full_path))
+        except OSError as exc:
+            logging.warning("Nem sikerült beolvasni a TTS könyvtárat: %s", exc)
+
     return render_template('project.html', 
                          project=project_data,
                          project_tree=build_directory_tree(project_dir),
                          config=config,
+                         tts_root_path=tts_root_abs,
+                         tts_directories=tts_directories,
                          audio_extensions=AUDIO_EXTENSIONS,
                          video_extensions=VIDEO_EXTENSIONS,
                          audio_mime_map=AUDIO_MIME_MAP,
@@ -2452,6 +2493,148 @@ def create_project_backup():
     except FileNotFoundError:
         logging.exception("A létrehozott archívum nem található: %s", archive_path)
         return jsonify({'success': False, 'error': 'A biztonsági mentés nem található.'}), 500
+
+
+@app.route('/api/tts-directory', methods=['POST'])
+def create_tts_directory():
+    payload = request.get_json(silent=True) or {}
+    target_path_raw = (payload.get('path') or '').strip()
+    if not target_path_raw:
+        return jsonify({'success': False, 'error': 'Adj meg almappa nevet.'}), 400
+
+    config_snapshot = get_config_copy()
+    tts_root_abs = get_tts_root_directory(config_snapshot)
+    if not tts_root_abs:
+        return jsonify({'success': False, 'error': 'A TTS könyvtár nincs konfigurálva.'}), 500
+
+    try:
+        os.makedirs(tts_root_abs, exist_ok=True)
+    except OSError as exc:
+        logging.exception("Nem sikerült előkészíteni a TTS könyvtárat: %s", exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült elérni a TTS könyvtárat.'}), 500
+
+    try:
+        sanitized_relative = sanitize_storage_relative_path(target_path_raw, allow_empty=False)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    target_abs = os.path.abspath(os.path.join(tts_root_abs, sanitized_relative))
+    if not is_subpath(target_abs, tts_root_abs):
+        return jsonify({'success': False, 'error': 'Érvénytelen TTS almappa útvonal.'}), 400
+
+    if os.path.isdir(target_abs):
+        relative_existing = os.path.relpath(target_abs, tts_root_abs).replace('\\', '/')
+        return jsonify({
+            'success': True,
+            'message': 'A megadott almappa már létezik.',
+            'path': relative_existing
+        })
+
+    try:
+        os.makedirs(target_abs, exist_ok=True)
+    except OSError as exc:
+        logging.exception("Nem sikerült létrehozni a TTS almappát (%s): %s", target_abs, exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült létrehozni az almappát.'}), 500
+
+    relative_created = os.path.relpath(target_abs, tts_root_abs).replace('\\', '/')
+    return jsonify({
+        'success': True,
+        'message': 'Almappa sikeresen létrehozva.',
+        'path': relative_created
+    })
+
+
+@app.route('/api/tts-upload', methods=['POST'])
+def upload_tts_file():
+    target_path_raw = (request.form.get('targetPath') or '').strip()
+    uploaded_files = {
+        'model': request.files.get('modelFile'),
+        'vocab': request.files.get('vocabFile'),
+        'config': request.files.get('configFile')
+    }
+    required_labels = {
+        'model': 'model fájl',
+        'vocab': 'vocab.txt fájl',
+        'config': 'konfigurációs (JSON) fájl'
+    }
+    for key, file_storage in uploaded_files.items():
+        if not file_storage or not file_storage.filename:
+            return jsonify({
+                'success': False,
+                'error': f'Hiányzik a(z) {required_labels[key]}.'
+            }), 400
+
+    config_snapshot = get_config_copy()
+    tts_root_abs = get_tts_root_directory(config_snapshot)
+    if not tts_root_abs:
+        return jsonify({'success': False, 'error': 'A TTS könyvtár nincs konfigurálva.'}), 500
+
+    try:
+        os.makedirs(tts_root_abs, exist_ok=True)
+    except OSError as exc:
+        logging.exception("Nem sikerült előkészíteni a TTS könyvtárat: %s", exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült elérni a TTS könyvtárat.'}), 500
+
+    sanitized_relative = ''
+    if target_path_raw:
+        try:
+            sanitized_relative = sanitize_storage_relative_path(target_path_raw, allow_empty=False)
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+
+    destination_dir = tts_root_abs
+    if sanitized_relative:
+        destination_dir = os.path.abspath(os.path.join(tts_root_abs, sanitized_relative))
+        if not is_subpath(destination_dir, tts_root_abs):
+            return jsonify({'success': False, 'error': 'Érvénytelen célkönyvtár a TTS mappában.'}), 400
+        try:
+            os.makedirs(destination_dir, exist_ok=True)
+        except OSError as exc:
+            logging.exception("Nem sikerült létrehozni a célkönyvtárat (%s): %s", destination_dir, exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a célkönyvtárat.'}), 500
+
+    saved_paths: List[Tuple[str, str]] = []
+    try:
+        for key, file_storage in uploaded_files.items():
+            safe_filename = secure_filename(file_storage.filename)
+            if not safe_filename:
+                raise ValueError(f'A(z) {required_labels[key]} neve érvénytelen karaktereket tartalmaz.')
+            destination_abs = os.path.abspath(os.path.join(destination_dir, safe_filename))
+            if not is_subpath(destination_abs, tts_root_abs):
+                raise ValueError('Érvénytelen célfájl elérési útvonal.')
+            if os.path.exists(destination_abs):
+                raise FileExistsError(f'Már létezik ilyen nevű fájl: {safe_filename}')
+            file_storage.save(destination_abs)
+            relative_saved_path = os.path.relpath(destination_abs, tts_root_abs).replace('\\', '/')
+            saved_paths.append((safe_filename, relative_saved_path))
+    except ValueError as exc:
+        for _, rel_path in saved_paths:
+            try:
+                os.remove(os.path.join(tts_root_abs, rel_path))
+            except OSError:
+                pass
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except FileExistsError as exc:
+        for _, rel_path in saved_paths:
+            try:
+                os.remove(os.path.join(tts_root_abs, rel_path))
+            except OSError:
+                pass
+        return jsonify({'success': False, 'error': str(exc)}), 409
+    except OSError as exc:
+        logging.exception("Nem sikerült menteni a TTS fájlokat: %s", exc)
+        for _, rel_path in saved_paths:
+            try:
+                os.remove(os.path.join(tts_root_abs, rel_path))
+            except OSError:
+                pass
+        return jsonify({'success': False, 'error': 'Nem sikerült menteni a feltöltött fájlokat.'}), 500
+
+    return jsonify({
+        'success': True,
+        'message': 'F5-TTS modell csomag sikeresen feltöltve.',
+        'paths': [path for _, path in saved_paths]
+    })
 
 
 @app.route('/api/project-file/<project_name>', methods=['DELETE'])
