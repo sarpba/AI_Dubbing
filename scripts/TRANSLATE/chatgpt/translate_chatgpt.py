@@ -182,13 +182,30 @@ def create_smart_chunks(segments: List[Dict[str, Any]], min_size: int = 50, max_
     return chunks
 
 
-def build_system_prompt(lang_from: str, lang_to: str, allow_sensitive: bool, context: Optional[str], override: Optional[str]) -> str:
+def build_system_prompt(
+    lang_from: str,
+    lang_to: str,
+    allow_sensitive: bool,
+    context: Optional[str],
+    override: Optional[str],
+) -> str:
     """Construct the system prompt, allowing an override via CLI."""
+    input_lang_name = get_lang_name(lang_from)
+    output_lang_name = get_lang_name(lang_to)
+    replacements = {
+        "source_language": input_lang_name,
+        "target_language": output_lang_name,
+        "source_language_code": lang_from.upper(),
+        "target_language_code": lang_to.upper(),
+    }
+
     if override and override.strip():
         system_prompt = override.strip()
+        try:
+            system_prompt = system_prompt.format(**replacements)
+        except KeyError as exc:
+            logger.warning("A megadott system prompt formázása sikertelen, hiányzó kulcs: %s", exc)
     else:
-        input_lang_name = get_lang_name(lang_from)
-        output_lang_name = get_lang_name(lang_to)
         if allow_sensitive:
             system_prompt = (
                 f"You are a professional translator for tasks like film subtitling. Translate the numbered list from {input_lang_name} to {output_lang_name}. "
@@ -203,6 +220,15 @@ def build_system_prompt(lang_from: str, lang_to: str, allow_sensitive: bool, con
             )
     if context:
         system_prompt += f"\n\nContext: '{context}'"
+
+    normalized_prompt = system_prompt.lower()
+    extras: List[str] = []
+    if input_lang_name.lower() not in normalized_prompt and lang_from.lower() not in normalized_prompt:
+        extras.append(f"Source language: {lang_from.upper()} ({input_lang_name})")
+    if output_lang_name.lower() not in normalized_prompt and lang_to.lower() not in normalized_prompt:
+        extras.append(f"Target language: {lang_to.upper()} ({output_lang_name})")
+    if extras:
+        system_prompt += "\n\n" + "\n".join(extras)
     return system_prompt
 
 
