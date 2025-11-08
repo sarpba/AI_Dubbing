@@ -1207,6 +1207,88 @@
             return result;
         }
 
+        function extractDownloadFilename(dispositionHeader) {
+            if (!dispositionHeader || typeof dispositionHeader !== 'string') {
+                return null;
+            }
+            const utf8Match = dispositionHeader.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+            if (utf8Match && utf8Match[1]) {
+                const rawValue = utf8Match[1].trim().replace(/^\"|\"$/g, '');
+                try {
+                    return decodeURIComponent(rawValue.replace(/\+/g, '%20'));
+                } catch (error) {
+                    return rawValue;
+                }
+            }
+            const asciiMatch = dispositionHeader.match(/filename=\"?([^\";]+)\"?/i);
+            if (asciiMatch && asciiMatch[1]) {
+                return asciiMatch[1].trim();
+            }
+            return null;
+        }
+
+        async function requestProjectBackup() {
+            if (!PROJECT_NAME) {
+                alert('A projektnév nem elérhető.');
+                return;
+            }
+            const backupBtn = document.getElementById('projectBackupBtn');
+            if (backupBtn) {
+                backupBtn.dataset.originalLabel = backupBtn.dataset.originalLabel || backupBtn.textContent;
+                backupBtn.disabled = true;
+                backupBtn.textContent = 'Mentés készítése...';
+            }
+            try {
+                const response = await fetch('/api/project-backup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        projectName: PROJECT_NAME
+                    })
+                });
+                const contentType = response.headers.get('content-type') || '';
+                if (!response.ok) {
+                    let errorMessage = 'Nem sikerült létrehozni a biztonsági mentést.';
+                    if (contentType.includes('application/json')) {
+                        try {
+                            const result = await response.json();
+                            if (result && result.error) {
+                                errorMessage = result.error;
+                            }
+                        } catch (error) {
+                            // ignore parse error
+                        }
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const blob = await response.blob();
+                const disposition = response.headers.get('content-disposition') || '';
+                const fallbackName = `${PROJECT_NAME || 'project'}_backup.tar.gz`;
+                const filename = extractDownloadFilename(disposition) || fallbackName;
+                const urlCreator = window.URL || window.webkitURL;
+                const downloadUrl = urlCreator.createObjectURL(blob);
+                const tempLink = document.createElement('a');
+                tempLink.href = downloadUrl;
+                tempLink.download = filename;
+                document.body.appendChild(tempLink);
+                tempLink.click();
+                document.body.removeChild(tempLink);
+                urlCreator.revokeObjectURL(downloadUrl);
+            } catch (error) {
+                console.error('Projekt backup hiba:', error);
+                alert(error.message || 'Nem sikerült létrehozni a biztonsági mentést.');
+            } finally {
+                if (backupBtn) {
+                    backupBtn.disabled = false;
+                    const original = backupBtn.dataset.originalLabel || 'Biztonsági mentés letöltése';
+                    backupBtn.textContent = original;
+                }
+            }
+        }
+
         function showVideoPreview(fileName, fileUrl) {
             const modalElement = document.getElementById('videoPreviewModal');
             if (!modalElement) {
@@ -1371,6 +1453,13 @@
             if (refreshBtn) {
                 refreshBtn.addEventListener('click', () => {
                     reloadFileBrowser('');
+                });
+            }
+
+            const backupBtn = document.getElementById('projectBackupBtn');
+            if (backupBtn) {
+                backupBtn.addEventListener('click', () => {
+                    requestProjectBackup();
                 });
             }
         }
@@ -4618,6 +4707,7 @@
                 <div class="d-flex flex-wrap gap-2 mb-3">
                     <button type="button" class="btn btn-outline-primary btn-sm" id="rootUploadBtn">Fájl feltöltése a gyökérbe</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshFileBrowserBtn">Lista frissítése</button>
+                    <button type="button" class="btn btn-outline-success btn-sm" id="projectBackupBtn">Biztonsági mentés letöltése</button>
                 </div>
                 <div id="failedGenerationLegend" class="file-browser-legend small{% if not has_failed_generation_highlights %} d-none{% endif %}">
                     <span class="file-browser-legend-swatch" aria-hidden="true"></span>

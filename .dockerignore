@@ -8,7 +8,7 @@ workdir/*/
 .gradio/
 .old/
 narrator/*
-#TTS/*/
+TTS/*/
 
 # Docker build assets must remain available
 !docker/

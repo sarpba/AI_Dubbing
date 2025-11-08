@@ -1,4 +1,13 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, url_for
+from flask import (
+    Flask,
+    render_template,
+    request,
+    jsonify,
+    send_from_directory,
+    url_for,
+    send_file,
+    after_this_request
+)
 import os
 import json
 import subprocess
@@ -2325,6 +2334,86 @@ def move_failed_generation_file():
         'message': 'Fájl sikeresen áthelyezve.',
         'destination_path': relative_destination
     })
+
+
+@app.route('/api/project-backup', methods=['POST'])
+def create_project_backup():
+    payload = request.get_json(silent=True) or {}
+    project_name = (payload.get('projectName') or '').strip()
+
+    if not project_name:
+        return jsonify({'success': False, 'error': 'Hiányzó projektnév.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    project_root = os.path.join(workdir_path, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+
+    if not os.path.isdir(project_root_abs):
+        return jsonify({'success': False, 'error': 'A projekt könyvtára nem található.'}), 404
+
+    temp_dir = tempfile.mkdtemp(prefix='project-backup-')
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    archive_base = os.path.join(temp_dir, f"{sanitized_project}_backup_{timestamp}")
+    archive_path = f"{archive_base}.tar.gz"
+
+    @after_this_request
+    def cleanup_temp_dir(response):
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception as exc:
+            logging.exception("Nem sikerült törölni az ideiglenes könyvtárat (%s): %s", temp_dir, exc)
+        return response
+
+    archive_created = False
+    tar_executable = shutil.which('tar')
+    pigz_executable = shutil.which('pigz')
+    pigz_threads = max(1, min((os.cpu_count() or 1), 16))
+
+    if tar_executable:
+        tar_cmd = [tar_executable]
+        if pigz_executable:
+            tar_cmd.extend(['-cf', archive_path, '-I', f'{pigz_executable} -p {pigz_threads}'])
+        else:
+            tar_cmd.extend(['-czf', archive_path])
+        tar_cmd.extend(['-C', project_root_abs, '.'])
+        try:
+            subprocess.run(tar_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            archive_created = True
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            logging.exception("Tar archívum készítése sikertelen (pigz=%s): %s", bool(pigz_executable), exc)
+
+    if not archive_created:
+        if os.path.exists(archive_path):
+            try:
+                os.remove(archive_path)
+            except OSError:
+                pass
+        try:
+            archive_path = shutil.make_archive(archive_base, 'gztar', root_dir=project_root_abs)
+            archive_created = True
+        except Exception as exc:
+            logging.exception("Python alapú archívum készítése sikertelen: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült létrehozni a biztonsági mentést.'}), 500
+
+    if not archive_created or not os.path.exists(archive_path):
+        return jsonify({'success': False, 'error': 'A biztonsági mentés nem található.'}), 500
+
+    download_name = os.path.basename(archive_path)
+    try:
+        return send_file(
+            archive_path,
+            mimetype='application/gzip',
+            as_attachment=True,
+            download_name=download_name
+        )
+    except FileNotFoundError:
+        logging.exception("A létrehozott archívum nem található: %s", archive_path)
+        return jsonify({'success': False, 'error': 'A biztonsági mentés nem található.'}), 500
 
 
 @app.route('/api/project-file/<project_name>', methods=['DELETE'])
