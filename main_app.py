@@ -24,6 +24,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import shutil
+import tarfile
+import zipfile
+import stat
 from werkzeug.utils import secure_filename
 from pydub import AudioSegment
 import wave
@@ -463,6 +466,41 @@ def is_subpath(child_path, parent_path):
         return os.path.commonpath([child_path, parent_path]) == os.path.commonpath([parent_path])
     except ValueError:
         return False
+
+
+def safe_extract_tar(archive: tarfile.TarFile, destination: str) -> None:
+    for member in archive.getmembers():
+        member_name = member.name or ''
+        if not member_name:
+            continue
+        member_path = os.path.abspath(os.path.join(destination, member_name))
+        if not is_subpath(member_path, destination):
+            raise ValueError('Az archívum érvénytelen elérési utakat tartalmaz.')
+        if member.issym() or member.islnk():
+            raise ValueError('Az archívum szimbolikus linkeket tartalmaz, ami nem támogatott.')
+    archive.extractall(path=destination)
+
+
+def safe_extract_zip(archive: zipfile.ZipFile, destination: str) -> None:
+    for info in archive.infolist():
+        member_name = info.filename or ''
+        if not member_name:
+            continue
+        if info.create_system == 3:
+            permissions = info.external_attr >> 16
+            if stat.S_ISLNK(permissions):
+                raise ValueError('Az archívum szimbolikus linkeket tartalmaz, ami nem támogatott.')
+        member_path = os.path.abspath(os.path.join(destination, member_name))
+        if not is_subpath(member_path, destination):
+            raise ValueError('Az archívum érvénytelen elérési utakat tartalmaz.')
+        if info.is_dir():
+            os.makedirs(member_path, exist_ok=True)
+            continue
+        parent_dir = os.path.dirname(member_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+        with archive.open(info, 'r') as source, open(member_path, 'wb') as target:
+            shutil.copyfileobj(source, target)
 
 
 def collect_directory_entries(
@@ -2679,6 +2717,145 @@ def review_project(project_name):
                            segments_data=segments_data,
                            json_file_name=json_file_name,
                            app_config=config)  # Átadjuk a konfigurációt app_config néven
+
+@app.route('/api/restore-project', methods=['POST'])
+def restore_project_backup():
+    project_name = (request.form.get('projectName') or '').strip()
+    backup_file = request.files.get('backupFile')
+
+    if not project_name:
+        return jsonify({'success': False, 'error': 'Add meg a projekt nevét!'}), 400
+    if not backup_file or not backup_file.filename:
+        return jsonify({'success': False, 'error': 'Nem érkezett archívum a visszaállításhoz.'}), 400
+
+    sanitized_project = secure_filename(project_name)
+    if not sanitized_project:
+        return jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+    config_snapshot = get_config_copy()
+    workdir_path = config_snapshot['DIRECTORIES']['workdir']
+    workdir_abs = os.path.abspath(workdir_path)
+    try:
+        os.makedirs(workdir_abs, exist_ok=True)
+    except OSError as exc:
+        logging.exception("Nem sikerült elérni a workdir könyvtárat: %s", exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült elérni a workdir könyvtárat.'}), 500
+
+    project_root = os.path.join(workdir_abs, sanitized_project)
+    project_root_abs = os.path.abspath(project_root)
+    if not is_subpath(project_root_abs, workdir_abs):
+        return jsonify({'success': False, 'error': 'A projektnév pályája érvénytelen.'}), 400
+
+    project_dir_preexisted = os.path.isdir(project_root_abs)
+    if project_dir_preexisted:
+        try:
+            has_entries = any(os.scandir(project_root_abs))
+        except OSError as exc:
+            logging.exception("Nem sikerült beolvasni a projekt könyvtárát: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült elérni a projekt könyvtárát.'}), 500
+        if has_entries:
+            return jsonify({
+                'success': False,
+                'error': 'Már létezik ilyen nevű projekt. Töröld vagy válassz másik nevet a visszaállításhoz.'
+            }), 409
+    else:
+        try:
+            os.makedirs(project_root_abs, exist_ok=True)
+        except OSError as exc:
+            logging.exception("Nem sikerült létrehozni a projekt könyvtárát: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült létrehozni a projekt könyvtárát.'}), 500
+
+    def reset_project_directory():
+        try:
+            shutil.rmtree(project_root_abs, ignore_errors=True)
+            if project_dir_preexisted:
+                os.makedirs(project_root_abs, exist_ok=True)
+        except Exception as exc:
+            logging.exception("Nem sikerült visszaállítani a projekt könyvtárat: %s", exc)
+
+    temp_dir = tempfile.mkdtemp(prefix='project-restore-')
+    archive_name = secure_filename(backup_file.filename) or 'project-backup'
+    archive_path = os.path.join(temp_dir, archive_name)
+    extract_dir = os.path.join(temp_dir, 'extracted')
+    os.makedirs(extract_dir, exist_ok=True)
+
+    try:
+        backup_file.save(archive_path)
+    except Exception as exc:
+        logging.exception("Nem sikerült menteni a feltöltött archívumot: %s", exc)
+        reset_project_directory()
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a feltöltött fájlt.'}), 500
+
+    def resolve_payload_root(base_dir: str) -> str:
+        try:
+            entries = [
+                name for name in os.listdir(base_dir)
+                if name not in ('.', '..', '__MACOSX')
+            ]
+        except OSError as exc:
+            logging.exception("Nem sikerült beolvasni a kicsomagolt archívumot: %s", exc)
+            raise
+        if len(entries) == 1:
+            only_entry_path = os.path.join(base_dir, entries[0])
+            if os.path.isdir(only_entry_path):
+                return only_entry_path
+        return base_dir
+
+    try:
+        if zipfile.is_zipfile(archive_path):
+            with zipfile.ZipFile(archive_path) as archive:
+                safe_extract_zip(archive, extract_dir)
+        elif tarfile.is_tarfile(archive_path):
+            with tarfile.open(archive_path, 'r:*') as archive:
+                safe_extract_tar(archive, extract_dir)
+        else:
+            reset_project_directory()
+            return jsonify({
+                'success': False,
+                'error': 'A feltöltött fájl nem támogatott archívum (csak .tar, .tar.gz, .tgz vagy .zip).'
+            }), 400
+
+        payload_root = resolve_payload_root(extract_dir)
+        try:
+            entries_to_move = [
+                entry for entry in os.listdir(payload_root)
+                if entry not in ('__MACOSX',)
+            ]
+        except OSError as exc:
+            logging.exception("Nem sikerült beolvasni a kicsomagolt fájlokat: %s", exc)
+            reset_project_directory()
+            return jsonify({'success': False, 'error': 'Nem sikerült feldolgozni a kicsomagolt fájlokat.'}), 500
+
+        if not entries_to_move:
+            reset_project_directory()
+            return jsonify({'success': False, 'error': 'Az archívum nem tartalmaz visszaállítható fájlokat.'}), 400
+
+        for entry in entries_to_move:
+            source_path = os.path.join(payload_root, entry)
+            destination_path = os.path.join(project_root_abs, entry)
+            shutil.move(source_path, destination_path)
+
+        return jsonify({
+            'success': True,
+            'message': 'A projekt mentés sikeresen visszaállítva.',
+            'project': sanitized_project
+        })
+    except ValueError as exc:
+        logging.exception("Érvénytelen archívumtartalom: %s", exc)
+        reset_project_directory()
+        return jsonify({'success': False, 'error': 'Az archívum érvénytelen vagy tiltott útvonalakat tartalmaz.'}), 400
+    except (zipfile.BadZipFile, tarfile.TarError) as exc:
+        logging.exception("Nem sikerült kibontani a mentést: %s", exc)
+        reset_project_directory()
+        return jsonify({'success': False, 'error': 'Nem sikerült kibontani a mentést. Ellenőrizd, hogy sértetlen-e a fájl.'}), 400
+    except Exception as exc:
+        logging.exception("Ismeretlen hiba a visszaállítás közben: %s", exc)
+        reset_project_directory()
+        return jsonify({'success': False, 'error': 'Nem sikerült visszaállítani a projektet.'}), 500
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 @app.route('/api/upload-video', methods=['POST'])
 def upload_video():

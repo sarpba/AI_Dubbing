@@ -194,6 +194,9 @@
                                         <button type="button" class="nav-link source-type-tab" id="sourceTypeYoutubeTab" data-source="youtube" role="tab" aria-selected="false">
                                             YouTube letöltés (yt-dlp)
                                         </button>
+                                        <button type="button" class="nav-link source-type-tab" id="sourceTypeRestoreTab" data-source="restore" role="tab" aria-selected="false">
+                                            Mentés visszaállítása
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="mb-3" id="fileInputGroup">
@@ -205,12 +208,17 @@
                                     <input type="url" class="form-control" id="youtubeUrl" name="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." inputmode="url">
                                     <small class="text-muted">A videó yt-dlp segítségével MKV konténerbe kerül letöltésre.</small>
                                 </div>
-                                <div class="mb-3">
+                                <div class="mb-3 d-none" id="restoreInputGroup">
+                                    <label for="restoreArchive" class="form-label">Projekt mentés (.tar.gz vagy .zip)</label>
+                                    <input type="file" class="form-control" id="restoreArchive" name="backupFile" accept=".tar,.tar.gz,.tgz,.zip,application/gzip,application/x-tar">
+                                    <small class="text-muted">Töltsd fel a letöltött projekt mentést; a rendszer visszaállítja a teljes mappát a workdir könyvtárba.</small>
+                                </div>
+                                <div class="mb-3 subtitle-input-group">
                                     <label for="subtitleFile" class="form-label">Felirat fájl (opcionális)</label>
                                     <input type="file" class="form-control" id="subtitleFile" name="subtitleFile" accept=".srt">
                                     <small class="text-muted">Csak .srt felirat fájl tölthető fel.</small>
                                 </div>
-                                <div class="mb-3">
+                                <div class="mb-3 subtitle-input-group">
                                     <label for="subtitleSuffix" class="form-label">Felirat kiegészítés (pl. _hu, _en)</label>
                                     <input type="text" class="form-control" id="subtitleSuffix" name="subtitleSuffix" placeholder="_hu">
                                     <small class="text-muted">Formátum: egy aláhúzás és két betűs nyelvi kód (pl. _hu vagy _en). A mentett felirat neve a videó bázisnév + kiegészítés lesz.</small>
@@ -256,6 +264,9 @@
         const youtubeUrlInput = document.getElementById('youtubeUrl');
         const fileInputGroup = document.getElementById('fileInputGroup');
         const youtubeInputGroup = document.getElementById('youtubeInputGroup');
+        const restoreInputGroup = document.getElementById('restoreInputGroup');
+        const restoreFileInput = document.getElementById('restoreArchive');
+        const subtitleInputGroups = document.querySelectorAll('.subtitle-input-group');
         const projectDeleteButtons = document.querySelectorAll('.project-delete-btn');
         const sourceTypeInput = document.getElementById('sourceTypeInput');
         const sourceTabs = document.querySelectorAll('.source-type-tab');
@@ -265,10 +276,30 @@
         }
 
         function updateSourceVisibility() {
-            const useUpload = getSelectedSource() === 'upload';
+            const selectedSource = getSelectedSource();
+            const useUpload = selectedSource === 'upload';
+            const useYoutube = selectedSource === 'youtube';
+            const useRestore = selectedSource === 'restore';
+
             fileInputGroup.classList.toggle('d-none', !useUpload);
-            youtubeInputGroup.classList.toggle('d-none', useUpload);
-            videoInput.required = useUpload;
+            youtubeInputGroup.classList.toggle('d-none', !useYoutube);
+            if (restoreInputGroup) {
+                restoreInputGroup.classList.toggle('d-none', !useRestore);
+            }
+
+            if (videoInput) {
+                videoInput.required = useUpload;
+            }
+            if (youtubeUrlInput) {
+                youtubeUrlInput.required = useYoutube;
+            }
+            if (restoreFileInput) {
+                restoreFileInput.required = useRestore;
+            }
+
+            subtitleInputGroups.forEach(group => {
+                group.classList.toggle('d-none', useRestore);
+            });
         }
 
         function activateSourceTab(source) {
@@ -353,7 +384,7 @@
                     alert('Válassz videó fájlt!');
                     return;
                 }
-            } else {
+            } else if (sourceType === 'youtube') {
                 if (!youtubeUrl) {
                     alert('Add meg a YouTube hivatkozást!');
                     return;
@@ -363,26 +394,35 @@
                     return;
                 }
                 youtubeUrlInput.value = youtubeUrl;
-            }
-
-            const subtitleInput = document.getElementById('subtitleFile');
-            if (subtitleInput.files.length && !subtitleInput.files[0].name.toLowerCase().endsWith('.srt')) {
-                alert('Csak .srt felirat fájl tölthető fel.');
+            } else if (sourceType === 'restore') {
+                if (!restoreFileInput || !restoreFileInput.files.length) {
+                    alert('Válassz egy korábban letöltött mentés fájlt!');
+                    return;
+                }
+            } else {
+                alert('Ismeretlen forrástípus.');
                 return;
             }
 
+            const subtitleInput = document.getElementById('subtitleFile');
             const subtitleSuffixInput = document.getElementById('subtitleSuffix');
             const subtitleSuffixRaw = subtitleSuffixInput.value.trim();
             const subtitleSuffix = subtitleSuffixRaw.toLowerCase();
             subtitleSuffixInput.value = subtitleSuffix;
 
-            if (subtitleInput.files.length && !subtitleSuffix) {
-                alert('Adj meg felirat kiegészítést (pl. _hu) a feltöltött felirathoz.');
-                return;
-            }
-            if (subtitleSuffix && !/^_[a-z]{2}$/.test(subtitleSuffix)) {
-                alert('A felirat kiegészítés formátuma: aláhúzás + két betűs nyelvi kód (pl. _hu).');
-                return;
+            if (sourceType !== 'restore') {
+                if (subtitleInput.files.length && !subtitleInput.files[0].name.toLowerCase().endsWith('.srt')) {
+                    alert('Csak .srt felirat fájl tölthető fel.');
+                    return;
+                }
+                if (subtitleInput.files.length && !subtitleSuffix) {
+                    alert('Adj meg felirat kiegészítést (pl. _hu) a feltöltött felirathoz.');
+                    return;
+                }
+                if (subtitleSuffix && !/^_[a-z]{2}$/.test(subtitleSuffix)) {
+                    alert('A felirat kiegészítés formátuma: aláhúzás + két betűs nyelvi kód (pl. _hu).');
+                    return;
+                }
             }
 
             const formData = new FormData();
@@ -390,24 +430,29 @@
             formData.append('sourceType', sourceType);
             if (sourceType === 'upload') {
                 formData.append('file', videoInput.files[0]);
-            } else {
+            } else if (sourceType === 'youtube') {
                 formData.append('youtubeUrl', youtubeUrl);
+            } else if (restoreFileInput && restoreFileInput.files.length) {
+                formData.append('backupFile', restoreFileInput.files[0]);
             }
 
-            if (subtitleSuffix) {
-                formData.append('subtitleSuffix', subtitleSuffix);
-            }
-
-            if (subtitleInput.files.length) {
-                formData.append('subtitleFile', subtitleInput.files[0]);
+            if (sourceType !== 'restore') {
+                if (subtitleSuffix) {
+                    formData.append('subtitleSuffix', subtitleSuffix);
+                }
+                if (subtitleInput.files.length) {
+                    formData.append('subtitleFile', subtitleInput.files[0]);
+                }
             }
 
             uploadProgressContainer.classList.remove('d-none');
             uploadProgressBar.classList.remove('bg-success', 'bg-danger');
-            if (sourceType === 'upload') {
+            if (sourceType === 'upload' || sourceType === 'restore') {
                 uploadProgressBar.style.width = '0%';
                 uploadProgressBar.textContent = '0%';
-                uploadProgressText.textContent = 'Feltöltés előkészítése...';
+                uploadProgressText.textContent = sourceType === 'restore'
+                    ? 'Mentés feltöltése előkészítése...'
+                    : 'Feltöltés előkészítése...';
             } else {
                 uploadProgressBar.style.width = '100%';
                 uploadProgressBar.textContent = '';
@@ -415,17 +460,19 @@
             }
 
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/upload-video', true);
+            const targetUrl = sourceType === 'restore' ? '/api/restore-project' : '/api/upload-video';
+            xhr.open('POST', targetUrl, true);
 
             xhr.upload.addEventListener('progress', event => {
-                if (sourceType !== 'upload' || !event.lengthComputable) {
+                if ((sourceType !== 'upload' && sourceType !== 'restore') || !event.lengthComputable) {
                     return;
                 }
 
                 const percent = Math.round((event.loaded / event.total) * 100);
                 uploadProgressBar.style.width = `${percent}%`;
                 uploadProgressBar.textContent = `${percent}%`;
-                uploadProgressText.textContent = `Feltöltve: ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`;
+                const label = sourceType === 'restore' ? 'Mentés feltöltve' : 'Feltöltve';
+                uploadProgressText.textContent = `${label}: ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`;
             });
 
             let responsePayload = null;
@@ -441,7 +488,9 @@
                         const successMessage = responsePayload.message
                             || (sourceType === 'youtube'
                                 ? 'Letöltés befejezve. Az oldal frissítése folyamatban...'
-                                : 'Feltöltés befejezve. Az oldal frissítése folyamatban...');
+                                : sourceType === 'restore'
+                                    ? 'Mentés visszaállítva. Az oldal frissítése folyamatban...'
+                                    : 'Feltöltés befejezve. Az oldal frissítése folyamatban...');
                         uploadProgressText.textContent = successMessage;
                         setTimeout(() => location.reload(), 800);
                     } else {
