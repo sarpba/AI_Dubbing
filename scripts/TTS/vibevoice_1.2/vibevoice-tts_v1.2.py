@@ -627,7 +627,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--model_path",
         type=str,
-        default="microsoft/VibeVoice-1.5b",
+        default="sarpba/VibeVoice-large-HUN",
         help="A HuggingFace model path vagy lokális modell könyvtár.",
     )
     parser.add_argument(

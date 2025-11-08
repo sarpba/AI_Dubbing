@@ -25,7 +25,7 @@
         "--background-volume"
       ],
       "type": "option",
-      "default": 100
+      "default": null
     },
     {
       "name": "max_speedup",

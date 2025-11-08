@@ -24,7 +24,7 @@
         "--model_path"
       ],
       "type": "option",
-      "default": "microsoft/VibeVoice-1.5b"
+      "default": "sarpba/VibeVoice-large-HUN"
     },
     {
       "name": "model_dir",
