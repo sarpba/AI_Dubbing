@@ -2905,6 +2905,24 @@ def review_project(project_name):
 def restore_project_backup():
     project_name = (request.form.get('projectName') or '').strip()
     backup_file = request.files.get('backupFile')
+    chunk_upload_id = (request.form.get('chunkUploadId') or '').strip()
+
+    def _parse_int(value: Any) -> Optional[int]:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    chunk_index = _parse_int(request.form.get('chunkIndex'))
+    total_chunks = _parse_int(request.form.get('totalChunks'))
+    chunk_size_bytes = _parse_int(request.form.get('chunkSize'))
+    requested_backup_name = request.form.get('fileName') or (backup_file.filename if backup_file else '')
+    chunk_mode = (
+        bool(chunk_upload_id)
+        and chunk_index is not None
+        and total_chunks is not None
+        and total_chunks > 0
+    )
 
     if not project_name:
         return jsonify({'success': False, 'error': 'Add meg a projekt nevét!'}), 400
@@ -2956,19 +2974,71 @@ def restore_project_backup():
         except Exception as exc:
             logging.exception("Nem sikerült visszaállítani a projekt könyvtárat: %s", exc)
 
+    chunk_base_dir = None
+    assembled_archive_path = None
+    chunk_parent_root = os.path.join(workdir_abs, '.restore_chunks', sanitized_project)
+
+    if chunk_mode:
+        if chunk_index < 0 or chunk_index >= total_chunks:
+            return jsonify({'success': False, 'error': 'Érvénytelen darab index.'}), 400
+
+        chunk_id_safe = secure_filename(chunk_upload_id) or f"{sanitized_project}_chunk"
+        chunk_base_dir = os.path.join(chunk_parent_root, chunk_id_safe)
+        try:
+            os.makedirs(chunk_base_dir, exist_ok=True)
+        except OSError as exc:
+            logging.exception("Nem sikerült létrehozni a chunk könyvtárat: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a chunk könyvtárat.'}), 500
+
+        chunk_filename = os.path.join(chunk_base_dir, f"{chunk_index:06d}.part")
+        try:
+            backup_file.save(chunk_filename)
+        except Exception as exc:
+            logging.exception("Nem sikerült menteni a mentés darabot: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült menteni a mentés darabot.'}), 500
+
+        if chunk_index + 1 < total_chunks:
+            return jsonify({
+                'success': True,
+                'chunkIndex': chunk_index,
+                'totalChunks': total_chunks,
+                'completed': False
+            })
+
+        assembled_name = secure_filename(requested_backup_name) or f"{sanitized_project}_backup.tar"
+        assembled_archive_path = os.path.join(chunk_base_dir, assembled_name)
+
+        try:
+            with open(assembled_archive_path, 'wb') as destination:
+                for idx in range(total_chunks):
+                    part_path = os.path.join(chunk_base_dir, f"{idx:06d}.part")
+                    if not os.path.exists(part_path):
+                        logging.error("Hiányzik a(z) %s chunk a mentés összefűzéséhez.", part_path)
+                        shutil.rmtree(chunk_base_dir, ignore_errors=True)
+                        return jsonify({'success': False, 'error': f'Hiányzó mentés darab: {idx}.'}), 400
+                    with open(part_path, 'rb') as part_file:
+                        shutil.copyfileobj(part_file, destination)
+        except Exception as exc:
+            logging.exception("Nem sikerült a chunkokat összeilleszteni: %s", exc)
+            shutil.rmtree(chunk_base_dir, ignore_errors=True)
+            return jsonify({'success': False, 'error': 'Nem sikerült a mentés darabjainak összeillesztése.'}), 500
+
     temp_dir = tempfile.mkdtemp(prefix='project-restore-')
-    archive_name = secure_filename(backup_file.filename) or 'project-backup'
-    archive_path = os.path.join(temp_dir, archive_name)
     extract_dir = os.path.join(temp_dir, 'extracted')
     os.makedirs(extract_dir, exist_ok=True)
 
-    try:
-        backup_file.save(archive_path)
-    except Exception as exc:
-        logging.exception("Nem sikerült menteni a feltöltött archívumot: %s", exc)
-        reset_project_directory()
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a feltöltött fájlt.'}), 500
+    if assembled_archive_path:
+        archive_path = assembled_archive_path
+    else:
+        archive_name = secure_filename(backup_file.filename) or 'project-backup'
+        archive_path = os.path.join(temp_dir, archive_name)
+        try:
+            backup_file.save(archive_path)
+        except Exception as exc:
+            logging.exception("Nem sikerült menteni a feltöltött archívumot: %s", exc)
+            reset_project_directory()
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a feltöltött fájlt.'}), 500
 
     def resolve_payload_root(base_dir: str) -> str:
         try:
@@ -3038,6 +3108,8 @@ def restore_project_backup():
         return jsonify({'success': False, 'error': 'Nem sikerült visszaállítani a projektet.'}), 500
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+        if chunk_base_dir:
+            shutil.rmtree(chunk_base_dir, ignore_errors=True)
 
 
 @app.route('/api/upload-video', methods=['POST'])
@@ -3045,6 +3117,17 @@ def upload_video():
     project_name = request.form.get('projectName', '').strip()
     youtube_url = request.form.get('youtubeUrl', '').strip()
     video_file = request.files.get('file')
+    chunk_upload_id = (request.form.get('chunkUploadId') or '').strip()
+
+    def _parse_int(value: Any) -> Optional[int]:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    chunk_index = _parse_int(request.form.get('chunkIndex'))
+    total_chunks = _parse_int(request.form.get('totalChunks'))
+    chunk_size_bytes = _parse_int(request.form.get('chunkSize'))
     has_video_file = bool(video_file and video_file.filename)
 
     if not project_name:
@@ -3080,6 +3163,7 @@ def upload_video():
     subtitle_suffix_raw = request.form.get('subtitleSuffix', '').strip()
     subtitle_filename = None
     subtitle_suffix_normalized = None
+    chunk_upload_handled = False
 
     if subtitle_file and subtitle_file.filename:
         original_subtitle_filename = secure_filename(subtitle_file.filename)
@@ -3098,10 +3182,66 @@ def upload_video():
     video_path = None
 
     if has_video_file:
-        video_filename = secure_filename(video_file.filename)
-        if not video_filename:
-            return jsonify({'error': 'Érvénytelen videó fájlnév.'}), 400
-        video_path = os.path.join(upload_dir, video_filename)
+        chunk_mode = (
+            bool(chunk_upload_id)
+            and chunk_index is not None
+            and total_chunks is not None
+            and total_chunks > 0
+        )
+
+        if chunk_mode:
+            if chunk_index < 0 or chunk_index >= total_chunks:
+                return jsonify({'error': 'Érvénytelen darab index.'}), 400
+
+            chunk_id_safe = secure_filename(chunk_upload_id) or f"{sanitized_project}_chunk"
+            chunk_base_dir = os.path.join(upload_dir, '.chunks', chunk_id_safe)
+
+            try:
+                os.makedirs(chunk_base_dir, exist_ok=True)
+            except OSError as exc:
+                logging.exception("Nem sikerült létrehozni a chunk könyvtárat: %s", exc)
+                return jsonify({'error': 'Nem sikerült előkészíteni a chunk könyvtárat.'}), 500
+
+            chunk_filename = os.path.join(chunk_base_dir, f"{chunk_index:06d}.part")
+            try:
+                video_file.save(chunk_filename)
+            except Exception as exc:
+                logging.exception("Nem sikerült menteni a videó chunkot: %s", exc)
+                return jsonify({'error': 'Nem sikerült menteni a videó darabot.'}), 500
+
+            if chunk_index + 1 < total_chunks:
+                return jsonify({
+                    'success': True,
+                    'chunkIndex': chunk_index,
+                    'totalChunks': total_chunks,
+                    'completed': False
+                })
+
+            requested_name = request.form.get('fileName') or video_file.filename
+            video_filename = secure_filename(requested_name) or f"{sanitized_project}_video.mkv"
+            video_path = os.path.join(upload_dir, video_filename)
+
+            try:
+                with open(video_path, 'wb') as destination:
+                    for idx in range(total_chunks):
+                        part_path = os.path.join(chunk_base_dir, f"{idx:06d}.part")
+                        if not os.path.exists(part_path):
+                            logging.error("A chunk fájl hiányzik: %s", part_path)
+                            return jsonify({'error': f'Hiányzó videó darab: {idx}.'}), 400
+                        with open(part_path, 'rb') as part_file:
+                            shutil.copyfileobj(part_file, destination)
+            except Exception as exc:
+                logging.exception("Nem sikerült összeilleszteni a chunkokat: %s", exc)
+                return jsonify({'error': 'Nem sikerült a videó chunkjainak összeillesztése.'}), 500
+            finally:
+                shutil.rmtree(chunk_base_dir, ignore_errors=True)
+
+            chunk_upload_handled = True
+        else:
+            video_filename = secure_filename(video_file.filename)
+            if not video_filename:
+                return jsonify({'error': 'Érvénytelen videó fájlnév.'}), 400
+            video_path = os.path.join(upload_dir, video_filename)
     else:
         if not shutil.which('yt-dlp'):
             return jsonify({'error': 'A yt-dlp nem érhető el a kiszolgálón. Telepítsd a yt-dlp csomagot.'}), 500
@@ -3152,7 +3292,7 @@ def upload_video():
         subtitle_path = os.path.join(upload_dir, subtitle_filename)
 
     try:
-        if has_video_file and video_path:
+        if has_video_file and video_path and not chunk_upload_handled:
             video_file.save(video_path)
 
         if subtitle_filename and subtitle_path:

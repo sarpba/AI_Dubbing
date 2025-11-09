@@ -203,6 +203,11 @@
                                     <label for="videoFile" class="form-label">Videó fájl</label>
                                     <input type="file" class="form-control" id="videoFile" name="file" accept="video/*">
                                 </div>
+                                <div class="mb-3" id="chunkConfigGroup">
+                                    <label for="chunkSizeMb" class="form-label">Darab méret (MB)</label>
+                                    <input type="number" class="form-control" id="chunkSizeMb" name="chunkSizeMb" min="10" max="512" step="1" value="99">
+                                    <small class="text-muted">A videó vagy mentés feltöltése nagyobb darabokra bontható. Alapértelmezett méret: 99&nbsp;MB.</small>
+                                </div>
                                 <div class="mb-3 d-none" id="youtubeInputGroup">
                                     <label for="youtubeUrl" class="form-label">YouTube hivatkozás</label>
                                     <input type="url" class="form-control" id="youtubeUrl" name="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." inputmode="url">
@@ -261,6 +266,8 @@
         const uploadProgressBar = document.getElementById('uploadProgressBar');
         const uploadProgressText = document.getElementById('uploadProgressText');
         const videoInput = document.getElementById('videoFile');
+        const chunkSizeInput = document.getElementById('chunkSizeMb');
+        const chunkConfigGroup = document.getElementById('chunkConfigGroup');
         const youtubeUrlInput = document.getElementById('youtubeUrl');
         const fileInputGroup = document.getElementById('fileInputGroup');
         const youtubeInputGroup = document.getElementById('youtubeInputGroup');
@@ -282,6 +289,9 @@
             const useRestore = selectedSource === 'restore';
 
             fileInputGroup.classList.toggle('d-none', !useUpload);
+            if (chunkConfigGroup) {
+                chunkConfigGroup.classList.toggle('d-none', !(useUpload || useRestore));
+            }
             youtubeInputGroup.classList.toggle('d-none', !useYoutube);
             if (restoreInputGroup) {
                 restoreInputGroup.classList.toggle('d-none', !useRestore);
@@ -367,7 +377,7 @@
             });
         });
 
-        uploadForm.addEventListener('submit', function(event) {
+        uploadForm.addEventListener('submit', async function(event) {
             event.preventDefault();
 
             const projectName = document.getElementById('projectName').value.trim();
@@ -425,55 +435,64 @@
                 }
             }
 
+            if (sourceType === 'upload') {
+                try {
+                    await uploadVideoWithChunks({
+                        projectName,
+                        videoFile: videoInput.files[0],
+                        subtitleFile: subtitleInput.files.length ? subtitleInput.files[0] : null,
+                        subtitleSuffix
+                    });
+                } catch (error) {
+                    console.error('Chunkelt feltöltés hiba:', error);
+                    uploadProgressContainer.classList.remove('d-none');
+                    uploadProgressBar.classList.add('bg-danger');
+                    uploadProgressBar.style.width = '100%';
+                    uploadProgressBar.textContent = '';
+                    uploadProgressText.textContent = error.message || 'Hiba történt a feltöltés során.';
+                    alert(error.message || 'Hiba történt a feltöltés során.');
+                }
+                return;
+            }
+
+            if (sourceType === 'restore') {
+                try {
+                    await uploadBackupWithChunks({
+                        projectName,
+                        backupFile: restoreFileInput.files[0]
+                    });
+                } catch (error) {
+                    console.error('Mentés feltöltés hiba:', error);
+                    uploadProgressContainer.classList.remove('d-none');
+                    uploadProgressBar.classList.add('bg-danger');
+                    uploadProgressBar.style.width = '100%';
+                    uploadProgressBar.textContent = '';
+                    uploadProgressText.textContent = error.message || 'Hiba történt a feltöltés során.';
+                    alert(error.message || 'Hiba történt a feltöltés során.');
+                }
+                return;
+            }
+
             const formData = new FormData();
             formData.append('projectName', projectName);
             formData.append('sourceType', sourceType);
-            if (sourceType === 'upload') {
-                formData.append('file', videoInput.files[0]);
-            } else if (sourceType === 'youtube') {
-                formData.append('youtubeUrl', youtubeUrl);
-            } else if (restoreFileInput && restoreFileInput.files.length) {
-                formData.append('backupFile', restoreFileInput.files[0]);
-            }
+            formData.append('youtubeUrl', youtubeUrl);
 
-            if (sourceType !== 'restore') {
-                if (subtitleSuffix) {
-                    formData.append('subtitleSuffix', subtitleSuffix);
-                }
-                if (subtitleInput.files.length) {
-                    formData.append('subtitleFile', subtitleInput.files[0]);
-                }
+            if (subtitleSuffix) {
+                formData.append('subtitleSuffix', subtitleSuffix);
+            }
+            if (subtitleInput.files.length) {
+                formData.append('subtitleFile', subtitleInput.files[0]);
             }
 
             uploadProgressContainer.classList.remove('d-none');
             uploadProgressBar.classList.remove('bg-success', 'bg-danger');
-            if (sourceType === 'upload' || sourceType === 'restore') {
-                uploadProgressBar.style.width = '0%';
-                uploadProgressBar.textContent = '0%';
-                uploadProgressText.textContent = sourceType === 'restore'
-                    ? 'Mentés feltöltése előkészítése...'
-                    : 'Feltöltés előkészítése...';
-            } else {
-                uploadProgressBar.style.width = '100%';
-                uploadProgressBar.textContent = '';
-                uploadProgressText.textContent = 'YouTube videó letöltése és MKV konvertálása folyamatban...';
-            }
+            uploadProgressBar.style.width = '100%';
+            uploadProgressBar.textContent = '';
+            uploadProgressText.textContent = 'YouTube videó letöltése és MKV konvertálása folyamatban...';
 
             const xhr = new XMLHttpRequest();
-            const targetUrl = sourceType === 'restore' ? '/api/restore-project' : '/api/upload-video';
-            xhr.open('POST', targetUrl, true);
-
-            xhr.upload.addEventListener('progress', event => {
-                if ((sourceType !== 'upload' && sourceType !== 'restore') || !event.lengthComputable) {
-                    return;
-                }
-
-                const percent = Math.round((event.loaded / event.total) * 100);
-                uploadProgressBar.style.width = `${percent}%`;
-                uploadProgressBar.textContent = `${percent}%`;
-                const label = sourceType === 'restore' ? 'Mentés feltöltve' : 'Feltöltve';
-                uploadProgressText.textContent = `${label}: ${formatBytes(event.loaded)} / ${formatBytes(event.total)}`;
-            });
+            xhr.open('POST', '/api/upload-video', true);
 
             let responsePayload = null;
             xhr.onreadystatechange = function() {
@@ -486,11 +505,7 @@
                     if (xhr.status >= 200 && xhr.status < 300 && responsePayload.success !== false) {
                         uploadProgressBar.classList.add('bg-success');
                         const successMessage = responsePayload.message
-                            || (sourceType === 'youtube'
-                                ? 'Letöltés befejezve. Az oldal frissítése folyamatban...'
-                                : sourceType === 'restore'
-                                    ? 'Mentés visszaállítva. Az oldal frissítése folyamatban...'
-                                    : 'Feltöltés befejezve. Az oldal frissítése folyamatban...');
+                            || 'Letöltés befejezve. Az oldal frissítése folyamatban...';
                         uploadProgressText.textContent = successMessage;
                         setTimeout(() => location.reload(), 800);
                     } else {
@@ -515,6 +530,133 @@
 
             xhr.send(formData);
         });
+
+        function getChunkSizeBytes(fileSize) {
+            if (!chunkSizeInput) {
+                return fileSize;
+            }
+            const value = parseFloat(chunkSizeInput.value);
+            if (!value || value <= 0) {
+                return fileSize;
+            }
+            const bytes = Math.floor(value * 1024 * 1024);
+            return Math.min(Math.max(bytes, 1 * 1024 * 1024), fileSize || bytes);
+        }
+
+        function createUploadSessionId(prefix = 'upload') {
+            if (window.crypto && window.crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+            return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        }
+
+        async function uploadVideoWithChunks({ projectName, videoFile, subtitleFile, subtitleSuffix }) {
+            const chunkSizeBytes = getChunkSizeBytes(videoFile.size);
+            const totalChunks = Math.max(1, Math.ceil(videoFile.size / chunkSizeBytes));
+            const uploadId = createUploadSessionId('video');
+            let uploadedBytes = 0;
+
+            uploadProgressContainer.classList.remove('d-none');
+            uploadProgressBar.classList.remove('bg-success', 'bg-danger');
+            uploadProgressBar.style.width = '0%';
+            uploadProgressBar.textContent = '0%';
+            uploadProgressText.textContent = 'Feltöltés előkészítése...';
+
+            for (let index = 0; index < totalChunks; index++) {
+                const start = index * chunkSizeBytes;
+                const end = Math.min(videoFile.size, start + chunkSizeBytes);
+                const chunk = videoFile.slice(start, end);
+                const formData = new FormData();
+                formData.append('projectName', projectName);
+                formData.append('sourceType', 'upload');
+                formData.append('chunkUploadId', uploadId);
+                formData.append('chunkIndex', index);
+                formData.append('totalChunks', totalChunks);
+                formData.append('chunkSize', chunkSizeBytes);
+                formData.append('fileName', videoFile.name);
+                formData.append('file', chunk, videoFile.name);
+
+                if (index === totalChunks - 1) {
+                    if (subtitleSuffix) {
+                        formData.append('subtitleSuffix', subtitleSuffix);
+                    }
+                    if (subtitleFile) {
+                        formData.append('subtitleFile', subtitleFile);
+                    }
+                }
+
+                uploadProgressText.textContent = `Darab ${index + 1}/${totalChunks} feltöltése...`;
+
+                const response = await fetch('/api/upload-video', {
+                    method: 'POST',
+                    body: formData
+                });
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok || payload.success === false) {
+                    throw new Error(payload.error || 'Ismeretlen hiba történt a feltöltés közben.');
+                }
+
+                uploadedBytes = end;
+                const percent = Math.round((uploadedBytes / videoFile.size) * 100);
+                uploadProgressBar.style.width = `${percent}%`;
+                uploadProgressBar.textContent = `${percent}%`;
+                uploadProgressText.textContent = `Feltöltve: ${formatBytes(uploadedBytes)} / ${formatBytes(videoFile.size)}`;
+            }
+
+            uploadProgressBar.classList.add('bg-success');
+            uploadProgressText.textContent = 'Feltöltés befejezve. Az oldal frissítése folyamatban...';
+            setTimeout(() => location.reload(), 800);
+        }
+
+        async function uploadBackupWithChunks({ projectName, backupFile }) {
+            const chunkSizeBytes = getChunkSizeBytes(backupFile.size);
+            const totalChunks = Math.max(1, Math.ceil(backupFile.size / chunkSizeBytes));
+            const uploadId = createUploadSessionId('backup');
+            let uploadedBytes = 0;
+
+            uploadProgressContainer.classList.remove('d-none');
+            uploadProgressBar.classList.remove('bg-success', 'bg-danger');
+            uploadProgressBar.style.width = '0%';
+            uploadProgressBar.textContent = '0%';
+            uploadProgressText.textContent = 'Mentés feltöltése előkészítése...';
+
+            for (let index = 0; index < totalChunks; index++) {
+                const start = index * chunkSizeBytes;
+                const end = Math.min(backupFile.size, start + chunkSizeBytes);
+                const chunk = backupFile.slice(start, end);
+                const formData = new FormData();
+                formData.append('projectName', projectName);
+                formData.append('chunkUploadId', uploadId);
+                formData.append('chunkIndex', index);
+                formData.append('totalChunks', totalChunks);
+                formData.append('chunkSize', chunkSizeBytes);
+                formData.append('fileName', backupFile.name);
+                formData.append('backupFile', chunk, backupFile.name);
+
+                uploadProgressText.textContent = `Mentés darab ${index + 1}/${totalChunks} feltöltése...`;
+
+                const response = await fetch('/api/restore-project', {
+                    method: 'POST',
+                    body: formData
+                });
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok || payload.success === false) {
+                    throw new Error(payload.error || 'Ismeretlen hiba történt a feltöltés közben.');
+                }
+
+                uploadedBytes = end;
+                const percent = Math.round((uploadedBytes / backupFile.size) * 100);
+                uploadProgressBar.style.width = `${percent}%`;
+                uploadProgressBar.textContent = `${percent}%`;
+                uploadProgressText.textContent = `Mentés feltöltve: ${formatBytes(uploadedBytes)} / ${formatBytes(backupFile.size)}`;
+            }
+
+            uploadProgressBar.classList.add('bg-success');
+            uploadProgressText.textContent = 'Mentés visszaállítva. Az oldal frissítése folyamatban...';
+            setTimeout(() => location.reload(), 800);
+        }
 
         function formatBytes(bytes) {
             if (!bytes) {
