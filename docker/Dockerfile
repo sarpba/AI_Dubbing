@@ -27,6 +27,8 @@ RUN apt-get update \
 
 # Copy project sources first so that pip installs can leverage them during build
 COPY . /workspace
+RUN install -m 755 /workspace/docker/entrypoint.sh /opt/base_entrypoint.sh \
+    && install -m 755 /workspace/docker/runtime_entrypoint.sh /usr/local/bin/ai_dubbing_entrypoint
 
 # Additional repos referenced by the environment setup docs
 RUN git clone https://github.com/sarpba/VibeVoice.git /opt/VibeVoice
@@ -90,4 +92,4 @@ EXPOSE 2018
 
 RUN chmod +x docker/entrypoint.sh
 
-ENTRYPOINT ["/workspace/docker/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/ai_dubbing_entrypoint"]
