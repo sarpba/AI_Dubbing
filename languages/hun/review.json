@@ -1,0 +1,158 @@
+{
+  "meta": {
+    "code": "hun",
+    "label": "Magyar",
+    "html_lang": "hu"
+  },
+  "strings": {
+    "document": {
+      "title": "Aktív projekt: {project}"
+    },
+    "general": {
+      "theme_toggle_aria": "Téma váltása",
+      "language_selector_label": "Nyelv",
+      "language_selector_aria": "Felület nyelvének kiválasztása",
+      "close_aria": "Bezárás"
+    },
+    "buttons": {
+      "close": "Bezárás",
+      "save": "Mentés"
+    },
+    "audio_modal": {
+      "title": "Audió szerkesztése",
+      "loading": "Betöltés...",
+      "instructions": "Húzd az egeret a hullámformán a kijelöléshez, vagy állítsd a csúszkákkal a kezdő és záró pontot.",
+      "start_label": "Kezdet:",
+      "end_label": "Vége:",
+      "duration_label": "Hossz:",
+      "start_slider": "Kezdőpont",
+      "end_slider": "Végpont",
+      "reset_selection": "Teljes fájl kijelölése",
+      "reset_hint": "Mentéskor az eredeti fájl felülíródik."
+    },
+    "header": {
+      "title": "Aktív projekt: {project}",
+      "back_button": "Vissza a projekthez",
+      "audio_file_label": "Audio fájl:",
+      "json_file_label": "JSON fájl:",
+      "segment_count": "{count} szegmens",
+      "play_button": "Lejátszás"
+    },
+    "player": {
+      "pause": "Szünet"
+    },
+    "alerts": {
+      "audio_without_segments": "Audio fájl betöltve ({audio}), de nincsenek megjeleníthető szegmensek a {json} fájlban.",
+      "associated_json": "társított JSON fájlban",
+      "audio_missing": "Nem található audio fájl a felülvizsgálathoz.",
+      "help_cta": "Útmutatóra van szükséged? Kattints a jobb alsó sarokban lévő <strong>Súgó</strong> gombra a felülvizsgálati nézet részletes ismertetéséhez."
+    },
+    "context_menu": {
+      "insert": "Szegmens beszúrása mögé",
+      "delete": "Szegmens törlése",
+      "regenerate": "Regenerálás (TTS)"
+    },
+    "segments": {
+      "play_button": "Lejátszás",
+      "no_tts": "Nincs TTS",
+      "play_tooltip": "Megnyitja a szegmens audióját a modális lejátszóban.",
+      "no_tts_tooltip": "Ehhez a szegmenshez még nincs TTS hang.",
+      "original_placeholder": "Eredeti szöveg",
+      "translated_placeholder": "Fordított szöveg",
+      "translation_missing": "Nincs fordítás"
+    },
+    "help": {
+      "button_label": "Súgó",
+      "button_aria": "Felülvizsgálati nézet súgója",
+      "title": "Felülvizsgálati nézet súgó",
+      "intro": "Ez a felület a kiválasztott projekt audió- és szöveg-szegmenseinek felülvizsgálatára szolgál. Itt ellenőrizheted, szerkesztheted és újragenerálhatod a tartalmakat, miközben folyamatosan visszajelzést kapsz az állapotokról.",
+      "navigation": {
+        "title": "Navigáció és fájlinformációk",
+        "items": [
+          "A fejlécben látható az aktuális projekt neve, valamint a <em>Vissza a projekthez</em> gomb a projektoldalra ugráshoz.",
+          "A fájlinformációs blokk jelzi, mely audió és JSON fájl van betöltve, illetve hány szegmens áll rendelkezésre."
+        ]
+      },
+      "playback": {
+        "title": "Lejátszás és idővonal",
+        "items": [
+          "A felső <strong>Lejátszás</strong> gombbal indíthatod vagy állíthatod meg az audiót; lejátszás közben <em>Szünet</em>-re vált.",
+          "A hullámforma vízszintesen görgethető az egérgörgővel vagy az érintőpad vízszintes mozdulataival; a rendszer automatikusan alkalmazkodik a nagyobb felvételekhez.",
+          "A kék kiemelések a Wavesurfer régiói: kattintásra az adott szakasz játszódik le, az élek húzásával pedig a szegmens kezdő- és végpontja finomhangolható."
+        ]
+      },
+      "editing": {
+        "title": "Szegmens szerkesztése",
+        "items": [
+          "Minden szegmenshez két szövegmező tartozik: az eredeti és a fordított szöveg. A mezők mérete a tartalomhoz igazodik, így könnyen áttekinthetők a hosszabb mondatok is.",
+          "Kattintáskor a lejátszás megáll, a mező elhagyásakor (vagy Enter megnyomásával) a módosítás azonnal mentésre kerül a szerverre.",
+          "A virtuális görgetésnek köszönhetően nagy projektek esetén is csak a látható szegmenseket tölti be a felület, így gyors marad."
+        ]
+      },
+      "operations": {
+        "title": "Szegmens műveletek",
+        "items": [
+          "Jobb gombbal a színes idővonalsávokra kattintva megjelenik a helyi menü, ahol új szegmens beszúrása, meglévő törlése vagy TTS regenerálás indítása érhető el.",
+          "Új szegmens beszúrásakor a rendszer automatikusan frissíti a sorszámozást, és szükség esetén lekéri az aktuális adatokat a szerverről.",
+          "Törléskor a kapcsolódó vizuális elemek és a Wavesurfer régiók is frissülnek, így a nézet mindig a naprakész állapotot mutatja."
+        ]
+      },
+      "tts": {
+        "title": "TTS és audió kezelése",
+        "items": [
+          "A szegmensek jobb oldalán található <strong>Lejátszás</strong> gomb akkor aktív, ha a szakaszhoz tartozik legenerált TTS. Kattintva megnyílik az audió előnézet, ahol az AudioTrimmer segítségével vághatod a hangot.",
+          "Ha még nincs TTS a szegmenshez, a gomb szürke és <em>Nincs TTS</em> feliratot kap, jelezve, hogy előbb regenerálni kell a hangot.",
+          "A TTS regenerálás után a rendszer automatikusan frissíti a gomb állapotát és elérhetővé teszi az új hangfájlt."
+        ]
+      },
+      "regeneration": {
+        "title": "Regenerációs folyamat követése",
+        "items": [
+          "A <em>Regenerálás (TTS)</em> művelet indításakor megjelenik a napló modal, amely folyamatosan mutatja a feldolgozás állapotát.",
+          "Sikeres befejezés után a napló automatikusan bezárul, de bármikor manuálisan is zárható."
+        ]
+      },
+      "tips": {
+        "title": "Hasznos tippek",
+        "items": [
+          "Hosszú felvételeknél hagyd, hogy a görgetés pillanatnyilag betöltse a szegmenseket – a háttérben futó optimalizáció gondoskodik a teljesítményről.",
+          "Hibajelzés esetén a felület visszajelzést ad, a <em>Frissítés</em> műveletek pedig újratöltik a legfrissebb adatokat a szerverről."
+        ]
+      }
+    },
+    "regenerate_modal": {
+      "title": "TTS regeneráció napló",
+      "preparing": "Feldolgozás előkészítése...",
+      "initial_log": "Log inicializálása...",
+      "preparing_log": "A log előkészítése folyamatban...",
+      "no_job": "Nincs naplózható feladat azonosító.",
+      "log_fetch_error": "Log lekérdezési hiba: {error}",
+      "status": {
+        "queued": "Feladat sorban áll...",
+        "running": "Feldolgozás folyamatban...",
+        "cancelling": "Megszakítás folyamatban...",
+        "cancelled": "Feladat megszakítva.",
+        "completed": "Feldolgozás sikeresen befejeződött.",
+        "failed": "Feldolgozás sikertelen.",
+        "default": "Állapot frissítése..."
+      }
+    },
+    "messages": {
+      "regeneration_started": "Regeneráció elindítva."
+    },
+    "errors": {
+      "unknown": "Ismeretlen hiba",
+      "segment_save": "Hiba a szegmens mentésekor: {error}",
+      "segment_space": "Nincs elég hely új szegmens létrehozásához (minimum 50 ms).",
+      "segment_add": "Hiba az új szegmens hozzáadásakor: {error}",
+      "generic": "Hiba: {error}",
+      "segment_delete": "Hiba a szegmens törlésekor: {error}",
+      "missing_json": "Hiányzik a JSON fájlnév, a regenerálás nem indítható.",
+      "regenerate_failed": "Regenerálás sikertelen: {error}",
+      "regenerate_error": "Regenerálás hiba: {error}"
+    },
+    "prompts": {
+      "delete_confirm": "Biztosan törli a(z) {index}. szegmenst?"
+    }
+  }
+}

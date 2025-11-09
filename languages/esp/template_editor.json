@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "code": "esp",
+    "label": "Español",
+    "html_lang": "es"
+  },
+  "strings": {
+    "document": {
+      "title": "Editor de paleta | AI Dubbing"
+    },
+    "general": {
+      "theme_toggle_aria": "Cambiar tema",
+      "language_selector_label": "Idioma",
+      "language_selector_aria": "Seleccionar idioma de la interfaz"
+    },
+    "hero": {
+      "heading": "Editor de paleta de colores",
+      "description": "Configura por separado los colores del modo claro y oscuro y guarda los cambios.",
+      "back_button": "Volver al inicio",
+      "restore_saved": "Cargar valores guardados",
+      "restore_default": "Restablecer por defecto"
+    },
+    "panels": {
+      "light_mode": "Modo claro",
+      "dark_mode": "Modo oscuro"
+    },
+    "colors": {
+      "labels": {
+        "primary": "Acento principal",
+        "secondary": "Acento secundario",
+        "success": "Color de éxito (estados positivos)",
+        "background": "Color de fondo base",
+        "text": "Color de texto base",
+        "card": "Fondo de tarjetas",
+        "border": "Color de borde base",
+        "waveform": "Fondo de la forma de onda",
+        "timeline": "Segmentos de la línea de tiempo"
+      }
+    },
+    "form": {
+      "default_prefix": "Predeterminado:",
+      "notice": "Después de guardar, los colores se aplican inmediatamente en toda la aplicación.",
+      "submit": "Guardar cambios"
+    },
+    "messages": {
+      "load_failed_fallback": "No se pudieron cargar los colores guardados. Se usarán los valores iniciales.",
+      "save_success": "¡Guardado correcto! Los nuevos colores ya están activos.",
+      "restore_saved": "Se cargaron los últimos valores guardados.",
+      "restore_default": "Valores predeterminados restaurados. Guarda los cambios para aplicarlos definitivamente."
+    },
+    "errors": {
+      "parse_colors": "No se pudieron leer los colores del elemento:",
+      "load_failed": "No se pudieron cargar los colores guardados.",
+      "save_failed": "No se pudieron guardar los colores del tema."
+    }
+  }
+}

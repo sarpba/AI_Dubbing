@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "code": "hun",
+    "label": "Magyar",
+    "html_lang": "hu"
+  },
+  "strings": {
+    "document": {
+      "title": "Színsablon szerkesztő | AI Dubbing"
+    },
+    "general": {
+      "theme_toggle_aria": "Téma váltása",
+      "language_selector_label": "Nyelv",
+      "language_selector_aria": "Felület nyelvének kiválasztása"
+    },
+    "hero": {
+      "heading": "Színsablon szerkesztő",
+      "description": "Állítsd be külön a világos és a sötét téma színeit, majd mentsd a változtatásokat.",
+      "back_button": "Vissza a főoldalra",
+      "restore_saved": "Mentett értékek visszatöltése",
+      "restore_default": "Alapértelmezett színek"
+    },
+    "panels": {
+      "light_mode": "Világos mód",
+      "dark_mode": "Sötét mód"
+    },
+    "colors": {
+      "labels": {
+        "primary": "Elsődleges kiemelőszín",
+        "secondary": "Másodlagos kiemelőszín",
+        "success": "Siker szín (pozitív állapotok)",
+        "background": "Alap háttérszín",
+        "text": "Alap szövegszín",
+        "card": "Kártyák háttérszíne",
+        "border": "Alap keretszín",
+        "waveform": "Hullámforma háttér",
+        "timeline": "Idővonal szegmensek"
+      }
+    },
+    "form": {
+      "default_prefix": "Alapértelmezett:",
+      "notice": "Mentés után a beállítások azonnal érvénybe lépnek minden oldalon.",
+      "submit": "Változtatások mentése"
+    },
+    "messages": {
+      "load_failed_fallback": "Nem sikerült betölteni a mentett színeket. Az induló értékek maradnak érvényben.",
+      "save_success": "Sikeres mentés! Az új színek már érvényben vannak.",
+      "restore_saved": "Visszatöltve a legutóbb mentett értékek.",
+      "restore_default": "Alapértelmezett színek visszaállítva. Mentsd a változtatásokat a véglegesítéshez."
+    },
+    "errors": {
+      "parse_colors": "Nem sikerült beolvasni a színeket a következő elemről:",
+      "load_failed": "Nem sikerült betölteni a mentett színeket.",
+      "save_failed": "Nem sikerült elmenteni a témaszíneket."
+    }
+  }
+}

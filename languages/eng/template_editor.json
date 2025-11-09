@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "code": "eng",
+    "label": "English",
+    "html_lang": "en"
+  },
+  "strings": {
+    "document": {
+      "title": "Theme Palette Editor | AI Dubbing"
+    },
+    "general": {
+      "theme_toggle_aria": "Toggle theme",
+      "language_selector_label": "Language",
+      "language_selector_aria": "Select interface language"
+    },
+    "hero": {
+      "heading": "Theme Palette Editor",
+      "description": "Configure the light and dark colors separately, then save your changes.",
+      "back_button": "Back to home",
+      "restore_saved": "Load saved values",
+      "restore_default": "Reset to defaults"
+    },
+    "panels": {
+      "light_mode": "Light mode",
+      "dark_mode": "Dark mode"
+    },
+    "colors": {
+      "labels": {
+        "primary": "Primary accent",
+        "secondary": "Secondary accent",
+        "success": "Success (positive states)",
+        "background": "Base background",
+        "text": "Base text color",
+        "card": "Card background",
+        "border": "Base border color",
+        "waveform": "Waveform background",
+        "timeline": "Timeline segments"
+      }
+    },
+    "form": {
+      "default_prefix": "Default:",
+      "notice": "After saving, the colors take effect immediately across the app.",
+      "submit": "Save changes"
+    },
+    "messages": {
+      "load_failed_fallback": "Could not load the saved colors. Using the initial values instead.",
+      "save_success": "Saved successfully! The new colors are now active.",
+      "restore_saved": "Reloaded the last saved values.",
+      "restore_default": "Defaults restored. Save the changes to apply them permanently."
+    },
+    "errors": {
+      "parse_colors": "Failed to read colors from element:",
+      "load_failed": "Could not load the saved colors.",
+      "save_failed": "Could not save the theme colors."
+    }
+  }
+}

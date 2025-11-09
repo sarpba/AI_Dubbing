@@ -514,6 +514,15 @@ body {
   gap: 0.75rem;
 }
 
+.language-selector {
+  width: 140px;
+}
+
+.language-selector .form-select {
+  min-width: 140px;
+  width: 100%;
+}
+
 .theme-toggle,
 .theme-editor-button {
   width: 50px;

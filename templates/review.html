@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="hu" data-bs-theme="auto">
+<html lang="{{ html_lang }}" data-bs-theme="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aktív projekt: {{project_name}}</title>
+    <title>{{ translate('document.title', project=project_name) }}</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <link rel="stylesheet" href="{{url_for('static', filename='css/style.css')}}">
@@ -110,7 +110,17 @@
 </head>
 <body>
     <div class="theme-controls">
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Téma váltása">
+        {% if language_options %}
+        <div class="language-selector">
+            <label for="languageSelect" class="visually-hidden">{{ translate('general.language_selector_label') }}</label>
+            <select id="languageSelect" class="form-select form-select-sm" aria-label="{{ translate('general.language_selector_aria') }}">
+                {% for option in language_options %}
+                <option value="{{ option.code }}" {% if option.code == active_language %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="{{ translate('general.theme_toggle_aria') }}">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
             <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
         </svg>
@@ -121,33 +131,33 @@
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="audioPreviewTitle">Audió szerkesztése</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title" id="audioPreviewTitle">{{ translate('audio_modal.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <div class="audio-waveform mb-3">
                         <div id="audioWaveform"></div>
-                        <div id="audioWaveformLoading" class="waveform-loading-overlay d-none">Betöltés...</div>
+                        <div id="audioWaveformLoading" class="waveform-loading-overlay d-none">{{ translate('audio_modal.loading') }}</div>
                     </div>
                     <div class="small text-muted">
-                        Húzd az egeret a hullámformán a kijelöléshez, vagy állítsd a csúszkákkal a kezdő és záró pontot.
+                        {{ translate('audio_modal.instructions') }}
                     </div>
                     <div class="audio-trim-info d-flex flex-wrap align-items-center gap-3 mt-3">
-                        <div>Kezdet: <span id="trimStartDisplay">—</span></div>
-                        <div>Vége: <span id="trimEndDisplay">—</span></div>
-                        <div>Hossz: <span id="trimDurationDisplay">—</span></div>
+                        <div>{{ translate('audio_modal.start_label') }} <span id="trimStartDisplay">—</span></div>
+                        <div>{{ translate('audio_modal.end_label') }} <span id="trimEndDisplay">—</span></div>
+                        <div>{{ translate('audio_modal.duration_label') }} <span id="trimDurationDisplay">—</span></div>
                     </div>
                     <div class="mt-3">
-                        <label for="trimStartRange" class="form-label mb-1">Kezdőpont</label>
+                        <label for="trimStartRange" class="form-label mb-1">{{ translate('audio_modal.start_slider') }}</label>
                         <input type="range" class="form-range" id="trimStartRange" min="0" max="0" step="0.01" value="0" disabled>
                     </div>
                     <div class="mt-3">
-                        <label for="trimEndRange" class="form-label mb-1">Végpont</label>
+                        <label for="trimEndRange" class="form-label mb-1">{{ translate('audio_modal.end_slider') }}</label>
                         <input type="range" class="form-range" id="trimEndRange" min="0" max="0" step="0.01" value="0" disabled>
                     </div>
                     <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="trimResetSelectionBtn" disabled>Teljes fájl kijelölése</button>
-                        <span class="small text-muted">Mentéskor az eredeti fájl felülíródik.</span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="trimResetSelectionBtn" disabled>{{ translate('audio_modal.reset_selection') }}</button>
+                        <span class="small text-muted">{{ translate('audio_modal.reset_hint') }}</span>
                     </div>
                     <div class="alert alert-danger py-2 px-3 small mt-3 d-none" id="trimErrorAlert"></div>
                 </div>
@@ -156,8 +166,8 @@
                         <div class="spinner-border spinner-border-sm text-primary d-none" role="status" id="trimSaveSpinner"></div>
                         <span class="small text-muted" id="trimStatusText"></span>
                     </div>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
-                    <button type="button" class="btn btn-primary" id="trimSaveBtn" disabled>Mentés</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.close') }}</button>
+                    <button type="button" class="btn btn-primary" id="trimSaveBtn" disabled>{{ translate('buttons.save') }}</button>
                 </div>
             </div>
         </div>
@@ -165,18 +175,18 @@
 
     <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>Aktív projekt: {{project_name}}</h1>
+        <h1>{{ translate('header.title', project=project_name) }}</h1>
         <div>
-            <a href="{{url_for('show_project', project_name=project_name)}}" class="btn btn-secondary me-2">Vissza a projekthez</a>
+            <a href="{{url_for('show_project', project_name=project_name)}}" class="btn btn-secondary me-2">{{ translate('header.back_button') }}</a>
         </div>
     </div>
 
         {%if audio_url and segments_data%}
             <div class="mb-3">
-                <p class="mb-1">Audio fájl: <strong>{{audio_file_name}}</strong></p>
-                <p class="mb-1">JSON fájl: <strong>{{json_file_name}}</strong> ({{segments_data|length}} szegmens)</p>
+                <p class="mb-1">{{ translate('header.audio_file_label') }} <strong>{{audio_file_name}}</strong></p>
+                <p class="mb-1">{{ translate('header.json_file_label') }} <strong>{{json_file_name}}</strong> ({{ translate('header.segment_count', count=segments_data|length) }})</p>
             </div>
-            <button id="playPauseBtn" class="btn btn-primary mb-3">Lejátszás</button>
+            <button id="playPauseBtn" class="btn btn-primary mb-3">{{ translate('header.play_button') }}</button>
             <div id="waveform-scroll-wrapper">
                 <div id="waveform-content-area">
                     <div id="waveform"></div>
@@ -185,18 +195,18 @@
             </div>
         {%elif audio_url and not segments_data%}
             <div class="alert alert-warning" role="alert">
-                Audio fájl betöltve ({{audio_file_name}}), de nincsenek megjeleníthető szegmensek a {{json_file_name if json_file_name else 'társított JSON fájlban'}}.
+                {{ translate('alerts.audio_without_segments', audio=audio_file_name, json=json_file_name if json_file_name else translate('alerts.associated_json')) }}
             </div>
         {%elif not audio_url%}
             <div class="alert alert-danger" role="alert">
-                Nem található audio fájl a felülvizsgálathoz.
+                {{ translate('alerts.audio_missing') }}
             </div>
         {%endif%}
     </div>
 
     <div class="container-fluid mb-5 px-4">
         <div class="alert alert-info mb-0" role="alert">
-            Útmutatóra van szükséged? Kattints a jobb alsó sarokban lévő <strong>Súgó</strong> gombra a felülvizsgálati nézet részletes ismertetéséhez.
+            {{ translate('alerts.help_cta') | safe }}
         </div>
     </div>
 
@@ -204,8 +214,8 @@
             class="btn btn-outline-info shadow floating-help-button"
             data-bs-toggle="modal"
             data-bs-target="#reviewHelpModal"
-            aria-label="Felülvizsgálati nézet súgója">
-        Súgó
+            aria-label="{{ translate('help.button_aria') }}">
+        {{ translate('help.button_label') }}
     </button>
 
     <script src="{{ url_for('static', filename='vendor/wavesurfer/wavesurfer.min.js') }}"></script>
@@ -214,9 +224,9 @@
     <!-- Felugró menü HTML struktúrája -->
     <div id="segment-context-menu" class="custom-context-menu">
         <ul>
-            <li id="menu-insert-segment">Szegmens beszúrása mögé</li>
-            <li id="menu-delete-segment">Szegmens törlése</li>
-            <li id="menu-regenerate-segment">Regenerálás (TTS)</li>
+            <li id="menu-insert-segment">{{ translate('context_menu.insert') }}</li>
+            <li id="menu-delete-segment">{{ translate('context_menu.delete') }}</li>
+            <li id="menu-regenerate-segment">{{ translate('context_menu.regenerate') }}</li>
         </ul>
     </div>
 
@@ -224,84 +234,152 @@
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="reviewHelpModalLabel">Felülvizsgálati nézet súgó</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title" id="reviewHelpModalLabel">{{ translate('help.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <p class="mb-3">
-                        Ez a felület a kiválasztott projekt audió- és szöveg-szegmenseinek felülvizsgálatára szolgál. Itt ellenőrizheted, szerkesztheted és újragenerálhatod a tartalmakat, miközben folyamatosan visszajelzést kapsz az állapotokról.
+                        {{ translate('help.intro') }}
                     </p>
-                    <h6 class="fw-bold">Navigáció és fájlinformációk</h6>
+                    <h6 class="fw-bold">{{ translate('help.navigation.title') }}</h6>
                     <ul class="mb-4">
-                        <li>A fejlécben látható az aktuális projekt neve, valamint a <em>Vissza a projekthez</em> gomb a projektoldalra ugráshoz.</li>
-                        <li>A fájlinformációs blokk jelzi, mely audió és JSON fájl van betöltve, illetve hány szegmens áll rendelkezésre.</li>
+                        {% for item in translate('help.navigation.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Lejátszás és idővonal</h6>
+                    <h6 class="fw-bold">{{ translate('help.playback.title') }}</h6>
                     <ul class="mb-4">
-                        <li>A felső <strong>Lejátszás</strong> gombbal indíthatod vagy állíthatod meg az audiót; lejátszás közben <em>Szünet</em>-re vált.</li>
-                        <li>A hullámforma vízszintesen görgethető az egérgörgővel vagy az érintőpad vízszintes mozdulataival; a rendszer automatikusan alkalmazkodik a nagyobb felvételekhez.</li>
-                        <li>A kék kiemelések a Wavesurfer régiói: kattintásra az adott szakasz játszódik le, az élek húzásával pedig a szegmens kezdő- és végpontja finomhangolható. A változtatások automatikusan mentésre kerülnek.</li>
+                        {% for item in translate('help.playback.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Szegmens szerkesztése</h6>
+                    <h6 class="fw-bold">{{ translate('help.editing.title') }}</h6>
                     <ul class="mb-4">
-                        <li>Minden szegmenshez két szövegmező tartozik: az eredeti és a fordított szöveg. A mezők mérete a tartalomhoz igazodik, így könnyen áttekinthetők a hosszabb mondatok is.</li>
-                        <li>Kattintáskor a lejátszás megáll, a mező elhagyásakor (vagy Enter megnyomásával) a módosítás azonnal mentésre kerül a szerverre.</li>
-                        <li>A rendszer a virtuális görgetésnek köszönhetően nagy projektek esetén is csak a látható szegmenseket tölti be, így a felület gyors marad.</li>
+                        {% for item in translate('help.editing.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Szegmens műveletek</h6>
+                    <h6 class="fw-bold">{{ translate('help.operations.title') }}</h6>
                     <ul class="mb-4">
-                        <li>Jobb gombbal a színes idővonalsávokra kattintva megjelenik a helyi menü, ahol új szegmens beszúrása, meglévő törlése vagy TTS regenerálás indítása érhető el.</li>
-                        <li>Új szegmens beszúrásakor a rendszer automatikusan frissíti a sorszámozást, és szükség esetén lekéri az aktuális adatokat a szerverről.</li>
-                        <li>Törléskor a kapcsolódó vizuális elemek és a Wavesurfer régiók is frissülnek, így a nézet mindig a naprakész állapotot mutatja.</li>
+                        {% for item in translate('help.operations.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">TTS és audió kezelése</h6>
+                    <h6 class="fw-bold">{{ translate('help.tts.title') }}</h6>
                     <ul class="mb-4">
-                        <li>A szegmensek jobb oldalán található <strong>Lejátszás</strong> gomb akkor aktív, ha a szakaszhoz tartozik legenerált TTS. Kattintva megnyílik az audió előnézet, ahol az AudioTrimmer segítségével vághatod a hangot.</li>
-                        <li>Ha még nincs TTS a szegmenshez, a gomb szürke és <em>Nincs TTS</em> feliratot kap, jelezve, hogy előbb regenerálni kell a hangot.</li>
-                        <li>A TTS regenerálás után a rendszer automatikusan frissíti a gomb állapotát és elérhetővé teszi az új hangfájlt.</li>
+                        {% for item in translate('help.tts.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Regenerációs folyamat követése</h6>
+                    <h6 class="fw-bold">{{ translate('help.regeneration.title') }}</h6>
                     <ul class="mb-4">
-                        <li>A <em>Regenerálás (TTS)</em> művelet indításakor megjelenik a napló modal, amely folyamatosan mutatja a feldolgozás állapotát.</li>
-                        <li>Sikeres befejezés után a napló automatikusan bezárul, szükség esetén manuálisan is zárható.</li>
+                        {% for item in translate('help.regeneration.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Hasznos tippek</h6>
+                    <h6 class="fw-bold">{{ translate('help.tips.title') }}</h6>
                     <ul class="mb-0">
-                        <li>Hosszú felvételeknél hagyd, hogy a görgetés pillanatnyilag betöltse a szegmenseket – a háttérben futó optimalizáció gondoskodik arról, hogy a teljesítmény ne csökkenjen.</li>
-                        <li>Hibajelzés esetén a felület visszajelzést ad, a <em>Frissítés</em> műveletek pedig újratöltik a legfrissebb adatokat a szerverről.</li>
+                        {% for item in translate('help.tips.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.close') }}</button>
                 </div>
             </div>
         </div>
-    </div>
+</div>
 
     <!-- Regeneráció napló modal -->
     <div class="modal fade" id="regenerateLogModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">TTS regeneráció napló</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás" id="regenerateLogCloseBtn"></button>
+                    <h5 class="modal-title">{{ translate('regenerate_modal.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}" id="regenerateLogCloseBtn"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="log-modal-status mb-2" id="regenerateLogStatus">Feldolgozás előkészítése...</div>
-                    <pre class="log-modal-pre" id="regenerateLogContent">Log inicializálása...</pre>
+                    <div class="log-modal-status mb-2" id="regenerateLogStatus">{{ translate('regenerate_modal.preparing') }}</div>
+                    <pre class="log-modal-pre" id="regenerateLogContent">{{ translate('regenerate_modal.initial_log') }}</pre>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.close') }}</button>
                 </div>
             </div>
         </div>
     </div>
+
+    <script id="ui-translations-data" type="application/json">{{ translations | tojson }}</script>
+    <script>
+        (function() {
+            const dataElement = document.getElementById('ui-translations-data');
+            let dictionary = {};
+            if (dataElement) {
+                try {
+                    dictionary = JSON.parse(dataElement.textContent || '{}') || {};
+                } catch (error) {
+                    console.warn('Failed to parse UI translations:', error);
+                }
+            }
+
+            function resolveKey(key) {
+                if (!key) {
+                    return undefined;
+                }
+                return key.split('.').reduce((acc, part) => {
+                    if (acc && typeof acc === 'object' && part in acc) {
+                        return acc[part];
+                    }
+                    return undefined;
+                }, dictionary);
+            }
+
+            window.translateText = function(key, replacements = {}, fallback) {
+                const template = resolveKey(key);
+                if (typeof template === 'string') {
+                    return template.replace(/\{(\w+)\}/g, (match, token) => {
+                        if (Object.prototype.hasOwnProperty.call(replacements, token)) {
+                            return replacements[token];
+                        }
+                        return match;
+                    });
+                }
+                if (template !== undefined) {
+                    return template;
+                }
+                return typeof fallback === 'string' ? fallback : key;
+            };
+
+            window.getUiTranslations = function() {
+                return dictionary;
+            };
+        })();
+    </script>
 
     <script>
         console.log('[DEBUG 01] Script tag processing started.');
         document.addEventListener('DOMContentLoaded', function () {
             console.log('[DEBUG 02] DOMContentLoaded event handler started.');
             
+            const languageSelect = document.getElementById('languageSelect');
+            const t = typeof window.translateText === 'function'
+                ? window.translateText
+                : (key, replacements = {}, fallback) => (fallback || key);
+
+            if (languageSelect) {
+                languageSelect.addEventListener('change', event => {
+                    const selected = event.target.value;
+                    const targetUrl = new URL(window.location.href);
+                    if (selected) {
+                        targetUrl.searchParams.set('lang', selected);
+                    } else {
+                        targetUrl.searchParams.delete('lang');
+                    }
+                    window.location.assign(targetUrl.toString());
+                });
+            }
+
             const audioUrl = "{{audio_url|safe if audio_url else ''}}";
             const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
             const currentProjectName = "{{project_name|safe}}";
@@ -388,8 +466,8 @@
                 button.disabled = !hasAudio;
                 button.classList.toggle('btn-outline-primary', hasAudio);
                 button.classList.toggle('btn-outline-secondary', !hasAudio);
-                button.textContent = hasAudio ? 'Lejátszás' : 'Nincs TTS';
-                button.title = hasAudio ? 'Megnyitja a szegmens audióját a modális lejátszóban' : 'Ehhez a szegmenshez még nincs TTS hang.';
+                button.textContent = hasAudio ? t('segments.play_button') : t('segments.no_tts');
+                button.title = hasAudio ? t('segments.play_tooltip') : t('segments.no_tts_tooltip');
             }
 
             ensureAudioTrimmer();
@@ -437,14 +515,14 @@
 
             function updateRegenerateStatus(status, message) {
                 const statusMap = {
-                    queued: 'Feladat sorban áll...',
-                    running: 'Feldolgozás folyamatban...',
-                    cancelling: 'Megszakítás folyamatban...',
-                    cancelled: 'Feladat megszakítva.',
-                    completed: 'Feldolgozás sikeresen befejeződött.',
-                    failed: 'Feldolgozás sikertelen.'
+                    queued: t('regenerate_modal.status.queued'),
+                    running: t('regenerate_modal.status.running'),
+                    cancelling: t('regenerate_modal.status.cancelling'),
+                    cancelled: t('regenerate_modal.status.cancelled'),
+                    completed: t('regenerate_modal.status.completed'),
+                    failed: t('regenerate_modal.status.failed')
                 };
-                const statusLabel = statusMap[status] || 'Állapot frissítése...';
+                const statusLabel = statusMap[status] || t('regenerate_modal.status.default');
                 const combined = message ? `${statusLabel} ${message}` : statusLabel;
                 if (regenerateLogStatusText) {
                     regenerateLogStatusText.textContent = combined;
@@ -455,7 +533,7 @@
                 stopRegeneratePolling();
                 regenerateActiveJobId = jobId;
                 if (regenerateLogContent) {
-                    regenerateLogContent.textContent = 'Log inicializálása...';
+                    regenerateLogContent.textContent = t('regenerate_modal.initial_log');
                 }
                 updateRegenerateStatus('queued', '');
                 const poll = () => pollRegenerateJob();
@@ -472,7 +550,8 @@
                     .then(data => {
                         if (!data.success) {
                             if (regenerateLogContent) {
-                                regenerateLogContent.textContent = `Log lekérdezési hiba: ${data.error || 'Ismeretlen hiba'}`;
+                                const errorText = data.error || t('errors.unknown');
+                                regenerateLogContent.textContent = t('regenerate_modal.log_fetch_error', { error: errorText });
                             }
                             updateRegenerateStatus('failed', '');
                             stopRegeneratePolling();
@@ -483,7 +562,7 @@
                                 regenerateLogContent.textContent = data.log;
                                 regenerateLogContent.scrollTop = regenerateLogContent.scrollHeight;
                             } else if (!data.log_available) {
-                                regenerateLogContent.textContent = 'A log előkészítése folyamatban...';
+                                regenerateLogContent.textContent = t('regenerate_modal.preparing_log');
                             }
                         }
                         updateRegenerateStatus(data.status, data.message);
@@ -502,7 +581,7 @@
                     })
                     .catch(err => {
                         if (regenerateLogContent) {
-                            regenerateLogContent.textContent = `Log lekérdezési hiba: ${err.message}`;
+                            regenerateLogContent.textContent = t('regenerate_modal.log_fetch_error', { error: err.message });
                         }
                         updateRegenerateStatus('failed', '');
                         stopRegeneratePolling();
@@ -768,7 +847,7 @@
                         const originalTextarea = document.createElement('textarea');
                         originalTextarea.className = 'timeline-segment form-control form-control-sm original-text';
                         originalTextarea.value = segment.text;
-                        originalTextarea.placeholder = "Original text";
+                        originalTextarea.placeholder = t('segments.original_placeholder');
                         originalTextarea.style.resize = 'none';
                         originalTextarea.style.overflowY = 'hidden';
                         originalTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
@@ -776,7 +855,7 @@
                         const translatedTextarea = document.createElement('textarea');
                         translatedTextarea.className = 'timeline-segment form-control form-control-sm translated-text';
                         translatedTextarea.value = segment.translated_text || '';
-                        translatedTextarea.placeholder = segment.translated_text ? "Fordított szöveg" : "Nincs fordítás";
+                        translatedTextarea.placeholder = segment.translated_text ? t('segments.translated_placeholder') : t('segments.translation_missing');
                         translatedTextarea.style.resize = 'none';
                         translatedTextarea.style.overflowY = 'hidden';
                         translatedTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
@@ -1018,7 +1097,7 @@
                 .then(data => {
                     if (!data.success) {
                         console.error('Szerver oldali hiba a mentéskor:', data.error);
-                        alert(`Hiba a szegmens mentésekor: ${data.error}`);
+                        alert(t('errors.segment_save', { error: data.error || t('errors.unknown') }));
                         // Rollback
                         segmentsData[segmentIndex] = originalSegment;
                         // Frissítjük a cache-t és a UI-t
@@ -1058,7 +1137,7 @@
                 })
                 .catch(error => {
                     console.error('Hálózati vagy egyéb hiba a mentéskor:', error);
-                    alert(`Hiba a szegmens mentésekor: ${error.error || error.message || 'Ismeretlen hiba'}`);
+                    alert(t('errors.segment_save', { error: error.error || error.message || t('errors.unknown') }));
                     // Rollback
                     segmentsData[segmentIndex] = originalSegment;
                     segmentElementsCache.clear();
@@ -1136,9 +1215,9 @@
             }
             
             document.getElementById('playPauseBtn')?.addEventListener('click', () => wavesurfer.playPause());
-            wavesurfer.on('play', () => document.getElementById('playPauseBtn').textContent = 'Szünet');
-            wavesurfer.on('pause', () => document.getElementById('playPauseBtn').textContent = 'Lejátszás');
-            wavesurfer.on('finish', () => document.getElementById('playPauseBtn').textContent = 'Lejátszás');
+            wavesurfer.on('play', () => document.getElementById('playPauseBtn').textContent = t('player.pause'));
+            wavesurfer.on('pause', () => document.getElementById('playPauseBtn').textContent = t('header.play_button'));
+            wavesurfer.on('finish', () => document.getElementById('playPauseBtn').textContent = t('header.play_button'));
 
             // Optimalizált scroll kezelés
             const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
@@ -1215,7 +1294,7 @@
                 }
                 let newSegmentEndTime = Math.min(newSegmentStartTime + 0.5, nextExistingSegmentStartTime, wavesurfer.getDuration());
                 if (newSegmentEndTime - newSegmentStartTime < 0.05) {
-                    alert('Nincs elég hely új szegmens létrehozásához (minimum 50ms).');
+                    alert(t('errors.segment_space'));
                     return;
                 }
                 const newSegmentPayload = {
@@ -1236,10 +1315,10 @@
                         sanitizeSegmentTexts(segmentsData);
                         fullRefreshUI();
                     } else {
-                        alert(`Hiba az új szegmens hozzáadásakor: ${data.error}`);
+                        alert(t('errors.segment_add', { error: data.error || t('errors.unknown') }));
                     }
                 })
-                .catch(err => alert(`Hiba: ${err.message}`));
+                .catch(err => alert(t('errors.generic', { error: err.message })));
             }
 
             function deleteSegmentOnServer(segmentIndex) {
@@ -1255,15 +1334,15 @@
                         sanitizeSegmentTexts(segmentsData);
                         fullRefreshUI();
                     } else {
-                        alert(`Hiba a szegmens törlésekor: ${data.error}`);
+                        alert(t('errors.segment_delete', { error: data.error || t('errors.unknown') }));
                     }
                 })
-                .catch(err => alert(`Hiba: ${err.message}`));
+                .catch(err => alert(t('errors.generic', { error: err.message })));
             }
 
             function regenerateSegmentOnServer(segmentIndex) {
                 if (currentJsonFileName === null || currentJsonFileName === undefined) {
-                    alert('Hiányzik a JSON fájlnév, a regenerálás nem indítható.');
+                    alert(t('errors.missing_json'));
                     return;
                 }
                 const payload = {
@@ -1278,13 +1357,13 @@
                 .then(res => res.json())
                 .then(data => {
                     if (!data.success) {
-                        alert(`Regenerálás sikertelen: ${data.error}`);
+                        alert(t('errors.regenerate_failed', { error: data.error || t('errors.unknown') }));
                         return;
                     }
-                    const message = data.message || 'Regeneráció elindítva.';
+                    const message = data.message || t('messages.regeneration_started');
                     if (regenerateLogModal) {
                         if (regenerateLogContent) {
-                            regenerateLogContent.textContent = 'Log inicializálása...';
+                            regenerateLogContent.textContent = t('regenerate_modal.initial_log');
                         }
                         updateRegenerateStatus('queued', message);
                         regenerateLogModal.show();
@@ -1298,13 +1377,13 @@
                             clearTimeout(regenerateAutoCloseTimeout);
                             regenerateAutoCloseTimeout = null;
                         }
-                        regenerateLogContent.textContent = `${message}\nNincs naplózható feladat azonosító.`;
+                        regenerateLogContent.textContent = `${message}\n${t('regenerate_modal.no_job')}`;
                         regenerateAutoCloseTimeout = setTimeout(() => {
                             regenerateLogModal.hide();
                         }, 2000);
                     }
                 })
-                .catch(err => alert(`Regenerálás hiba: ${err.message}`));
+                .catch(err => alert(t('errors.regenerate_error', { error: err.message || t('errors.unknown') })));
             }
 
             document.getElementById('menu-insert-segment').addEventListener('click', () => {
@@ -1313,7 +1392,10 @@
             });
 
             document.getElementById('menu-delete-segment').addEventListener('click', () => {
-                if (currentContextMenuSegmentIndex !== -1 && confirm(`Biztosan törli a(z) ${currentContextMenuSegmentIndex + 1}. szegmenst?`)) {
+                if (
+                    currentContextMenuSegmentIndex !== -1
+                    && confirm(t('prompts.delete_confirm', { index: currentContextMenuSegmentIndex + 1 }))
+                ) {
                     deleteSegmentOnServer(currentContextMenuSegmentIndex);
                 }
                 contextMenu.style.display = 'none';

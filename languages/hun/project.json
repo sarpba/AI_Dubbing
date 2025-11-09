@@ -1,0 +1,442 @@
+{
+  "meta": {
+    "code": "hun",
+    "label": "Magyar",
+    "html_lang": "hu"
+  },
+  "strings": {
+    "document": {
+      "title": "Projekt: {project} | AI Dubbing"
+    },
+    "general": {
+      "theme_toggle_aria": "Téma váltása",
+      "language_selector_label": "Nyelv",
+      "language_selector_aria": "Felület nyelvének kiválasztása",
+      "close_aria": "Bezárás"
+    },
+    "buttons": {
+      "close": "Bezárás",
+      "save": "Mentés",
+      "cancel": "Mégse",
+      "save_and_start": "Mentés és indítás"
+    },
+    "file_browser": {
+      "upload_title": "Fájl feltöltése ebbe a mappába",
+      "upload_button": "Feltöltés",
+      "clear_title": "Könyvtár tartalmának törlése",
+      "clear_button": "Tartalom törlése",
+      "delete_title": "Fájl törlése",
+      "delete_button": "Törlés",
+      "move_title": "Áthelyezés a fordított szegmensek közé",
+      "move_button": "Áthelyezés"
+    },
+    "header": {
+      "title": "Projekt: {project}",
+      "back_to_home": "Vissza a főoldalra"
+    },
+    "backup": {
+      "project_missing": "A projektnév nem elérhető.",
+      "working": "Mentés készítése...",
+      "create_failed": "Nem sikerült létrehozni a biztonsági mentést."
+    },
+    "files": {
+      "card_title": "Projekt fájlok",
+      "description": "A lista a {path} könyvtár aktuális tartalmát mutatja.",
+      "root_upload": "Fájl feltöltése a gyökérbe",
+      "refresh_list": "Lista frissítése",
+      "download_backup": "Biztonsági mentés letöltése",
+      "legend_text": "Jelölt almappák: találtunk egyező fordított szegmenst a {directory} mappában.",
+      "empty_project": "A projekt mappa üres.",
+      "unnamed_folder": "(névtelen mappa)",
+      "unnamed_file": "(névtelen fájl)",
+      "loading": "Betöltés...",
+      "empty_folder": "A mappa üres.",
+      "load_failed": "Nem sikerült betölteni a könyvtár tartalmát.",
+      "refreshing": "Frissítés...",
+      "refresh_failed": "Nem sikerült frissíteni a fájlok listáját."
+    },
+    "notifications": {
+      "file_upload_success": "Fájl sikeresen feltöltve.",
+      "file_upload_failed": "Nem sikerült feltölteni a fájlt.",
+      "files_upload_success": "Fájlok sikeresen feltöltve.",
+      "files_upload_failed": "Nem sikerült feltölteni a fájlokat."
+    },
+    "directories": {
+      "path_missing": "A mappa útvonala nem határozható meg.",
+      "clear_confirm": "Biztosan törlöd a(z) \"{name}\" mappa teljes tartalmát?\nA mappa megmarad, de minden fájl és alkönyvtár törlődik.",
+      "clear_success": "A mappa tartalma sikeresen törölve.",
+      "clear_error": "Nem sikerült törölni a mappa tartalmát.",
+      "delete_confirm": "Biztosan törlöd ezt a fájlt?\n{name}",
+      "delete_success": "Fájl sikeresen törölve.",
+      "delete_error": "Nem sikerült törölni a fájlt.",
+      "move_confirm": "Áthelyezed ezt a fájlt a fordított szegmensek közé?\n{name}",
+      "move_success": "Fájl sikeresen áthelyezve.",
+      "move_error": "Nem sikerült áthelyezni a fájlt."
+    },
+    "tts": {
+      "section_title": "F5-TTS modellek kezelése",
+      "section_description": "Itt tölthetsz fel F5-TTS modelleket a <code>{directory}</code> könyvtár bármely almappájába, amit később használhatsz a TTS generáláshoz.",
+      "subfolders_label": "TTS almappák",
+      "root_label": "Gyökér: {path}",
+      "no_subfolders": "Nem találtunk almappát a TTS könyvtárban.",
+      "target_label": "Cél almappa",
+      "target_placeholder": "Pl.: F5-TTS_custom",
+      "target_error": "A cél almappa megadása kötelező.",
+      "target_help": "A megadott útvonal a TTS gyökérhez képest értendő (pl. <code>F5-TTS_custom</code>).",
+      "model_label": "Model fájl",
+      "vocab_label": "vocab.txt",
+      "config_label": "Konfiguráció (JSON)",
+      "upload_button": "Model csomag feltöltése",
+      "progress_aria": "F5-TTS feltöltés állapota",
+      "upload_prepare": "Feltöltés előkészítése ({fileKey})...",
+      "chunk_status": "Fájl ({fileKey}) darab {current}/{total} – {chunkPercent}% ({uploaded} / {totalBytes})",
+      "upload_complete": "Fájl ({fileKey}) feltöltése befejezve.",
+      "button_uploading": "Feltöltés...",
+      "validation": {
+        "all_files": "Válaszd ki mindhárom fájlt: modell, vocab.txt és konfiguráció.",
+        "vocab_extension": "A vocab fájlnak .txt kiterjesztésűnek kell lennie.",
+        "config_extension": "A konfigurációs fájlnak .json kiterjesztésűnek kell lennie.",
+        "target_required": "Add meg a cél almappát (pl. F5-TTS_almapa)."
+      }
+    },
+    "help": {
+      "button_label": "Súgó",
+      "title": "AI Dubbing projektoldal súgó",
+      "intro": "Ez az oldal a projekt teljes kezelését biztosítja: itt állíthatod össze és futtathatod a workflow-kat, követheted az állapotukat, és hozzáférsz a projektfájlokhoz.",
+      "general": {
+        "title": "Általános munkafolyamat",
+        "items": [
+          "Válaszd ki a futtatni kívánt lépéseket a moduláris workflow táblázatban.",
+          "Töltsd ki a szükséges paramétereket a lépésekhez kapcsolódó űrlapokon.",
+          "Használd a futtatási vezérlőket a folyamat indításához, megállításához vagy folytatásához.",
+          "Ellenőrizd a naplókat és az állapotjelzőket, hogy nyomon kövesd a végrehajtást."
+        ]
+      },
+      "widgets": {
+        "title": "Widgetek részletes leírása",
+        "items": [
+          "<strong>Review + Continue</strong>: Megállítja a futást egy ellenőrzési pontnál, ahol áttekintheted a korábbi lépéseket, módosíthatod a paramétereket, majd a megfelelő gombbal folytathatod vagy újrafuttathatod a workflow-t.",
+          "<strong>Ciklus</strong>: Ismétlődő futtatást tesz lehetővé. A \"Visszalépés lépéseinek száma\" értékkel adhatod meg, hány korábbi futtatható lépést építsen vissza a ciklusba."
+        ]
+      },
+      "workflow": {
+        "title": "Workflow szekció",
+        "items": [
+          "A badge jelzi, fut-e aktív feladat; a segítő szöveg összegzi az aktuális teendőt.",
+          "A sablonválasztóval betöltheted mentett workflow-kat, a gombokkal pedig elmentheted vagy visszaállíthatod az alapértelmezett lépéslistát.",
+          "A táblázatban kapcsolhatod az egyes lépéseket, megadhatod az execution környezetet és dönthetsz arról, mi történjen hiba esetén.",
+          "A vezérlők indítják, leállítják vagy folytatják a futtatást, továbbá itt érhetők el a napló- és státusznézetek."
+        ]
+      },
+      "files": {
+        "title": "Projektfájlok",
+        "items": [
+          "A fájlkezelő a projekt könyvtárának teljes struktúráját mutatja, a jelölések pedig a fordított szegmenseket emelik ki.",
+          "Az eszköztárból tölthetsz fel új fájlokat a gyökérbe, illetve frissítheted a listát a háttérben végzett módosítások után.",
+          "Az egyes elemeknél gyorsműveletek érhetők el: megnyitás új lapon, törlés vagy – ahol elérhető – áthelyezés a fordított tartományba."
+        ]
+      },
+      "previews": {
+        "title": "Előnézeti és segédablakok",
+        "items": [
+          "Az audió, videó és JSON előnézetek külön modális ablakban jelennek meg, ahol a trim funkciókkal testre szabhatod a fájlokat vagy áttekintheted a tartalmat.",
+          "A workflow mentésekor, API kulcsok megadásakor vagy paraméterek összeállításakor modális felület segít a strukturált adatbevitelben."
+        ]
+      }
+    },
+    "workflow": {
+      "title": "Moduláris AI workflow",
+      "status_none": "Nincs aktív feladat",
+      "hint": "Állítsd össze a futtatandó lépéseket, konfiguráld a paramétereket, majd indítsd a workflow-t.",
+      "info": "Válaszd ki a scripts mappában elérhető lépéseket, állítsd be a paramétereket egyenként, majd indítsd el a kívánt munkafolyamatot. A projektnév automatikusan kitöltésre kerül minden lépésnél.",
+      "template_label": "Mentett workflow",
+      "save_template": "Mentés sablonként",
+      "reset_default": "Alapértelmezés visszaállítása",
+      "table_hint": "Jobb klikk a táblázatban a lépések beszúrásához.",
+      "missing_badge": "Hiányzó paraméterek",
+      "table_headers": {
+        "active": "Aktív",
+        "step": "Lépés",
+        "environment": "Környezet",
+        "on_failure": "Hiba esetén",
+        "actions": "Műveletek"
+      },
+      "table_empty": "Még nem adtál hozzá lépéseket.",
+      "start_button": "Workflow indítása",
+      "stop_button": "Workflow megszakítása",
+      "status_text": "Állapot frissítése folyamatban...",
+      "log_title": "Workflow log",
+      "refresh_button": "Frissítés",
+      "log_status": "A log a workflow indítása után jelenik meg.",
+      "tip": "Tipp: a lépések paraméterei egyenként módosíthatók. A logban minden végrehajtott parancs kimenete megjelenik.",
+      "status_texts": {
+        "add_steps": "Adj hozzá futtatható lépéseket az indításhoz.",
+        "enable_steps": "Engedélyezz legalább egy lépést az indításhoz.",
+        "no_steps_before_widget": "Az első widget előtt nincs futtatható lépés. Használd a Continue gombot.",
+        "ready": "Workflow készen áll az indításra.",
+        "never_run": "Workflow még nem futott ezen a projekten.",
+        "error": "Hiba: {error}"
+      },
+      "status_labels": {
+        "queued": "Sorban áll",
+        "running": "Folyamatban",
+        "completed": "Kész",
+        "failed": "Hiba",
+        "cancelling": "Megszakítás folyamatban",
+        "cancelled": "Megszakítva",
+        "unknown": "Ismeretlen"
+      },
+      "labels_extra": {
+        "halt_on_fail": "Megáll hibánál",
+        "continue_on_fail": "Tovább hiba után",
+        "special_widget": "Speciális widget",
+        "api_usage": "API használat",
+        "auto_value_project": "Automatikus érték: projektnév",
+        "auto_value_path": "Automatikus érték: projekt könyvtár teljes elérési útja",
+        "default_flag_on": "Alapértelmezett: bekapcsolva",
+        "default_flag_off": "Alapértelmezett: kikapcsolva",
+        "key_saved_hint": "Kulcs jelenleg el van mentve. Hagyd üresen, ha nem módosítod.",
+        "widget_badge": "Widget",
+        "flags_prefix": "Kapcsolók",
+        "key_placeholder": "API kulcs",
+        "key_enter_value": "Add meg az API kulcsot.",
+        "key_clear_button": "Kulcs törlése",
+        "key_clear_placeholder": "Kulcs törlésre jelölve",
+        "key_clear_hint": "Kulcs törlésre kerül mentéskor.",
+        "key_new_hint": "Új kulcs kerül mentésre."
+      },
+      "buttons_extra": {
+        "parameters": "Paraméterek",
+        "help": "Segédlet",
+        "stop": "Workflow megszakítása"
+      },
+      "messages": {
+        "missing_required": "Hiányzó kötelező paraméterek: {missing}",
+        "check_fields": "Ellenőrizd a következő mezőket: {fields}",
+        "no_parameters": "Nincs megadott paraméter",
+        "options_load_failed": "Nem sikerült betölteni a workflow opciókat: {error}",
+        "script_added": "{name} hozzáadva a workflow-hoz.",
+        "widget_added": "{name} widget hozzáadva a workflow-hoz.",
+        "step_removed": "{name} eltávolítva a workflow-ból.",
+        "already_running": "Már fut egy workflow. Várj a befejezésig.",
+        "no_more_steps": "Nincs további futtatható lépés.",
+        "missing_params_list": "{name}: hiányzó paraméterek – {missing}",
+        "no_steps_before_cycle": "Nincs futtatható lépés a widget előtt a ciklushoz.",
+        "cycle_not_enough_steps": "Nincs elegendő aktív lépés a widget előtt a megadott ciklushoz.",
+        "cycle_repeat_invalid": "A ciklus ismétlésszámának legalább 1-nek kell lennie.",
+        "cycle_step_back_invalid": "A ciklus visszalépési értékének legalább 1-nek kell lennie.",
+        "widget_disabled": "Ez a widget le van tiltva.",
+        "cycle_start": "Ciklus indítása {count} ismétléssel.",
+        "cycle_start_failed": "Nem sikerült elindítani a ciklust: {error}",
+        "cycle_complete": "Ciklus futása befejeződött. Folytatás a következő lépésekkel.",
+        "cycle_cancelled": "A ciklus futása megszakadt.",
+        "widget_continue_hint": "{name} widgethez értünk. Használd a Continue gombot a folytatáshoz.",
+        "segment_success": "A workflow szakasz sikeresen lefutott.",
+        "cycle_next_failed": "Nem sikerült a ciklus következő futásának indítása."
+      },
+      "validation": {
+        "number_invalid": "{field} (érvénytelen szám)",
+        "min_value": "{field} (min. {min})",
+        "max_value": "{field} (max. {max})"
+      },
+      "log_messages": {
+        "queued": "Feladat sorban áll – néhány másodpercen belül indul.",
+        "running": "Folyamatban lévő workflow – a logban követheted a lépéseket.",
+        "cancelling": "Megszakítás folyamatban – várakozás a folyamat leállítására.",
+        "failed": "Hiba történt – nyisd meg a logot és ellenőrizd, melyik lépés állt le.",
+        "cancelled": "Workflow megszakítva – szükség esetén indíts új feldolgozást.",
+        "completed": "Workflow sikeresen lefutott – a fájlok a projekt könyvtárban találhatók.",
+        "failed_short": "A workflow hibával leállt. Ellenőrizd a logot.",
+        "cancelled_short": "A workflow megszakítva.",
+        "completed_short": "A workflow befejeződött.",
+        "running_short": "A workflow fut – a log folyamatosan frissül.",
+        "log_refresh_failed": "Nem sikerült frissíteni a logot.",
+        "log_initializing": "Log inicializálása...",
+        "open_log": "Log megnyitása",
+        "stop_pending": "Megszakítás kérve. Várakozás a folyamat leállítására.",
+        "step_error": "Hiba a(z) {name} lépés futtatása közben.",
+        "unknown": "Ismeretlen"
+      },
+      "run": {
+        "starting": "Workflow indítása...",
+        "starting_info": "Workflow indítása folyamatban. Az első lépés néhány másodpercig eltarthat.",
+        "waiting_log": "Workflow indítása... várakozás a logra.",
+        "started": "Workflow elindult, állapot frissítése folyamatban..."
+      },
+      "cycle": {
+        "preparing": "Ciklus előkészítése...",
+        "progress": "Ciklus: {current}/{total}"
+      },
+      "stop": {
+        "requesting": "Megszakítás kérve...",
+        "requesting_label": "Megszakítás kérése folyamatban...",
+        "unknown_error": "Ismeretlen hiba a megszakítás során."
+      },
+      "errors": {
+        "start_failed": "Workflow indítása sikertelen: {error}",
+        "start_unknown": "Ismeretlen hiba a workflow indításakor.",
+        "stop_failed": "Nem sikerült megszakítani a workflow-t: {error}",
+        "continue_failed": "Nem sikerült folytatni a workflow-t: {error}",
+        "unknown_script": "Ismeretlen szkript: {name}",
+        "unknown_widget": "Ismeretlen widget: {name}",
+        "unknown_script_short": "Ismeretlen szkript",
+        "unknown_error": "Ismeretlen hiba",
+        "key_status_failed": "Nem sikerült ellenőrizni az API kulcsokat.",
+        "keys_save_failed_generic": "Nem sikerült menteni az API kulcsokat.",
+        "keys_save_failed": "API kulcs mentése sikertelen: {error}",
+        "status_check_failed": "Nem sikerült lekérdezni az állapotot.",
+        "log_fetch_failed": "Nem sikerült beolvasni a logot."
+      },
+      "keys": {
+        "missing_alert": "Hiányzó API kulcsok: {keys}",
+        "list_instructions": "A workflow indításához add meg a következő kulcsokat: {keys}",
+        "fill_all": "Kérjük add meg az összes hiányzó kulcsot."
+      },
+      "templates": {
+        "placeholder": "Válassz sablont...",
+        "list_failed": "Nem sikerült lekérdezni a sablonokat.",
+        "select_prompt": "Előbb válassz egy workflow sablont.",
+        "load_failed": "Nem sikerült betölteni a sablont.",
+        "loaded": "{name} sablon betöltve.",
+        "load_error": "Nem sikerült betölteni a kiválasztott workflow-t: {error}",
+        "none_selected_overwrite": "Nincs kiválasztott sablon, amit felül lehetne írni.",
+        "name_required": "Adj meg egy nevet a workflow sablonnak.",
+        "overwrite_current": "Aktuális sablon: {name} ({id})",
+        "save_failed": "Nem sikerült elmenteni a workflow sablont.",
+        "saved": "Workflow sablon elmentve: {name}.",
+        "default_missing": "Nincs elérhető alapértelmezett workflow.",
+        "reset_confirm": "Biztosan visszaállítod az alapértelmezett lépéssort?",
+        "default_loaded": "Az alapértelmezett lépéssor betöltve."
+      },
+      "widgets": {
+        "review": {
+          "name": "Review + Continue",
+          "description": "Felülvizsgálati nézet megnyitása és kézi folytatás.",
+          "continue_label": "Folytatás",
+          "review_label": "Felülvizsgálat"
+        },
+        "cycle": {
+          "name": "Ciklus",
+          "description": "Korábbi lépések többszöri futtatása a workflow-ban.",
+          "continue_label": "Ciklus futtatása",
+          "review_label": "Felülvizsgálat",
+          "parameters": {
+            "repeat": {
+              "label": "Ismétlések száma",
+              "helper": "Hányszor ismétlődjön a kijelölt lépéssor."
+            },
+            "step_back": {
+              "label": "Visszalépés lépéseinek száma",
+              "helper": "A widget előtti hány futtatható lépést ismételjen a ciklus."
+            }
+          },
+          "help": "A ciklus widget a megadott számú, aktív szkript lépést ismétli a widget előtt, a megadott alkalommal."
+        }
+      },
+      "context_menu": {
+        "insert_above": "Beszúrás fölé",
+        "insert_below": "Beszúrás alá"
+      },
+      "file_tree": {
+        "root_label": "Gyökér",
+        "empty": "Nincs elérhető elem"
+      },
+      "status": {
+        "add_steps": "Adj hozzá futtatható lépéseket az indításhoz.",
+        "enable_steps": "Engedélyezz legalább egy lépést az indításhoz.",
+        "no_steps_before_widget": "Az első widget előtt nincs futtatható lépés. Használd a Continue gombot.",
+        "ready": "Workflow készen áll az indításra."
+      },
+      "search": {
+        "no_results": "Nincs a keresésnek megfelelő szkript."
+      },
+      "buttons": {
+        "add_step": "Hozzáadás"
+      },
+      "details": {
+        "environment_label": "Környezet:",
+        "required_params_label": "Kötelező paraméterek:",
+        "required_keys_label": "Szükséges kulcsok:",
+        "api_label": "API:"
+      },
+      "groups": {
+        "root_label": "scripts/ (gyökér)"
+      },
+      "modals": {
+        "add_step": {
+          "title": "Új workflow lépés hozzáadása",
+          "search_placeholder": "Szűrés név alapján...",
+          "loading": "Betöltés folyamatban..."
+        },
+        "params": {
+          "title": "Paraméterek szerkesztése",
+          "script_title": "{name} – paraméterek",
+          "widget_title": "{name} – beállítások",
+          "help_title": "Segédlet",
+          "no_settings": "Ehhez a lépéshez nem szükséges beállítás.",
+          "no_widget_settings": "Ehhez a widgethez nem szükséges beállítás."
+        },
+        "template_save": {
+          "title": "Workflow sablon mentése",
+          "name_label": "Sablon neve",
+          "name_placeholder": "Pl. Alap beállítások",
+          "description_label": "Leírás (opcionális)",
+          "description_placeholder": "Rövid megjegyzés a sablonhoz",
+          "overwrite_label": "Aktuális sablon felülírása"
+        },
+        "api_keys": {
+          "title": "API kulcsok megadása",
+          "instructions": "A workflow indításához add meg a hiányzó API kulcsokat.",
+          "labels": {
+            "chatgpt": "OpenAI / ChatGPT API kulcs",
+            "deepl": "DeepL API kulcs",
+            "huggingface": "Hugging Face token"
+          },
+          "placeholders": {
+            "chatgpt": "sk-...",
+            "deepl": "DeepL API kulcs",
+            "huggingface": "hf_..."
+          }
+        }
+      }
+    },
+    "js": {
+      "logs": {
+        "config_read_failed": "Projekt konfiguráció beolvasása sikertelen:",
+        "workflow_state_save_failed": "Workflow állapot mentése sikertelen:",
+        "workflow_state_load_failed": "Nem sikerült betölteni a projekt workflow állapotát:",
+        "workflow_default_load_failed": "Alapértelmezett workflow betöltési hiba:"
+      },
+      "errors": {
+        "upload_failed": "Nem sikerült feltölteni a fájlt.",
+        "delete_failed": "Nem sikerült törölni a fájlt.",
+        "clear_directory_failed": "Nem sikerült törölni a könyvtár tartalmát.",
+        "move_failed": "Nem sikerült áthelyezni a fájlt.",
+        "tts_upload_failed": "Nem sikerült feltölteni a fájlt a TTS könyvtárba."
+      }
+    },
+    "audio_modal": {
+      "title": "Audió szerkesztése",
+      "loading": "Betöltés...",
+      "instructions": "Húzd az egeret a hullámformán a kijelöléshez, vagy állítsd a csúszkákkal a kezdő és záró pontot.",
+      "start_label": "Kezdet:",
+      "end_label": "Vége:",
+      "duration_label": "Hossz:",
+      "start_slider": "Kezdőpont",
+      "end_slider": "Végpont",
+      "reset_selection": "Teljes fájl kijelölése",
+      "reset_hint": "Mentéskor az eredeti fájl felülíródik."
+    },
+    "video_modal": {
+      "title": "Videó lejátszása",
+      "default_title": "Videó lejátszása"
+    },
+    "json_modal": {
+      "title": "Fájl előnézete",
+      "default_title": "Fájl előnézete",
+      "loading": "Betöltés...",
+      "empty": "Üres fájl.",
+      "load_error": "Nem sikerült betölteni a fájlt.\n{error}"
+    }
+  }
+}

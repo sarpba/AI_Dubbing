@@ -1,0 +1,442 @@
+{
+  "meta": {
+    "code": "eng",
+    "label": "English",
+    "html_lang": "en"
+  },
+  "strings": {
+    "document": {
+      "title": "Project: {project} | AI Dubbing"
+    },
+    "general": {
+      "theme_toggle_aria": "Toggle theme",
+      "language_selector_label": "Language",
+      "language_selector_aria": "Select interface language",
+      "close_aria": "Close"
+    },
+    "buttons": {
+      "close": "Close",
+      "save": "Save",
+      "cancel": "Cancel",
+      "save_and_start": "Save and start"
+    },
+    "file_browser": {
+      "upload_title": "Upload file into this folder",
+      "upload_button": "Upload",
+      "clear_title": "Clear folder contents",
+      "clear_button": "Clear contents",
+      "delete_title": "Delete file",
+      "delete_button": "Delete",
+      "move_title": "Move into translated segments",
+      "move_button": "Move"
+    },
+    "header": {
+      "title": "Project: {project}",
+      "back_to_home": "Back to home"
+    },
+    "backup": {
+      "project_missing": "Project name is not available.",
+      "working": "Creating backup...",
+      "create_failed": "Failed to create backup."
+    },
+    "files": {
+      "card_title": "Project files",
+      "description": "The list shows the current contents of the {path} directory.",
+      "root_upload": "Upload file to root",
+      "refresh_list": "Refresh list",
+      "download_backup": "Download backup",
+      "legend_text": "Highlighted subfolders: we found a matching translated segment inside {directory}.",
+      "empty_project": "The project folder is empty.",
+      "unnamed_folder": "(untitled folder)",
+      "unnamed_file": "(untitled file)",
+      "loading": "Loading...",
+      "empty_folder": "The folder is empty.",
+      "load_failed": "Failed to load directory contents.",
+      "refreshing": "Refreshing...",
+      "refresh_failed": "Failed to refresh the file list."
+    },
+    "notifications": {
+      "file_upload_success": "File uploaded successfully.",
+      "file_upload_failed": "Failed to upload file.",
+      "files_upload_success": "Files uploaded successfully.",
+      "files_upload_failed": "Failed to upload files."
+    },
+    "directories": {
+      "path_missing": "Folder path cannot be determined.",
+      "clear_confirm": "Are you sure you want to clear the entire contents of \"{name}\"?\nThe folder will remain, but every file and subdirectory will be deleted.",
+      "clear_success": "Folder contents cleared successfully.",
+      "clear_error": "Failed to clear folder contents.",
+      "delete_confirm": "Are you sure you want to delete this file?\n{name}",
+      "delete_success": "File deleted successfully.",
+      "delete_error": "Failed to delete the file.",
+      "move_confirm": "Move this file into the translated segments?\n{name}",
+      "move_success": "File moved successfully.",
+      "move_error": "Failed to move the file."
+    },
+    "tts": {
+      "section_title": "Manage F5-TTS models",
+      "section_description": "Upload F5-TTS models into any subfolder of <code>{directory}</code> so you can reuse them for TTS generation.",
+      "subfolders_label": "TTS subfolders",
+      "root_label": "Root: {path}",
+      "no_subfolders": "No subfolders found in the TTS directory.",
+      "target_label": "Target subfolder",
+      "target_placeholder": "e.g. F5-TTS_custom",
+      "target_error": "Target subfolder is required.",
+      "target_help": "Path is relative to the TTS root (e.g. <code>F5-TTS_custom</code>).",
+      "model_label": "Model file",
+      "vocab_label": "vocab.txt",
+      "config_label": "Configuration (JSON)",
+      "upload_button": "Upload model package",
+      "progress_aria": "F5-TTS upload status",
+      "upload_prepare": "Preparing upload ({fileKey})...",
+      "chunk_status": "File ({fileKey}) chunk {current}/{total} – {chunkPercent}% ({uploaded} / {totalBytes})",
+      "upload_complete": "File ({fileKey}) upload finished.",
+      "button_uploading": "Uploading...",
+      "validation": {
+        "all_files": "Select all three files: model, vocab.txt, and config.",
+        "vocab_extension": "The vocab file must use the .txt extension.",
+        "config_extension": "The config file must use the .json extension.",
+        "target_required": "Provide the target subfolder (e.g. F5-TTS_custom)."
+      }
+    },
+    "help": {
+      "button_label": "Help",
+      "title": "AI Dubbing project page help",
+      "intro": "This page lets you manage the entire project: assemble and run workflows, monitor their status, and access project files.",
+      "general": {
+        "title": "General workflow",
+        "items": [
+          "Select the steps you want to run in the modular workflow table.",
+          "Fill in the required parameters via the forms linked to each step.",
+          "Use the run controls to start, stop, or resume the process.",
+          "Check the logs and status indicators to follow execution."
+        ]
+      },
+      "widgets": {
+        "title": "Widget details",
+        "items": [
+          "<strong>Review + Continue</strong>: Pauses execution at a checkpoint where you can review previous steps, adjust parameters, then use the matching button to continue or rerun the workflow.",
+          "<strong>Cycle</strong>: Enables repeated execution. The \"Number of steps to rewind\" field defines how many previous runnable steps to include in the cycle."
+        ]
+      },
+      "workflow": {
+        "title": "Workflow section",
+        "items": [
+          "The badge shows whether a task is running; the helper text highlights the current action.",
+          "Use the template selector to load saved workflows, and the buttons to save or restore the default list of steps.",
+          "Within the table you can toggle steps, set the execution environment, and decide how to handle failures.",
+          "The controls start, stop, or resume execution and provide quick access to log and status views."
+        ]
+      },
+      "files": {
+        "title": "Project files",
+        "items": [
+          "The file browser shows the entire project directory, while markers highlight translated segments.",
+          "Use the toolbar to upload new files into the root and refresh the list after background changes.",
+          "Each entry offers quick actions: open in a new tab, delete, or—where available—move into the translated folder."
+        ]
+      },
+      "previews": {
+        "title": "Preview and helper dialogs",
+        "items": [
+          "Audio, video, and JSON previews open in separate modals where trim tools let you customize files or inspect their contents.",
+          "When saving workflows, entering API keys, or assembling parameters, modal forms guide structured input."
+        ]
+      }
+    },
+    "workflow": {
+      "title": "Modular AI workflow",
+      "status_none": "No active task",
+      "hint": "Assemble the steps to run, configure the parameters, then start the workflow.",
+      "info": "Select steps available in the scripts folder, configure their parameters one by one, then start the desired workflow. The project name is auto-filled for every step.",
+      "template_label": "Saved workflow",
+      "save_template": "Save as template",
+      "reset_default": "Reset to default",
+      "table_hint": "Right-click inside the table to insert steps.",
+      "missing_badge": "Missing parameters",
+      "table_headers": {
+        "active": "Active",
+        "step": "Step",
+        "environment": "Environment",
+        "on_failure": "On failure",
+        "actions": "Actions"
+      },
+      "table_empty": "You have not added any steps yet.",
+      "start_button": "Start workflow",
+      "stop_button": "Cancel workflow",
+      "status_text": "Updating status...",
+      "log_title": "Workflow log",
+      "refresh_button": "Refresh",
+      "log_status": "The log appears after the workflow starts.",
+      "tip": "Tip: step parameters can be edited individually. The log shows the output of every executed command.",
+      "status_texts": {
+        "add_steps": "Add runnable steps before starting.",
+        "enable_steps": "Enable at least one step before starting.",
+        "no_steps_before_widget": "There are no runnable steps before the first widget. Use the Continue button.",
+        "ready": "Workflow is ready to start.",
+        "never_run": "Workflow has not been run on this project yet.",
+        "error": "Error: {error}"
+      },
+      "status_labels": {
+        "queued": "Queued",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelling": "Cancelling",
+        "cancelled": "Cancelled",
+        "unknown": "Unknown"
+      },
+      "labels_extra": {
+        "halt_on_fail": "Stop on failure",
+        "continue_on_fail": "Continue after failure",
+        "special_widget": "Special widget",
+        "api_usage": "API usage",
+        "auto_value_project": "Auto value: project name",
+        "auto_value_path": "Auto value: full project path",
+        "default_flag_on": "Default: on",
+        "default_flag_off": "Default: off",
+        "key_saved_hint": "Key is currently saved. Leave empty to keep it.",
+        "widget_badge": "Widget",
+        "flags_prefix": "Flags",
+        "key_placeholder": "API key",
+        "key_enter_value": "Enter the API key.",
+        "key_clear_button": "Clear key",
+        "key_clear_placeholder": "Key marked for deletion",
+        "key_clear_hint": "Key will be removed when saved.",
+        "key_new_hint": "New key will be saved."
+      },
+      "buttons_extra": {
+        "parameters": "Parameters",
+        "help": "Help",
+        "stop": "Cancel workflow"
+      },
+      "messages": {
+        "missing_required": "Missing required parameters: {missing}",
+        "check_fields": "Check the following fields: {fields}",
+        "no_parameters": "No parameters provided",
+        "options_load_failed": "Failed to load workflow options: {error}",
+        "script_added": "{name} added to the workflow.",
+        "widget_added": "{name} widget added to the workflow.",
+        "step_removed": "{name} removed from the workflow.",
+        "already_running": "A workflow is already running. Wait for it to finish.",
+        "no_more_steps": "No more runnable steps.",
+        "missing_params_list": "{name}: missing parameters – {missing}",
+        "no_steps_before_cycle": "There are no runnable steps before the widget for the cycle.",
+        "cycle_not_enough_steps": "Not enough active steps before the widget for the requested cycle.",
+        "cycle_repeat_invalid": "Cycle repeat count must be at least 1.",
+        "cycle_step_back_invalid": "Cycle rewind value must be at least 1.",
+        "widget_disabled": "This widget is disabled.",
+        "cycle_start": "Starting cycle with {count} repetitions.",
+        "cycle_start_failed": "Failed to start cycle: {error}",
+        "cycle_complete": "Cycle finished. Continuing with the next steps.",
+        "cycle_cancelled": "Cycle execution was cancelled.",
+        "widget_continue_hint": "Reached widget {name}. Use Continue to proceed.",
+        "segment_success": "Workflow segment finished successfully.",
+        "cycle_next_failed": "Failed to start the next cycle run."
+      },
+      "validation": {
+        "number_invalid": "{field} (invalid number)",
+        "min_value": "{field} (min {min})",
+        "max_value": "{field} (max {max})"
+      },
+      "log_messages": {
+        "queued": "Task queued – it will start in a few seconds.",
+        "running": "Workflow in progress – follow the steps in the log.",
+        "cancelling": "Cancelling – waiting for the process to stop.",
+        "failed": "An error occurred – open the log to see which step stopped.",
+        "cancelled": "Workflow cancelled – start a new run if needed.",
+        "completed": "Workflow finished successfully – files are available in the project directory.",
+        "failed_short": "Workflow stopped with an error. Check the log.",
+        "cancelled_short": "Workflow was cancelled.",
+        "completed_short": "Workflow completed.",
+        "running_short": "Workflow is running – the log keeps refreshing.",
+        "log_refresh_failed": "Failed to refresh the log.",
+        "log_initializing": "Initializing log...",
+        "open_log": "Open log",
+        "stop_pending": "Cancellation requested. Waiting for the process to stop.",
+        "step_error": "Error while running step {name}.",
+        "unknown": "Unknown"
+      },
+      "run": {
+        "starting": "Starting workflow...",
+        "starting_info": "Workflow is starting. The first step may take a few seconds.",
+        "waiting_log": "Starting workflow... waiting for log.",
+        "started": "Workflow started, updating status..."
+      },
+      "cycle": {
+        "preparing": "Preparing cycle...",
+        "progress": "Cycle: {current}/{total}"
+      },
+      "stop": {
+        "requesting": "Requesting cancellation...",
+        "requesting_label": "Cancellation request in progress...",
+        "unknown_error": "Unknown error while cancelling."
+      },
+      "errors": {
+        "start_failed": "Failed to start workflow: {error}",
+        "start_unknown": "Unknown error while starting the workflow.",
+        "stop_failed": "Failed to cancel the workflow: {error}",
+        "continue_failed": "Failed to continue the workflow: {error}",
+        "unknown_script": "Unknown script: {name}",
+        "unknown_widget": "Unknown widget: {name}",
+        "unknown_script_short": "Unknown script",
+        "unknown_error": "Unknown error",
+        "key_status_failed": "Failed to check API keys.",
+        "keys_save_failed_generic": "Failed to save API keys.",
+        "keys_save_failed": "Failed to save API key: {error}",
+        "status_check_failed": "Failed to fetch status.",
+        "log_fetch_failed": "Failed to read log."
+      },
+      "keys": {
+        "missing_alert": "Missing API keys: {keys}",
+        "list_instructions": "Provide the following keys before starting: {keys}",
+        "fill_all": "Please enter all missing keys."
+      },
+      "templates": {
+        "placeholder": "Select a template...",
+        "list_failed": "Failed to fetch templates.",
+        "select_prompt": "Select a workflow template first.",
+        "load_failed": "Failed to load template.",
+        "loaded": "Template {name} loaded.",
+        "load_error": "Failed to load the selected workflow: {error}",
+        "none_selected_overwrite": "No template selected to overwrite.",
+        "name_required": "Enter a name for the workflow template.",
+        "overwrite_current": "Current template: {name} ({id})",
+        "save_failed": "Failed to save workflow template.",
+        "saved": "Workflow template saved: {name}.",
+        "default_missing": "Default workflow is not available.",
+        "reset_confirm": "Reset the step list to defaults?",
+        "default_loaded": "Default step list loaded."
+      },
+      "widgets": {
+        "review": {
+          "name": "Review + Continue",
+          "description": "Open review view and resume manually.",
+          "continue_label": "Continue",
+          "review_label": "Review"
+        },
+        "cycle": {
+          "name": "Cycle",
+          "description": "Repeat earlier steps multiple times in the workflow.",
+          "continue_label": "Run cycle",
+          "review_label": "Review",
+          "parameters": {
+            "repeat": {
+              "label": "Number of repetitions",
+              "helper": "How many times to repeat the selected block."
+            },
+            "step_back": {
+              "label": "Number of steps to rewind",
+              "helper": "How many runnable steps before the widget should the cycle repeat."
+            }
+          },
+          "help": "The cycle widget repeats the specified number of active script steps before the widget for the given count."
+        }
+      },
+      "context_menu": {
+        "insert_above": "Insert above",
+        "insert_below": "Insert below"
+      },
+      "file_tree": {
+        "root_label": "Root",
+        "empty": "No items available"
+      },
+      "status": {
+        "add_steps": "Add runnable steps before starting.",
+        "enable_steps": "Enable at least one step before starting.",
+        "no_steps_before_widget": "There are no runnable steps before the first widget. Use the Continue button.",
+        "ready": "Workflow is ready to start."
+      },
+      "search": {
+        "no_results": "No script matches the search."
+      },
+      "buttons": {
+        "add_step": "Add"
+      },
+      "details": {
+        "environment_label": "Environment:",
+        "required_params_label": "Required parameters:",
+        "required_keys_label": "Required keys:",
+        "api_label": "API:"
+      },
+      "groups": {
+        "root_label": "scripts/ (root)"
+      },
+      "modals": {
+        "add_step": {
+          "title": "Add new workflow step",
+          "search_placeholder": "Filter by name...",
+          "loading": "Loading..."
+        },
+        "params": {
+          "title": "Edit parameters",
+          "script_title": "{name} – parameters",
+          "widget_title": "{name} – settings",
+          "help_title": "Help",
+          "no_settings": "No configuration required for this step.",
+          "no_widget_settings": "No configuration required for this widget."
+        },
+        "template_save": {
+          "title": "Save workflow template",
+          "name_label": "Template name",
+          "name_placeholder": "e.g. Default settings",
+          "description_label": "Description (optional)",
+          "description_placeholder": "Short note for the template",
+          "overwrite_label": "Overwrite current template"
+        },
+        "api_keys": {
+          "title": "Enter API keys",
+          "instructions": "Provide the missing API keys to start the workflow.",
+          "labels": {
+            "chatgpt": "OpenAI / ChatGPT API key",
+            "deepl": "DeepL API key",
+            "huggingface": "Hugging Face token"
+          },
+          "placeholders": {
+            "chatgpt": "sk-...",
+            "deepl": "DeepL API key",
+            "huggingface": "hf_..."
+          }
+        }
+      }
+    },
+    "js": {
+      "logs": {
+        "config_read_failed": "Failed to read project configuration:",
+        "workflow_state_save_failed": "Failed to save workflow state:",
+        "workflow_state_load_failed": "Failed to load project workflow state:",
+        "workflow_default_load_failed": "Default workflow load error:"
+      },
+      "errors": {
+        "upload_failed": "Failed to upload file.",
+        "delete_failed": "Failed to delete file.",
+        "clear_directory_failed": "Failed to clear directory contents.",
+        "move_failed": "Failed to move file.",
+        "tts_upload_failed": "Failed to upload file into the TTS directory."
+      }
+    },
+    "audio_modal": {
+      "title": "Edit audio",
+      "loading": "Loading...",
+      "instructions": "Drag on the waveform to select, or use the sliders to set start and end.",
+      "start_label": "Start:",
+      "end_label": "End:",
+      "duration_label": "Duration:",
+      "start_slider": "Start point",
+      "end_slider": "End point",
+      "reset_selection": "Select entire file",
+      "reset_hint": "Saving overwrites the original file."
+    },
+    "video_modal": {
+      "title": "Play video",
+      "default_title": "Play video"
+    },
+    "json_modal": {
+      "title": "File preview",
+      "default_title": "File preview",
+      "loading": "Loading...",
+      "empty": "Empty file.",
+      "load_error": "Failed to load file.\n{error}"
+    }
+  }
+}

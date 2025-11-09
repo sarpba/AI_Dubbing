@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "code": "eng",
+    "label": "English",
+    "html_lang": "en"
+  },
+  "strings": {
+    "document": {
+      "title": "AI Dubbing Editor"
+    },
+    "general": {
+      "app_heading": "AI Dubbing Editor",
+      "theme_toggle_aria": "Toggle theme",
+      "theme_editor_aria": "Edit theme colors",
+      "language_selector_label": "Language",
+      "language_selector_aria": "Select interface language"
+    },
+    "cards": {
+      "upload_title": "Upload Video",
+      "existing_projects_title": "Existing Projects",
+      "tips_title": "Tips"
+    },
+    "projects": {
+      "delete_button": "Delete",
+      "delete_aria": "Delete project {project}",
+      "delete_confirmation": "Are you sure you want to delete \"{project}\"? The entire folder will be removed permanently.",
+      "delete_failed": "Failed to delete the project.",
+      "empty_state": "No projects yet"
+    },
+    "new_project": {
+      "title": "Create New Project",
+      "name_label": "Project name",
+      "source_type_label": "Source type",
+      "source_upload": "Upload video file",
+      "source_youtube": "Download from YouTube (yt-dlp)",
+      "source_restore": "Restore from backup",
+      "video_label": "Video file",
+      "youtube_label": "YouTube link",
+      "youtube_placeholder": "https://www.youtube.com/watch?v=...",
+      "youtube_helper": "The video will be downloaded with yt-dlp into an MKV container.",
+      "restore_label": "Project backup (.tar.gz or .zip)",
+      "restore_helper": "Upload the previously downloaded project backup; the system restores the full folder into workdir.",
+      "subtitle_label": "Subtitle file (optional)",
+      "subtitle_helper": "Only .srt subtitle files are accepted.",
+      "subtitle_suffix_label": "Subtitle suffix (e.g. _hu, _en)",
+      "subtitle_suffix_placeholder": "_hu",
+      "subtitle_suffix_helper": "Format: underscore plus a two-letter language code (e.g. _hu or _en). The saved subtitle name will be the video base name plus this suffix.",
+      "progress_label": "Upload status",
+      "submit_button": "Create project"
+    },
+    "tips": {
+      "project_list": {
+        "title": "Project list:",
+        "body": "Use the table on the left to browse existing projects. Click the name to open the workflow, or delete it permanently with the \"Delete\" button."
+      },
+      "new_project": {
+        "title": "Creating a new project:",
+        "body": "Enter a project name, then pick the source via the tabs. Choose a local file for uploads, or paste the full https:// link for YouTube downloads."
+      },
+      "upload_status": {
+        "title": "Upload status:",
+        "body": "When uploading a video the progress bar shows speed and size; for YouTube links the download starts automatically and the status updates once conversion finishes."
+      },
+      "subtitles": {
+        "title": "Subtitles:",
+        "body": "Optionally upload a .srt file. Provide a suffix like `_hu` so the system can append it to the video name."
+      },
+      "theme": {
+        "title": "Theme & palette:",
+        "body": "Use the top-right controls to switch between light/dark and open the theme color editor to customize the entire UI."
+      }
+    },
+    "uploads": {
+      "youtube_in_progress": "Downloading YouTube video and converting to MKV…",
+      "youtube_success": "Download complete. Reloading…",
+      "chunk_prepare": "Preparing upload…",
+      "chunk_status": "Uploading chunk {current}/{total}…",
+      "bytes_uploaded": "Uploaded: {uploaded} / {total}",
+      "upload_success": "Upload finished. Reloading…",
+      "backup_prepare": "Preparing backup upload…",
+      "backup_chunk_status": "Uploading backup chunk {current}/{total}…",
+      "backup_bytes_uploaded": "Backup uploaded: {uploaded} / {total}",
+      "backup_success": "Backup restored. Reloading…",
+      "zero_bytes": "0 B"
+    },
+    "errors": {
+      "project_name_required": "Please enter a project name.",
+      "video_required": "Select a video file.",
+      "youtube_required": "Provide the YouTube link.",
+      "youtube_invalid": "Enter a valid YouTube URL (https://...).",
+      "restore_required": "Choose a previously downloaded backup file.",
+      "unknown_source": "Unknown source type.",
+      "subtitle_extension": "Only .srt subtitle files are allowed.",
+      "subtitle_suffix_required": "Add a subtitle suffix (e.g. _hu) when uploading subtitles.",
+      "subtitle_suffix_format": "Subtitle suffix must be underscore + two letters (e.g. _hu).",
+      "upload_generic": "An error occurred during upload.",
+      "upload_unknown": "Unknown error during upload.",
+      "upload_network": "Network error during upload.",
+      "upload_with_reason": "Upload failed: {reason}",
+      "project_delete_error_prefix": "Project deletion error:"
+    }
+  }
+}

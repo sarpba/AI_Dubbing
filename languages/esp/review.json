@@ -1,0 +1,158 @@
+{
+  "meta": {
+    "code": "esp",
+    "label": "Español",
+    "html_lang": "es"
+  },
+  "strings": {
+    "document": {
+      "title": "Proyecto activo: {project}"
+    },
+    "general": {
+      "theme_toggle_aria": "Cambiar tema",
+      "language_selector_label": "Idioma",
+      "language_selector_aria": "Seleccionar idioma de la interfaz",
+      "close_aria": "Cerrar"
+    },
+    "buttons": {
+      "close": "Cerrar",
+      "save": "Guardar"
+    },
+    "audio_modal": {
+      "title": "Editar audio",
+      "loading": "Cargando…",
+      "instructions": "Arrastra sobre la forma de onda para seleccionar o usa los deslizadores para ajustar inicio y fin.",
+      "start_label": "Inicio:",
+      "end_label": "Fin:",
+      "duration_label": "Duración:",
+      "start_slider": "Punto inicial",
+      "end_slider": "Punto final",
+      "reset_selection": "Seleccionar archivo completo",
+      "reset_hint": "Al guardar se sobrescribe el archivo original."
+    },
+    "header": {
+      "title": "Proyecto activo: {project}",
+      "back_button": "Volver al proyecto",
+      "audio_file_label": "Archivo de audio:",
+      "json_file_label": "Archivo JSON:",
+      "segment_count": "{count} segmentos",
+      "play_button": "Reproducir"
+    },
+    "player": {
+      "pause": "Pausa"
+    },
+    "alerts": {
+      "audio_without_segments": "Se cargó el audio ({audio}) pero no hay segmentos disponibles en {json}.",
+      "associated_json": "el archivo JSON asociado",
+      "audio_missing": "No se encontró un audio para revisar.",
+      "help_cta": "¿Necesitas ayuda? Haz clic en el botón <strong>Ayuda</strong> de la esquina inferior derecha para ver la guía."
+    },
+    "context_menu": {
+      "insert": "Insertar segmento después",
+      "delete": "Eliminar segmento",
+      "regenerate": "Regenerar (TTS)"
+    },
+    "segments": {
+      "play_button": "Reproducir",
+      "no_tts": "Sin TTS",
+      "play_tooltip": "Abrir el audio del segmento en el reproductor modal.",
+      "no_tts_tooltip": "Aún no hay audio sintetizado para este segmento.",
+      "original_placeholder": "Texto original",
+      "translated_placeholder": "Texto traducido",
+      "translation_missing": "Sin traducción"
+    },
+    "help": {
+      "button_label": "Ayuda",
+      "button_aria": "Ayuda de la vista de revisión",
+      "title": "Ayuda del área de revisión",
+      "intro": "Utiliza esta pantalla para revisar, editar y regenerar los segmentos de audio y texto del proyecto mientras supervisas su estado.",
+      "navigation": {
+        "title": "Navegación e información de archivos",
+        "items": [
+          "El encabezado muestra el nombre del proyecto y un botón “Volver al proyecto” para regresar a la página principal.",
+          "El bloque de información indica qué audio/JSON está cargado y cuántos segmentos hay disponibles."
+        ]
+      },
+      "playback": {
+        "title": "Reproducción y línea de tiempo",
+        "items": [
+          "El botón superior <strong>Reproducir</strong> inicia o detiene el audio; durante la reproducción cambia a <em>Pausa</em>.",
+          "Desplázate horizontalmente por la forma de onda con la rueda o el panel táctil; la línea de tiempo se ajusta automáticamente a grabaciones largas.",
+          "Las franjas azules son regiones de Wavesurfer: haz clic para escucharlas o arrastra los bordes para afinar comienzos y finales."
+        ]
+      },
+      "editing": {
+        "title": "Edición de segmentos",
+        "items": [
+          "Cada segmento tiene campos para el texto original y el traducido que se autoajustan, facilitando la lectura de frases largas.",
+          "Al enfocarte en un campo la reproducción se pausa; los cambios se guardan automáticamente al salir o al presionar Enter.",
+          "Gracias al desplazamiento virtual solo se renderizan los segmentos visibles, manteniendo el rendimiento en proyectos grandes."
+        ]
+      },
+      "operations": {
+        "title": "Operaciones de segmento",
+        "items": [
+          "Haz clic derecho sobre una barra de color para abrir el menú contextual e insertar, eliminar o regenerar el segmento.",
+          "Al insertar un segmento el sistema actualiza la numeración y, si hace falta, solicita los datos más recientes al servidor.",
+          "Al eliminarlo se actualizan los elementos visuales y la región en Wavesurfer para mantener la vista sincronizada."
+        ]
+      },
+      "tts": {
+        "title": "Gestión de TTS y audio",
+        "items": [
+          "El botón <strong>Reproducir</strong> del segmento solo se habilita cuando existe un clip sintetizado. Al pulsarlo se abre el modal de AudioTrimmer.",
+          "Si aún no hay TTS, el botón se muestra gris con el texto <em>Sin TTS</em> para indicar que debes regenerar audio.",
+          "Después de regenerar, la interfaz se actualiza automáticamente y el botón refleja el nuevo clip."
+        ]
+      },
+      "regeneration": {
+        "title": "Seguimiento de la regeneración",
+        "items": [
+          "Al iniciar <em>Regenerar (TTS)</em> se abre el modal de registro, que muestra el estado del proceso en segundo plano.",
+          "Tras completarse con éxito el modal se cierra solo, aunque siempre puedes cerrarlo manualmente."
+        ]
+      },
+      "tips": {
+        "title": "Consejos útiles",
+        "items": [
+          "En grabaciones largas deja que el desplazamiento cargue los segmentos según se necesiten; la optimización mantiene el rendimiento.",
+          "Si ocurre un error la interfaz mostrará comentarios y, con las acciones de refresco, obtendrás los datos más recientes del servidor."
+        ]
+      }
+    },
+    "regenerate_modal": {
+      "title": "Registro de regeneración TTS",
+      "preparing": "Preparando procesamiento…",
+      "initial_log": "Inicializando registro…",
+      "preparing_log": "Preparando datos del registro…",
+      "no_job": "No hay ID de tarea disponible para el registro.",
+      "log_fetch_error": "Error al obtener el registro: {error}",
+      "status": {
+        "queued": "Tarea en cola…",
+        "running": "Procesando…",
+        "cancelling": "Cancelando…",
+        "cancelled": "Tarea cancelada.",
+        "completed": "Procesamiento finalizado correctamente.",
+        "failed": "Procesamiento fallido.",
+        "default": "Actualizando estado…"
+      }
+    },
+    "messages": {
+      "regeneration_started": "Regeneración iniciada."
+    },
+    "errors": {
+      "unknown": "Error desconocido",
+      "segment_save": "Error al guardar el segmento: {error}",
+      "segment_space": "No hay suficiente espacio para crear otro segmento (mínimo 50 ms).",
+      "segment_add": "Error al agregar el nuevo segmento: {error}",
+      "generic": "Error: {error}",
+      "segment_delete": "Error al eliminar el segmento: {error}",
+      "missing_json": "Falta el nombre del archivo JSON; no se puede iniciar la regeneración.",
+      "regenerate_failed": "La regeneración falló: {error}",
+      "regenerate_error": "Error de regeneración: {error}"
+    },
+    "prompts": {
+      "delete_confirm": "¿Eliminar el segmento {index}?"
+    }
+  }
+}

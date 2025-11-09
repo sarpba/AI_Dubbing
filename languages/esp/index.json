@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "code": "esp",
+    "label": "Español",
+    "html_lang": "es"
+  },
+  "strings": {
+    "document": {
+      "title": "Editor de Doblaje IA"
+    },
+    "general": {
+      "app_heading": "Editor de Doblaje IA",
+      "theme_toggle_aria": "Cambiar tema",
+      "theme_editor_aria": "Editar colores del tema",
+      "language_selector_label": "Idioma",
+      "language_selector_aria": "Seleccionar idioma de la interfaz"
+    },
+    "cards": {
+      "upload_title": "Subir video",
+      "existing_projects_title": "Proyectos existentes",
+      "tips_title": "Consejos"
+    },
+    "projects": {
+      "delete_button": "Eliminar",
+      "delete_aria": "Eliminar el proyecto {project}",
+      "delete_confirmation": "¿Seguro que deseas eliminar \"{project}\"? La carpeta completa se borrará de forma permanente.",
+      "delete_failed": "No se pudo eliminar el proyecto.",
+      "empty_state": "No hay proyectos"
+    },
+    "new_project": {
+      "title": "Crear nuevo proyecto",
+      "name_label": "Nombre del proyecto",
+      "source_type_label": "Tipo de fuente",
+      "source_upload": "Subir archivo de video",
+      "source_youtube": "Descargar de YouTube (yt-dlp)",
+      "source_restore": "Restaurar respaldo",
+      "video_label": "Archivo de video",
+      "youtube_label": "Enlace de YouTube",
+      "youtube_placeholder": "https://www.youtube.com/watch?v=...",
+      "youtube_helper": "El video se descargará con yt-dlp en contenedor MKV.",
+      "restore_label": "Respaldo del proyecto (.tar.gz o .zip)",
+      "restore_helper": "Sube el respaldo descargado previamente; el sistema restaurará toda la carpeta dentro de workdir.",
+      "subtitle_label": "Archivo de subtítulos (opcional)",
+      "subtitle_helper": "Solo se admiten archivos .srt.",
+      "subtitle_suffix_label": "Sufijo de subtítulos (p. ej. _hu, _en)",
+      "subtitle_suffix_placeholder": "_hu",
+      "subtitle_suffix_helper": "Formato: guion bajo más código de dos letras (p. ej. _hu o _en). El nombre del subtítulo será el del video más este sufijo.",
+      "progress_label": "Estado de carga",
+      "submit_button": "Crear proyecto"
+    },
+    "tips": {
+      "project_list": {
+        "title": "Lista de proyectos:",
+        "body": "La tabla izquierda muestra los proyectos existentes. Haz clic en el nombre para abrir el flujo o elimínalo definitivamente con el botón \"Eliminar\"."
+      },
+      "new_project": {
+        "title": "Crear nuevo proyecto:",
+        "body": "Introduce el nombre y selecciona la fuente con las pestañas superiores. Para cargas usa un archivo local; para YouTube pega el enlace completo https://."
+      },
+      "upload_status": {
+        "title": "Estado de carga:",
+        "body": "Al subir un video verás el progreso y el tamaño; para enlaces de YouTube la descarga inicia sola y el estado se actualiza al terminar la conversión."
+      },
+      "subtitles": {
+        "title": "Subtítulos:",
+        "body": "Puedes subir un .srt opcional. Añade un sufijo como `_hu` para que el sistema lo agregue al nombre del video."
+      },
+      "theme": {
+        "title": "Tema y paleta:",
+        "body": "En la esquina superior derecha puedes alternar claro/oscuro y abrir el editor de colores para personalizar toda la interfaz."
+      }
+    },
+    "uploads": {
+      "youtube_in_progress": "Descargando video de YouTube y convirtiendo a MKV…",
+      "youtube_success": "Descarga finalizada. Recargando…",
+      "chunk_prepare": "Preparando carga…",
+      "chunk_status": "Subiendo parte {current}/{total}…",
+      "bytes_uploaded": "Cargado: {uploaded} / {total}",
+      "upload_success": "Carga finalizada. Recargando…",
+      "backup_prepare": "Preparando carga del respaldo…",
+      "backup_chunk_status": "Subiendo parte del respaldo {current}/{total}…",
+      "backup_bytes_uploaded": "Respaldo cargado: {uploaded} / {total}",
+      "backup_success": "Respaldo restaurado. Recargando…",
+      "zero_bytes": "0 B"
+    },
+    "errors": {
+      "project_name_required": "Introduce el nombre del proyecto.",
+      "video_required": "Selecciona un archivo de video.",
+      "youtube_required": "Proporciona el enlace de YouTube.",
+      "youtube_invalid": "Introduce un enlace válido de YouTube (https://...).",
+      "restore_required": "Elige un archivo de respaldo descargado previamente.",
+      "unknown_source": "Tipo de fuente desconocido.",
+      "subtitle_extension": "Solo se permiten subtítulos .srt.",
+      "subtitle_suffix_required": "Añade un sufijo (p. ej. _hu) cuando subas subtítulos.",
+      "subtitle_suffix_format": "El sufijo debe ser guion bajo + dos letras (p. ej. _hu).",
+      "upload_generic": "Ocurrió un error durante la carga.",
+      "upload_unknown": "Error desconocido durante la carga.",
+      "upload_network": "Error de red durante la carga.",
+      "upload_with_reason": "Error en la carga: {reason}",
+      "project_delete_error_prefix": "Error al eliminar el proyecto:"
+    }
+  }
+}

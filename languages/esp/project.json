@@ -1,0 +1,442 @@
+{
+  "meta": {
+    "code": "esp",
+    "label": "Español",
+    "html_lang": "es"
+  },
+  "strings": {
+    "document": {
+      "title": "Proyecto: {project} | AI Dubbing"
+    },
+    "general": {
+      "theme_toggle_aria": "Cambiar tema",
+      "language_selector_label": "Idioma",
+      "language_selector_aria": "Seleccionar idioma de la interfaz",
+      "close_aria": "Cerrar"
+    },
+    "buttons": {
+      "close": "Cerrar",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "save_and_start": "Guardar e iniciar"
+    },
+    "file_browser": {
+      "upload_title": "Subir archivo a esta carpeta",
+      "upload_button": "Subir",
+      "clear_title": "Vaciar contenido de la carpeta",
+      "clear_button": "Vaciar contenido",
+      "delete_title": "Eliminar archivo",
+      "delete_button": "Eliminar",
+      "move_title": "Mover a los segmentos traducidos",
+      "move_button": "Mover"
+    },
+    "header": {
+      "title": "Proyecto: {project}",
+      "back_to_home": "Volver al inicio"
+    },
+    "backup": {
+      "project_missing": "El nombre del proyecto no está disponible.",
+      "working": "Creando respaldo...",
+      "create_failed": "No se pudo crear el respaldo."
+    },
+    "files": {
+      "card_title": "Archivos del proyecto",
+      "description": "La lista muestra el contenido actual del directorio {path}.",
+      "root_upload": "Subir archivo a la raíz",
+      "refresh_list": "Actualizar lista",
+      "download_backup": "Descargar respaldo",
+      "legend_text": "Subcarpetas destacadas: se encontró un segmento traducido coincidente en {directory}.",
+      "empty_project": "La carpeta del proyecto está vacía.",
+      "unnamed_folder": "(carpeta sin título)",
+      "unnamed_file": "(archivo sin título)",
+      "loading": "Cargando...",
+      "empty_folder": "La carpeta está vacía.",
+      "load_failed": "No se pudo cargar el contenido del directorio.",
+      "refreshing": "Actualizando...",
+      "refresh_failed": "No se pudo actualizar la lista de archivos."
+    },
+    "notifications": {
+      "file_upload_success": "Archivo subido correctamente.",
+      "file_upload_failed": "No se pudo subir el archivo.",
+      "files_upload_success": "Archivos subidos correctamente.",
+      "files_upload_failed": "No se pudieron subir los archivos."
+    },
+    "directories": {
+      "path_missing": "No se puede determinar la ruta de la carpeta.",
+      "clear_confirm": "¿Seguro que quieres vaciar el contenido completo de \"{name}\"?\nLa carpeta permanecerá, pero se eliminarán todos los archivos y subdirectorios.",
+      "clear_success": "Contenido de la carpeta vaciado correctamente.",
+      "clear_error": "No se pudo vaciar el contenido de la carpeta.",
+      "delete_confirm": "¿Seguro que quieres eliminar este archivo?\n{name}",
+      "delete_success": "Archivo eliminado correctamente.",
+      "delete_error": "No se pudo eliminar el archivo.",
+      "move_confirm": "¿Mover este archivo a los segmentos traducidos?\n{name}",
+      "move_success": "Archivo movido correctamente.",
+      "move_error": "No se pudo mover el archivo."
+    },
+    "tts": {
+      "section_title": "Gestionar modelos F5-TTS",
+      "section_description": "Sube modelos F5-TTS a cualquier subcarpeta de <code>{directory}</code> para reutilizarlos en la generación TTS.",
+      "subfolders_label": "Subcarpetas TTS",
+      "root_label": "Raíz: {path}",
+      "no_subfolders": "No se encontraron subcarpetas en el directorio TTS.",
+      "target_label": "Subcarpeta destino",
+      "target_placeholder": "p. ej. F5-TTS_custom",
+      "target_error": "La subcarpeta destino es obligatoria.",
+      "target_help": "La ruta es relativa a la raíz TTS (p. ej. <code>F5-TTS_custom</code>).",
+      "model_label": "Archivo del modelo",
+      "vocab_label": "vocab.txt",
+      "config_label": "Configuración (JSON)",
+      "upload_button": "Subir paquete del modelo",
+      "progress_aria": "Estado de carga F5-TTS",
+      "upload_prepare": "Preparando carga ({fileKey})...",
+      "chunk_status": "Archivo ({fileKey}) parte {current}/{total} – {chunkPercent}% ({uploaded} / {totalBytes})",
+      "upload_complete": "Carga del archivo ({fileKey}) completada.",
+      "button_uploading": "Cargando...",
+      "validation": {
+        "all_files": "Selecciona los tres archivos: modelo, vocab.txt y configuración.",
+        "vocab_extension": "El archivo vocab debe tener extensión .txt.",
+        "config_extension": "El archivo de configuración debe tener extensión .json.",
+        "target_required": "Indica la subcarpeta destino (p. ej. F5-TTS_custom)."
+      }
+    },
+    "help": {
+      "button_label": "Ayuda",
+      "title": "Ayuda de la página del proyecto AI Dubbing",
+      "intro": "Esta página permite gestionar todo el proyecto: armar y ejecutar workflows, seguir su estado y acceder a los archivos del proyecto.",
+      "general": {
+        "title": "Flujo general",
+        "items": [
+          "Selecciona en la tabla modular los pasos que deseas ejecutar.",
+          "Rellena los parámetros requeridos en los formularios vinculados a cada paso.",
+          "Usa los controles de ejecución para iniciar, detener o reanudar el proceso.",
+          "Consulta los registros y los indicadores de estado para seguir la ejecución."
+        ]
+      },
+      "widgets": {
+        "title": "Detalles de los widgets",
+        "items": [
+          "<strong>Review + Continue</strong>: Detiene la ejecución en un punto de control donde puedes revisar los pasos previos, ajustar parámetros y luego usar el botón correspondiente para continuar o repetir el workflow.",
+          "<strong>Ciclo</strong>: Permite ejecuciones repetidas. El valor \"Número de pasos a retroceder\" indica cuántos pasos ejecutables anteriores se incluyen en el ciclo."
+        ]
+      },
+      "workflow": {
+        "title": "Sección de workflow",
+        "items": [
+          "La insignia muestra si hay una tarea en curso y el texto auxiliar resume la acción actual.",
+          "El selector de plantillas carga workflows guardados y los botones permiten guardar o restaurar la lista predeterminada de pasos.",
+          "En la tabla puedes activar pasos, definir el entorno de ejecución y decidir qué hacer en caso de fallo.",
+          "Los controles inician, detienen o reanudan la ejecución y ofrecen acceso rápido a los registros y vistas de estado."
+        ]
+      },
+      "files": {
+        "title": "Archivos del proyecto",
+        "items": [
+          "El explorador de archivos muestra toda la estructura del proyecto y los indicadores resaltan los segmentos traducidos.",
+          "Desde la barra de herramientas puedes subir archivos a la raíz y actualizar la lista tras cambios en segundo plano.",
+          "Cada elemento ofrece acciones rápidas: abrir en una pestaña nueva, eliminar o, cuando esté disponible, mover a la zona traducida."
+        ]
+      },
+      "previews": {
+        "title": "Ventanas de vista previa y ayuda",
+        "items": [
+          "Las vistas previas de audio, video y JSON se abren en modales donde las herramientas de recorte permiten ajustar los archivos o revisar su contenido.",
+          "Al guardar workflows, introducir claves API o preparar parámetros, los modales ayudan a capturar los datos de forma estructurada."
+        ]
+      }
+    },
+    "workflow": {
+      "title": "Workflow modular de IA",
+      "status_none": "No hay tareas activas",
+      "hint": "Arma los pasos a ejecutar, configura los parámetros y luego inicia el workflow.",
+      "info": "Selecciona los pasos disponibles en la carpeta scripts, configura sus parámetros uno por uno y ejecuta el workflow deseado. El nombre del proyecto se completa automáticamente en cada paso.",
+      "template_label": "Workflow guardado",
+      "save_template": "Guardar como plantilla",
+      "reset_default": "Restablecer predeterminado",
+      "table_hint": "Haz clic derecho en la tabla para insertar pasos.",
+      "missing_badge": "Faltan parámetros",
+      "table_headers": {
+        "active": "Activo",
+        "step": "Paso",
+        "environment": "Entorno",
+        "on_failure": "Al fallar",
+        "actions": "Acciones"
+      },
+      "table_empty": "Todavía no agregaste pasos.",
+      "start_button": "Iniciar workflow",
+      "stop_button": "Cancelar workflow",
+      "status_text": "Actualizando estado...",
+      "log_title": "Registro del workflow",
+      "refresh_button": "Actualizar",
+      "log_status": "El registro aparece después de iniciar el workflow.",
+      "tip": "Consejo: puedes editar los parámetros de cada paso por separado. El registro muestra la salida de cada comando ejecutado.",
+      "status_texts": {
+        "add_steps": "Agrega pasos ejecutables antes de iniciar.",
+        "enable_steps": "Activa al menos un paso para iniciar.",
+        "no_steps_before_widget": "No hay pasos ejecutables antes del primer widget. Usa el botón Continuar.",
+        "ready": "El workflow está listo para iniciar.",
+        "never_run": "El workflow aún no se ha ejecutado en este proyecto.",
+        "error": "Error: {error}"
+      },
+      "status_labels": {
+        "queued": "En cola",
+        "running": "En ejecución",
+        "completed": "Completado",
+        "failed": "Error",
+        "cancelling": "Cancelando",
+        "cancelled": "Cancelado",
+        "unknown": "Desconocido"
+      },
+      "labels_extra": {
+        "halt_on_fail": "Detener ante fallos",
+        "continue_on_fail": "Continuar tras fallos",
+        "special_widget": "Widget especial",
+        "api_usage": "Uso de API",
+        "auto_value_project": "Valor automático: nombre del proyecto",
+        "auto_value_path": "Valor automático: ruta completa del proyecto",
+        "default_flag_on": "Predeterminado: activado",
+        "default_flag_off": "Predeterminado: desactivado",
+        "key_saved_hint": "La clave está guardada. Déjala vacía para mantenerla.",
+        "widget_badge": "Widget",
+        "flags_prefix": "Opciones",
+        "key_placeholder": "Clave API",
+        "key_enter_value": "Introduce la clave API.",
+        "key_clear_button": "Borrar clave",
+        "key_clear_placeholder": "Clave marcada para borrar",
+        "key_clear_hint": "La clave se eliminará al guardar.",
+        "key_new_hint": "Se guardará una nueva clave."
+      },
+      "buttons_extra": {
+        "parameters": "Parámetros",
+        "help": "Ayuda",
+        "stop": "Cancelar workflow"
+      },
+      "messages": {
+        "missing_required": "Faltan parámetros obligatorios: {missing}",
+        "check_fields": "Revisa los siguientes campos: {fields}",
+        "no_parameters": "No se proporcionaron parámetros",
+        "options_load_failed": "No se pudieron cargar las opciones del workflow: {error}",
+        "script_added": "{name} agregado al workflow.",
+        "widget_added": "Widget {name} agregado al workflow.",
+        "step_removed": "{name} se eliminó del workflow.",
+        "already_running": "Ya hay un workflow en ejecución. Espera a que termine.",
+        "no_more_steps": "No hay más pasos ejecutables.",
+        "missing_params_list": "{name}: faltan parámetros – {missing}",
+        "no_steps_before_cycle": "No hay pasos ejecutables antes del widget para el ciclo.",
+        "cycle_not_enough_steps": "No hay suficientes pasos activos antes del widget para el ciclo solicitado.",
+        "cycle_repeat_invalid": "El número de repeticiones del ciclo debe ser al menos 1.",
+        "cycle_step_back_invalid": "El valor de retroceso del ciclo debe ser al menos 1.",
+        "widget_disabled": "Este widget está deshabilitado.",
+        "cycle_start": "Iniciando ciclo con {count} repeticiones.",
+        "cycle_start_failed": "No se pudo iniciar el ciclo: {error}",
+        "cycle_complete": "Ciclo finalizado. Continuando con los siguientes pasos.",
+        "cycle_cancelled": "La ejecución del ciclo se canceló.",
+        "widget_continue_hint": "Se alcanzó el widget {name}. Usa Continuar para seguir.",
+        "segment_success": "El segmento del workflow finalizó correctamente.",
+        "cycle_next_failed": "No se pudo iniciar la siguiente ejecución del ciclo."
+      },
+      "validation": {
+        "number_invalid": "{field} (número no válido)",
+        "min_value": "{field} (mín. {min})",
+        "max_value": "{field} (máx. {max})"
+      },
+      "log_messages": {
+        "queued": "Tarea en cola: comenzará en unos segundos.",
+        "running": "Workflow en progreso: sigue los pasos en el registro.",
+        "cancelling": "Cancelando: esperando a que el proceso se detenga.",
+        "failed": "Ocurrió un error: abre el registro para ver qué paso se detuvo.",
+        "cancelled": "Workflow cancelado: inicia un nuevo procesamiento si es necesario.",
+        "completed": "Workflow finalizado correctamente: los archivos están en la carpeta del proyecto.",
+        "failed_short": "El workflow se detuvo con error. Revisa el registro.",
+        "cancelled_short": "El workflow fue cancelado.",
+        "completed_short": "El workflow se completó.",
+        "running_short": "El workflow está en ejecución; el registro se actualiza continuamente.",
+        "log_refresh_failed": "No se pudo actualizar el registro.",
+        "log_initializing": "Inicializando registro...",
+        "open_log": "Abrir registro",
+        "stop_pending": "Cancelación solicitada. Esperando a que el proceso se detenga.",
+        "step_error": "Error al ejecutar el paso {name}.",
+        "unknown": "Desconocido"
+      },
+      "run": {
+        "starting": "Iniciando workflow...",
+        "starting_info": "El workflow se está iniciando. El primer paso puede tardar unos segundos.",
+        "waiting_log": "Iniciando workflow... esperando el registro.",
+        "started": "Workflow iniciado, actualizando estado..."
+      },
+      "cycle": {
+        "preparing": "Preparando ciclo...",
+        "progress": "Ciclo: {current}/{total}"
+      },
+      "stop": {
+        "requesting": "Solicitando cancelación...",
+        "requesting_label": "Solicitud de cancelación en curso...",
+        "unknown_error": "Error desconocido al cancelar."
+      },
+      "errors": {
+        "start_failed": "No se pudo iniciar el workflow: {error}",
+        "start_unknown": "Error desconocido al iniciar el workflow.",
+        "stop_failed": "No se pudo cancelar el workflow: {error}",
+        "continue_failed": "No se pudo continuar el workflow: {error}",
+        "unknown_script": "Script desconocido: {name}",
+        "unknown_widget": "Widget desconocido: {name}",
+        "unknown_script_short": "Script desconocido",
+        "unknown_error": "Error desconocido",
+        "key_status_failed": "No se pudieron verificar las claves API.",
+        "keys_save_failed_generic": "No se pudieron guardar las claves API.",
+        "keys_save_failed": "No se pudo guardar la clave API: {error}",
+        "status_check_failed": "No se pudo obtener el estado.",
+        "log_fetch_failed": "No se pudo leer el registro."
+      },
+      "keys": {
+        "missing_alert": "Faltan claves API: {keys}",
+        "list_instructions": "Para iniciar el workflow, proporciona las siguientes claves: {keys}",
+        "fill_all": "Ingresa todas las claves faltantes."
+      },
+      "templates": {
+        "placeholder": "Selecciona una plantilla...",
+        "list_failed": "No se pudieron obtener las plantillas.",
+        "select_prompt": "Primero selecciona una plantilla de workflow.",
+        "load_failed": "No se pudo cargar la plantilla.",
+        "loaded": "Plantilla {name} cargada.",
+        "load_error": "No se pudo cargar el workflow seleccionado: {error}",
+        "none_selected_overwrite": "No hay plantilla seleccionada para sobrescribir.",
+        "name_required": "Introduce un nombre para la plantilla del workflow.",
+        "overwrite_current": "Plantilla actual: {name} ({id})",
+        "save_failed": "No se pudo guardar la plantilla del workflow.",
+        "saved": "Plantilla de workflow guardada: {name}.",
+        "default_missing": "No hay workflow predeterminado disponible.",
+        "reset_confirm": "¿Restablecer la lista de pasos predeterminada?",
+        "default_loaded": "Lista de pasos predeterminada cargada."
+      },
+      "widgets": {
+        "review": {
+          "name": "Review + Continue",
+          "description": "Abrir vista de revisión y continuar manualmente.",
+          "continue_label": "Continuar",
+          "review_label": "Revisar"
+        },
+        "cycle": {
+          "name": "Ciclo",
+          "description": "Repetir pasos anteriores varias veces dentro del workflow.",
+          "continue_label": "Ejecutar ciclo",
+          "review_label": "Revisar",
+          "parameters": {
+            "repeat": {
+              "label": "Número de repeticiones",
+              "helper": "Cuántas veces repetir el bloque seleccionado."
+            },
+            "step_back": {
+              "label": "Número de pasos a retroceder",
+              "helper": "Cuántos pasos ejecutables previos al widget debe repetir el ciclo."
+            }
+          },
+          "help": "El widget de ciclo repite la cantidad indicada de pasos activos anteriores al widget durante el número de repeticiones indicado."
+        }
+      },
+      "context_menu": {
+        "insert_above": "Insertar arriba",
+        "insert_below": "Insertar abajo"
+      },
+      "file_tree": {
+        "root_label": "Raíz",
+        "empty": "No hay elementos disponibles"
+      },
+      "status": {
+        "add_steps": "Agrega pasos ejecutables antes de iniciar.",
+        "enable_steps": "Activa al menos un paso para iniciar.",
+        "no_steps_before_widget": "No hay pasos ejecutables antes del primer widget. Usa el botón Continuar.",
+        "ready": "El workflow está listo para iniciar."
+      },
+      "search": {
+        "no_results": "Ningún script coincide con la búsqueda."
+      },
+      "buttons": {
+        "add_step": "Agregar"
+      },
+      "details": {
+        "environment_label": "Entorno:",
+        "required_params_label": "Parámetros obligatorios:",
+        "required_keys_label": "Claves requeridas:",
+        "api_label": "API:"
+      },
+      "groups": {
+        "root_label": "scripts/ (raíz)"
+      },
+      "modals": {
+        "add_step": {
+          "title": "Agregar nuevo paso al workflow",
+          "search_placeholder": "Filtrar por nombre...",
+          "loading": "Cargando..."
+        },
+        "params": {
+          "title": "Editar parámetros",
+          "script_title": "{name} – parámetros",
+          "widget_title": "{name} – ajustes",
+          "help_title": "Ayuda",
+          "no_settings": "Este paso no requiere configuración.",
+          "no_widget_settings": "Este widget no requiere configuración."
+        },
+        "template_save": {
+          "title": "Guardar plantilla de workflow",
+          "name_label": "Nombre de la plantilla",
+          "name_placeholder": "p. ej. Configuración base",
+          "description_label": "Descripción (opcional)",
+          "description_placeholder": "Nota breve para la plantilla",
+          "overwrite_label": "Sobrescribir plantilla actual"
+        },
+        "api_keys": {
+          "title": "Ingresar claves API",
+          "instructions": "Proporciona las claves API faltantes para iniciar el workflow.",
+          "labels": {
+            "chatgpt": "Clave API de OpenAI / ChatGPT",
+            "deepl": "Clave API de DeepL",
+            "huggingface": "Token de Hugging Face"
+          },
+          "placeholders": {
+            "chatgpt": "sk-...",
+            "deepl": "Clave API de DeepL",
+            "huggingface": "hf_..."
+          }
+        }
+      }
+    },
+    "js": {
+      "logs": {
+        "config_read_failed": "Error al leer la configuración del proyecto:",
+        "workflow_state_save_failed": "No se pudo guardar el estado del workflow:",
+        "workflow_state_load_failed": "No se pudo cargar el estado del workflow del proyecto:",
+        "workflow_default_load_failed": "Error al cargar el workflow predeterminado:"
+      },
+      "errors": {
+        "upload_failed": "No se pudo subir el archivo.",
+        "delete_failed": "No se pudo eliminar el archivo.",
+        "clear_directory_failed": "No se pudo vaciar el contenido del directorio.",
+        "move_failed": "No se pudo mover el archivo.",
+        "tts_upload_failed": "No se pudo subir el archivo al directorio TTS."
+      }
+    },
+    "audio_modal": {
+      "title": "Editar audio",
+      "loading": "Cargando...",
+      "instructions": "Arrastra sobre la forma de onda para seleccionar o usa los deslizadores para fijar inicio y fin.",
+      "start_label": "Inicio:",
+      "end_label": "Fin:",
+      "duration_label": "Duración:",
+      "start_slider": "Punto inicial",
+      "end_slider": "Punto final",
+      "reset_selection": "Seleccionar el archivo completo",
+      "reset_hint": "Al guardar se sobrescribe el archivo original."
+    },
+    "video_modal": {
+      "title": "Reproducir video",
+      "default_title": "Reproducir video"
+    },
+    "json_modal": {
+      "title": "Vista previa del archivo",
+      "default_title": "Vista previa del archivo",
+      "loading": "Cargando...",
+      "empty": "Archivo vacío.",
+      "load_error": "No se pudo cargar el archivo.\n{error}"
+    }
+  }
+}

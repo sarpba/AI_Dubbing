@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="hu" data-bs-theme="auto">
+<html lang="{{ html_lang }}" data-bs-theme="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Projekt: {{ project.name }} | AI Dubbing</title>
+    <title>{{ translate('document.title', project=project.name) }}</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script id="project-config-data" type="application/json">
@@ -15,6 +15,52 @@
             "videoExtensions": (video_extensions | list | sort) if video_extensions is defined else []
         } | tojson }}
     </script>
+    <script id="ui-translations-data" type="application/json">{{ translations | tojson }}</script>
+    <script>
+        (function() {
+            const dataElement = document.getElementById('ui-translations-data');
+            let dictionary = {};
+            if (dataElement) {
+                try {
+                    dictionary = JSON.parse(dataElement.textContent || '{}') || {};
+                } catch (error) {
+                    console.warn('Failed to parse UI translations:', error);
+                }
+            }
+
+            function resolveKey(key) {
+                if (!key) {
+                    return undefined;
+                }
+                return key.split('.').reduce((acc, part) => {
+                    if (acc && typeof acc === 'object' && part in acc) {
+                        return acc[part];
+                    }
+                    return undefined;
+                }, dictionary);
+            }
+
+            window.translateText = function(key, replacements = {}, fallback) {
+                const template = resolveKey(key);
+                if (typeof template === 'string') {
+                    return template.replace(/\{(\w+)\}/g, (match, token) => {
+                        if (Object.prototype.hasOwnProperty.call(replacements, token)) {
+                            return replacements[token];
+                        }
+                        return match;
+                    });
+                }
+                if (template !== undefined) {
+                    return template;
+                }
+                return typeof fallback === 'string' ? fallback : key;
+            };
+
+            window.getUiTranslations = function() {
+                return dictionary;
+            };
+        })();
+    </script>
     <script>
         (function() {
             const configElement = document.getElementById('project-config-data');
@@ -25,7 +71,10 @@
             try {
                 window.__PROJECT_CONFIG__ = JSON.parse(configElement.textContent) || {};
             } catch (error) {
-                console.warn('Projekt konfiguráció beolvasása sikertelen:', error);
+                const message = window.translateText
+                    ? window.translateText('js.logs.config_read_failed', {}, 'Failed to parse project configuration:')
+                    : 'Failed to parse project configuration:';
+                console.warn(message, error);
                 window.__PROJECT_CONFIG__ = {};
             }
         })();
@@ -422,46 +471,56 @@
         const AUDIO_EXTENSIONS = new Set(PROJECT_CONFIG.audioExtensions || []);
         const VIDEO_EXTENSIONS = new Set(PROJECT_CONFIG.videoExtensions || []);
         const TEXT_PREVIEW_EXTENSIONS = new Set(['.json', '.txt', '.bak', '.log', '.srt']);
+        const translateInline = (key, replacements = {}, fallback) => {
+            if (window.translateText && typeof window.translateText === 'function') {
+                return window.translateText(key, replacements, fallback);
+            }
+            if (typeof fallback === 'string') {
+                return fallback;
+            }
+            return key;
+        };
+        const t = (key, replacements = {}, fallback) => translateInline(key, replacements, fallback);
         let videoPreviewModal = null;
         let jsonPreviewModal = null;
 
         const workflowWidgets = [
             {
                 id: 'reviewContinue',
-                name: 'Review + Continue',
-                description: 'Felülvizsgálati nézet megnyitása és kézi folytatás.',
-                continueLabel: 'Continue',
-                reviewLabel: 'Review'
+                name: t('workflow.widgets.review.name', {}, 'Review + Continue'),
+                description: t('workflow.widgets.review.description'),
+                continueLabel: t('workflow.widgets.review.continue_label', {}, 'Continue'),
+                reviewLabel: t('workflow.widgets.review.review_label', {}, 'Review')
             },
             {
                 id: 'cycleWidget',
-                name: 'Ciklus',
-                description: 'Korábbi lépések többszöri futtatása a workflow-ban.',
-                continueLabel: 'Ciklus futtatása',
-                reviewLabel: 'Review',
+                name: t('workflow.widgets.cycle.name', {}, 'Cycle'),
+                description: t('workflow.widgets.cycle.description'),
+                continueLabel: t('workflow.widgets.cycle.continue_label', {}, 'Run cycle'),
+                reviewLabel: t('workflow.widgets.cycle.review_label', {}, 'Review'),
                 parameters: [
                     {
                         name: 'repeat_count',
-                        label: 'Ismétlések száma',
+                        label: t('workflow.widgets.cycle.parameters.repeat.label'),
                         type: 'number',
                         min: 1,
                         step: 1,
                         default: 1,
                         required: true,
-                        helper: 'Hányszor ismétlődjön a kijelölt lépéssor.'
+                        helper: t('workflow.widgets.cycle.parameters.repeat.helper')
                     },
                     {
                         name: 'step_back',
-                        label: 'Visszalépés lépéseinek száma',
+                        label: t('workflow.widgets.cycle.parameters.step_back.label'),
                         type: 'number',
                         min: 1,
                         step: 1,
                         default: 1,
                         required: true,
-                        helper: 'A widget előtti hány futtatható lépést ismételjen a ciklus.'
+                        helper: t('workflow.widgets.cycle.parameters.step_back.helper')
                     }
                 ],
-                help: 'A ciklus widget a megadott számú, aktív szkript lépést ismétli a widget előtt, a megadott alkalommal.'
+                help: t('workflow.widgets.cycle.help')
             }
         ];
 
@@ -631,7 +690,7 @@
                 workflowLastSavedSnapshot = snapshotKey;
                 workflowAutoSavePending = false;
             } catch (error) {
-                console.error('Workflow állapot mentése sikertelen:', error);
+                console.error(t('js.logs.workflow_state_save_failed'), error);
                 workflowAutoSavePending = true;
                 scheduleWorkflowAutoSave(2000);
             } finally {
@@ -669,16 +728,16 @@
                 }
                 const result = await response.json();
                 if (!result || result.success !== true) {
-                    const message = result && result.error ? result.error : 'Ismeretlen hiba';
+                    const message = result && result.error ? result.error : t('workflow.errors.unknown_error');
                     throw new Error(message);
                 }
                 const data = result.state || {};
                 const steps = Array.isArray(data.steps) ? data.steps : [];
                 const templateId = data.template_id || null;
                 return { steps, template_id: templateId };
-            } catch (error) {
-                console.warn('Nem sikerült betölteni a projekt workflow állapotát:', error);
-            }
+        } catch (error) {
+            console.warn(t('js.logs.workflow_state_load_failed'), error);
+        }
             return null;
         }
 
@@ -692,12 +751,12 @@
                 const response = await fetch(`/api/workflow-template/${encodeURIComponent(defaultEntry.id)}`);
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba');
+                    throw new Error(result.error || t('workflow.errors.unknown_error'));
                 }
                 const template = result.template || {};
                 return Array.isArray(template.steps) ? template.steps : [];
             } catch (error) {
-                console.error('Alapértelmezett workflow betöltési hiba:', error);
+                console.error(t('js.logs.workflow_default_load_failed'), error);
                 return null;
             }
         }
@@ -738,7 +797,7 @@
                 hasRunnableStep = true;
                 const script = findScriptById(step.script);
                 if (!script) {
-                    errors.push(`Ismeretlen szkript: ${step.script}`);
+                    errors.push(t('workflow.errors.unknown_script', { name: step.script }));
                     return;
                 }
                 const missing = getMissingParams(step, script);
@@ -877,23 +936,23 @@
                     summary.className = 'file-browser-summary';
                     const label = document.createElement('span');
                     label.className = 'file-browser-label';
-                    label.textContent = entry.name || '(névtelen mappa)';
+                    label.textContent = entry.name || t('files.unnamed_folder', {}, '(unnamed folder)');
                     const actions = document.createElement('div');
                     actions.className = 'file-browser-actions';
                     const uploadBtn = document.createElement('button');
                     uploadBtn.type = 'button';
                     uploadBtn.className = 'btn btn-sm btn-outline-secondary file-upload-trigger';
                     uploadBtn.dataset.path = entry.path || '';
-                    uploadBtn.title = 'Fájl feltöltése ebbe a mappába';
-                    uploadBtn.textContent = 'Feltöltés';
+                    uploadBtn.title = t('file_browser.upload_title');
+                    uploadBtn.textContent = t('file_browser.upload_button');
                     actions.append(uploadBtn);
 
                     const clearBtn = document.createElement('button');
                     clearBtn.type = 'button';
                     clearBtn.className = 'btn btn-sm btn-outline-danger file-directory-clear-btn';
                     clearBtn.dataset.path = entry.path || '';
-                    clearBtn.title = 'Könyvtár tartalmának törlése';
-                    clearBtn.textContent = 'Tartalom törlése';
+                    clearBtn.title = t('file_browser.clear_title');
+                    clearBtn.textContent = t('file_browser.clear_button');
                     actions.append(clearBtn);
 
                     summary.append(label);
@@ -924,7 +983,7 @@
                     link.href = buildWorkdirUrl(entry.path || '');
                     link.target = '_blank';
                     link.rel = 'noopener';
-                    link.textContent = entry.name || '(névtelen fájl)';
+                    link.textContent = entry.name || t('files.unnamed_file', {}, '(unnamed file)');
 
                     fileRow.appendChild(link);
 
@@ -934,16 +993,16 @@
                     const deleteBtn = document.createElement('button');
                     deleteBtn.type = 'button';
                     deleteBtn.className = 'btn btn-sm btn-outline-danger file-delete-btn';
-                    deleteBtn.title = 'Fájl törlése';
-                    deleteBtn.textContent = 'Törlés';
+                    deleteBtn.title = t('file_browser.delete_title');
+                    deleteBtn.textContent = t('file_browser.delete_button');
                     actions.append(deleteBtn);
 
                     if (entry.enable_failed_move && extension === '.wav') {
                         const moveBtn = document.createElement('button');
                         moveBtn.type = 'button';
                         moveBtn.className = 'btn btn-sm btn-outline-primary file-move-to-translated-btn';
-                        moveBtn.title = 'Áthelyezés a fordított szegmensek közé';
-                        moveBtn.textContent = 'Áthelyezés';
+                        moveBtn.title = t('file_browser.move_title');
+                        moveBtn.textContent = t('file_browser.move_button');
                         actions.append(moveBtn);
                     }
 
@@ -1020,13 +1079,13 @@
                 return;
             }
             const relativePath = detailsElement.dataset.path || '';
-            childrenContainer.innerHTML = '<div class="small text-muted">Betöltés...</div>';
+            childrenContainer.innerHTML = `<div class="small text-muted">${t('files.loading', {}, 'Loading...')}</div>`;
             try {
                 const url = `/api/project-tree/${encodeURIComponent(PROJECT_NAME)}?path=${encodeURIComponent(relativePath)}`;
                 const response = await fetch(url);
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba');
+                    throw new Error(result.error || t('files.load_failed'));
                 }
                 const entries = result.entries || [];
                 updateDirectoryHighlight(detailsElement, result.current_highlight || '');
@@ -1037,14 +1096,14 @@
                 if (!entries.length) {
                     const empty = document.createElement('div');
                     empty.className = 'small text-muted';
-                    empty.textContent = 'A mappa üres.';
+                    empty.textContent = t('files.empty_folder', {}, 'Folder is empty.');
                     childrenContainer.appendChild(empty);
                 } else {
                     childrenContainer.appendChild(createFileTreeList(entries));
                 }
             } catch (error) {
                 console.error('Directory refresh failed:', error);
-                childrenContainer.innerHTML = '<div class="text-danger small">Nem sikerült betölteni a könyvtár tartalmát.</div>';
+                childrenContainer.innerHTML = `<div class="text-danger small">${t('files.load_failed', {}, 'Unable to load folder contents.')}</div>`;
             }
         }
 
@@ -1063,20 +1122,20 @@
             const normalized = (targetPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
 
             if (!normalized) {
-                browserRoot.innerHTML = '<div class="small text-muted">Frissítés...</div>';
+                browserRoot.innerHTML = `<div class="small text-muted">${t('files.refreshing', {}, 'Refreshing...')}</div>`;
                 try {
                     const url = `/api/project-tree/${encodeURIComponent(PROJECT_NAME)}?path=`;
                     const response = await fetch(url);
                     const result = await response.json();
                     if (!response.ok || !result.success) {
-                        throw new Error(result.error || 'Ismeretlen hiba');
+                        throw new Error(result.error || t('files.load_failed'));
                     }
                     const entries = result.entries || [];
                     browserRoot.innerHTML = '';
                     if (!entries.length) {
                         const empty = document.createElement('div');
                         empty.className = 'small text-muted';
-                        empty.textContent = 'A mappa üres.';
+                        empty.textContent = t('files.empty_folder', {}, 'Folder is empty.');
                         browserRoot.appendChild(empty);
                     } else {
                         browserRoot.appendChild(createFileTreeList(entries));
@@ -1086,7 +1145,7 @@
                     }
                 } catch (error) {
                     console.error('Root refresh failed:', error);
-                    browserRoot.innerHTML = '<div class="text-danger small">Nem sikerült frissíteni a fájlok listáját.</div>';
+                    browserRoot.innerHTML = `<div class="text-danger small">${t('files.refresh_failed', {}, 'Unable to refresh file list.')}</div>`;
                 }
                 return;
             }
@@ -1130,7 +1189,7 @@
             }
 
             if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || 'Nem sikerült feltölteni a fájlt.');
+                throw new Error((result && result.error) || t('js.errors.upload_failed', {}, 'Failed to upload file.'));
             }
             return result;
         }
@@ -1156,7 +1215,7 @@
             }
 
             if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || 'Nem sikerült törölni a fájlt.');
+                throw new Error((result && result.error) || t('js.errors.delete_failed', {}, 'Failed to delete file.'));
             }
             return result;
         }
@@ -1178,7 +1237,7 @@
             }
 
             if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || 'Nem sikerült törölni a könyvtár tartalmát.');
+                throw new Error((result && result.error) || t('js.errors.clear_directory_failed', {}, 'Failed to clear directory contents.'));
             }
             return result;
         }
@@ -1203,7 +1262,7 @@
             }
 
             if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || 'Nem sikerült áthelyezni a fájlt.');
+                throw new Error((result && result.error) || t('js.errors.move_failed', {}, 'Failed to move file.'));
             }
             return result;
         }
@@ -1254,7 +1313,7 @@
             const uploadId = createTtsChunkUploadId(fileKey);
             let uploadedBytes = 0;
             if (window.__updateTtsProgress) {
-                window.__updateTtsProgress(0, `Feltöltés előkészítése (${fileKey})...`);
+                window.__updateTtsProgress(0, t('tts.upload_prepare', { fileKey }, `Preparing upload (${fileKey})...`));
             }
 
             for (let index = 0; index < totalChunks; index++) {
@@ -1284,7 +1343,7 @@
                     // ignore
                 }
                 if (!response.ok || !result.success) {
-                    throw new Error((result && result.error) || 'Nem sikerült feltölteni a fájlt a TTS könyvtárba.');
+                    throw new Error((result && result.error) || t('js.errors.tts_upload_failed', {}, 'Failed to upload file to the TTS directory.'));
                 }
 
                 uploadedBytes = end;
@@ -1293,7 +1352,14 @@
                 if (window.__updateTtsProgress) {
                     window.__updateTtsProgress(
                         overallPercent,
-                        `Fájl (${fileKey}) darab ${index + 1}/${totalChunks} – ${chunkPercent}% (${formatBytes(uploadedBytes)} / ${formatBytes(fileObj.size)})`
+                        t('tts.chunk_status', {
+                            fileKey,
+                            current: index + 1,
+                            total: totalChunks,
+                            chunkPercent,
+                            uploaded: formatBytes(uploadedBytes),
+                            totalBytes: formatBytes(fileObj.size)
+                        }, `File (${fileKey}) chunk ${index + 1}/${totalChunks} – ${chunkPercent}% (${formatBytes(uploadedBytes)} / ${formatBytes(fileObj.size)})`)
                     );
                 }
 
@@ -1301,7 +1367,7 @@
                     if (window.__updateTtsProgress) {
                         window.__updateTtsProgress(
                             Math.round(((filesDone + 1) / totalFiles) * 100),
-                            `Fájl (${fileKey}) feltöltése befejezve.`,
+                            t('tts.upload_complete', { fileKey }, `File (${fileKey}) upload complete.`),
                             false,
                             filesDone + 1 === totalFiles
                         );
@@ -1313,7 +1379,7 @@
             if (window.__updateTtsProgress) {
                 window.__updateTtsProgress(
                     Math.round(((filesDone + 1) / totalFiles) * 100),
-                    `Fájl (${fileKey}) feltöltése befejezve.`,
+                    t('tts.upload_complete', { fileKey }, `File (${fileKey}) upload complete.`),
                     false,
                     filesDone + 1 === totalFiles
                 );
@@ -1343,14 +1409,14 @@
 
         async function requestProjectBackup() {
             if (!PROJECT_NAME) {
-                alert('A projektnév nem elérhető.');
+                alert(t('backup.project_missing'));
                 return;
             }
             const backupBtn = document.getElementById('projectBackupBtn');
             if (backupBtn) {
                 backupBtn.dataset.originalLabel = backupBtn.dataset.originalLabel || backupBtn.textContent;
                 backupBtn.disabled = true;
-                backupBtn.textContent = 'Mentés készítése...';
+                backupBtn.textContent = t('backup.working');
             }
             try {
                 const response = await fetch('/api/project-backup', {
@@ -1364,7 +1430,7 @@
                 });
                 const contentType = response.headers.get('content-type') || '';
                 if (!response.ok) {
-                    let errorMessage = 'Nem sikerült létrehozni a biztonsági mentést.';
+                    let errorMessage = t('backup.create_failed');
                     if (contentType.includes('application/json')) {
                         try {
                             const result = await response.json();
@@ -1393,11 +1459,11 @@
                 urlCreator.revokeObjectURL(downloadUrl);
             } catch (error) {
                 console.error('Projekt backup hiba:', error);
-                alert(error.message || 'Nem sikerült létrehozni a biztonsági mentést.');
+                alert(error.message || t('backup.create_failed'));
             } finally {
                 if (backupBtn) {
                     backupBtn.disabled = false;
-                    const original = backupBtn.dataset.originalLabel || 'Biztonsági mentés letöltése';
+                    const original = backupBtn.dataset.originalLabel || t('files.download_backup');
                     backupBtn.textContent = original;
                 }
             }
@@ -1415,7 +1481,7 @@
 
             const titleElement = document.getElementById('videoPreviewTitle');
             if (titleElement) {
-                titleElement.textContent = fileName || 'Videó lejátszása';
+                titleElement.textContent = fileName || t('video_modal.default_title', {}, 'Play video');
             }
 
             const videoElement = document.getElementById('videoPreviewPlayer');
@@ -1454,11 +1520,11 @@
             }
             const titleElement = document.getElementById('jsonPreviewTitle');
             if (titleElement) {
-                titleElement.textContent = fileName || 'Fájl előnézete';
+                titleElement.textContent = fileName || t('json_modal.default_title', {}, 'File preview');
             }
             const contentElement = document.getElementById('jsonPreviewContent');
             if (contentElement) {
-                contentElement.textContent = 'Betöltés...';
+                contentElement.textContent = t('json_modal.loading', {}, 'Loading...');
             }
             jsonPreviewModal.show();
 
@@ -1482,12 +1548,12 @@
                     }
                 }
                 if (contentElement) {
-                    contentElement.textContent = formatted || 'Üres fájl.';
+                    contentElement.textContent = formatted || t('json_modal.empty', {}, 'Empty file.');
                 }
             } catch (error) {
                 console.error('Text preview failed:', error);
                 if (contentElement) {
-                    contentElement.textContent = `Nem sikerült betölteni a fájlt.\n${error.message || error}`;
+                    contentElement.textContent = t('json_modal.load_error', { error: error.message || error }, `Failed to load file.\n${error.message || error}`);
                 }
             }
         }
@@ -1547,10 +1613,10 @@
                     const targetPath = uploadInput.dataset.targetPath || '';
                     try {
                         await uploadFileToPath(targetPath, files[0]);
-                        alert('Fájl sikeresen feltöltve.');
+                        alert(t('notifications.file_upload_success'));
                         await reloadFileBrowser(targetPath);
                     } catch (error) {
-                        alert(error.message || 'Nem sikerült feltölteni a fájlt.');
+                        alert(error.message || t('notifications.file_upload_failed'));
                     } finally {
                         uploadInput.value = '';
                         delete uploadInput.dataset.targetPath;
@@ -1593,15 +1659,15 @@
                     const vocabFile = vocabInput.files && vocabInput.files[0];
                     const configFile = configInput.files && configInput.files[0];
                     if (!modelFile || !vocabFile || !configFile) {
-                        alert('Válaszd ki mindhárom fájlt: modell, vocab.txt és konfiguráció.');
+                        alert(t('tts.validation.all_files'));
                         return;
                     }
                     if (!vocabFile.name.toLowerCase().endsWith('.txt')) {
-                        alert('A vocab fájlnak .txt kiterjesztésűnek kell lennie.');
+                        alert(t('tts.validation.vocab_extension'));
                         return;
                     }
                     if (!configFile.name.toLowerCase().endsWith('.json')) {
-                        alert('A konfigurációs fájlnak .json kiterjesztésűnek kell lennie.');
+                        alert(t('tts.validation.config_extension'));
                         return;
                     }
                     const targetPath = uploadTargetInput ? uploadTargetInput.value.trim() : '';
@@ -1610,7 +1676,7 @@
                         if (targetError) {
                             targetError.classList.remove('d-none');
                         }
-                        alert('Add meg a cél almappát (pl. F5-TTS_almapa).');
+                        alert(t('tts.validation.target_required'));
                         return;
                     }
                     if (targetError) {
@@ -1622,7 +1688,7 @@
                     modelInput.disabled = true;
                     vocabInput.disabled = true;
                     configInput.disabled = true;
-                    uploadBtn.textContent = 'Feltöltés...';
+                    uploadBtn.textContent = t('tts.button_uploading', {}, 'Uploading...');
                     resetTtsProgress();
                     try {
                         const result = await uploadFilesToTtsRequest(targetPath, {
@@ -1630,14 +1696,14 @@
                             vocab: vocabFile,
                             config: configFile
                         });
-                        alert(result.message || 'Fájlok sikeresen feltöltve.');
+                        alert(result.message || t('notifications.files_upload_success'));
                         modelInput.value = '';
                         vocabInput.value = '';
                         configInput.value = '';
                         setTimeout(() => location.reload(), 600);
                     } catch (error) {
                         console.error('TTS feltöltési hiba:', error);
-                        alert(error.message || 'Nem sikerült feltölteni a fájlokat.');
+                        alert(error.message || t('notifications.files_upload_failed'));
                     } finally {
                         resetTtsProgress();
                         uploadBtn.disabled = false;
@@ -1700,23 +1766,23 @@
                     }
                     const directoryPath = clearDirectoryButton.dataset.path || detailsElement.dataset.path || '';
                     if (!directoryPath) {
-                        alert('A mappa útvonala nem határozható meg.');
+                        alert(t('directories.path_missing'));
                         return;
                     }
                     const labelElement = detailsElement.querySelector('.file-browser-label');
                     const directoryName = (labelElement && labelElement.textContent) ? labelElement.textContent.trim() : directoryPath;
-                    const confirmed = confirm(`Biztosan törlöd a(z) "${directoryName}" mappa teljes tartalmát?\nA mappa megmarad, de minden fájl és alkönyvtár törlődik.`);
+                    const confirmed = confirm(t('directories.clear_confirm', { name: directoryName }));
                     if (!confirmed) {
                         return;
                     }
                     clearDirectoryButton.disabled = true;
                     try {
                         await clearProjectDirectory(directoryPath);
-                        alert('A mappa tartalma sikeresen törölve.');
+                        alert(t('directories.clear_success'));
                         await refreshDirectory(detailsElement);
                         detailsElement.setAttribute('open', '');
                     } catch (error) {
-                        alert(error.message || 'Nem sikerült törölni a mappa tartalmát.');
+                        alert(error.message || t('directories.clear_error'));
                     } finally {
                         clearDirectoryButton.disabled = false;
                     }
@@ -1736,17 +1802,17 @@
                         return;
                     }
                     const fileName = fileRow.dataset.fileName || filePath.split('/').pop();
-                    const confirmed = confirm(`Biztosan törlöd ezt a fájlt?\n${fileName}`);
+                    const confirmed = confirm(t('directories.delete_confirm', { name: fileName }));
                     if (!confirmed) {
                         return;
                     }
                     try {
                         await deleteProjectFile(filePath);
                         const parentPath = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
-                        alert('Fájl sikeresen törölve.');
+                        alert(t('directories.delete_success'));
                         await reloadFileBrowser(parentPath);
                     } catch (error) {
-                        alert(error.message || 'Nem sikerült törölni a fájlt.');
+                        alert(error.message || t('directories.delete_error'));
                     }
                     return;
                 }
@@ -1764,7 +1830,7 @@
                         return;
                     }
                     const fileName = fileRow.dataset.fileName || filePath.split('/').pop();
-                    const confirmed = confirm(`Áthelyezed ezt a fájlt a fordított szegmensek közé?\n${fileName}`);
+                    const confirmed = confirm(t('directories.move_confirm', { name: fileName }));
                     if (!confirmed) {
                         return;
                     }
@@ -1772,10 +1838,10 @@
                     try {
                         await moveFailedGenerationFileRequest(filePath);
                         const parentPath = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
-                        alert('Fájl sikeresen áthelyezve.');
+                        alert(t('directories.move_success'));
                         await reloadFileBrowser(parentPath);
                     } catch (error) {
-                        alert(error.message || 'Nem sikerült áthelyezni a fájlt.');
+                        alert(error.message || t('directories.move_error'));
                     } finally {
                         moveButton.disabled = false;
                     }
@@ -1895,7 +1961,7 @@
 
         function describeStepParameters(step, script, missing) {
             if (missing && missing.length) {
-                return `Hiányzó kötelező paraméterek: ${missing.join(', ')}`;
+                return t('workflow.messages.missing_required', { missing: missing.join(', ') }, `Missing required parameters: ${missing.join(', ')}`);
             }
             const summary = [];
             if (script && script.parameters) {
@@ -1926,7 +1992,7 @@
                     }
                 }
             });
-            return summary.length ? summary.join(', ') : 'Nincs megadott paraméter';
+            return summary.length ? summary.join(', ') : t('workflow.messages.no_parameters');
         }
 
         function describeWidgetParameters(widget, step) {
@@ -1970,7 +2036,7 @@
             if (step && typeof step.script === 'string') {
                 return step.script.replace(/_/g, ' ');
             }
-            return 'Ismeretlen script';
+            return t('workflow.errors.unknown_script_short', {}, 'Unknown script');
         }
 
         function updateMissingBadge() {
@@ -2001,7 +2067,7 @@
 
             const placeholder = document.createElement('option');
             placeholder.value = '';
-            placeholder.textContent = 'Válassz sablont...';
+            placeholder.textContent = t('workflow.templates.placeholder', {}, 'Select a template...');
             select.append(placeholder);
 
             workflowTemplates.forEach(template => {
@@ -2028,7 +2094,7 @@
                 const response = await fetch('/api/workflow-templates');
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Nem sikerült lekérdezni a sablonokat.');
+                    throw new Error(result.error || t('workflow.templates.list_failed'));
                 }
                 workflowTemplates = result.templates || [];
                 populateWorkflowTemplateSelect(selectedId);
@@ -2039,14 +2105,14 @@
 
         async function loadWorkflowTemplateById(templateId, showMessage = true) {
             if (!templateId) {
-                alert('Előbb válassz egy workflow sablont.');
+                alert(t('workflow.templates.select_prompt'));
                 return;
             }
             try {
                 const response = await fetch(`/api/workflow-template/${encodeURIComponent(templateId)}`);
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Nem sikerült betölteni a sablont.');
+                    throw new Error(result.error || t('workflow.templates.load_failed'));
                 }
                 const template = result.template || {};
                 currentTemplateId = template.id || templateId;
@@ -2056,11 +2122,11 @@
                 populateWorkflowTemplateSelect(currentTemplateId);
                 renderWorkflowSteps();
                 if (showMessage) {
-                    updateInfoBox('info', `${template.name || currentTemplateId} sablon betöltve.`);
+                    updateInfoBox('info', t('workflow.templates.loaded', { name: template.name || currentTemplateId }));
                 }
             } catch (error) {
                 console.error('Workflow sablon betöltési hiba:', error);
-                alert('Nem sikerült betölteni a kiválasztott workflow-t: ' + error.message);
+                alert(t('workflow.templates.load_error', { error: error.message }));
             }
         }
 
@@ -2088,7 +2154,10 @@
             }
             if (overwriteInfo) {
                 if (currentTemplate) {
-                    overwriteInfo.textContent = `Aktuális sablon: ${currentTemplate.name} (${currentTemplate.id})`;
+                    overwriteInfo.textContent = t('workflow.templates.overwrite_current', {
+                        name: currentTemplate.name || '',
+                        id: currentTemplate.id || ''
+                    });
                     overwriteInfo.classList.remove('d-none');
                 } else {
                     overwriteInfo.classList.add('d-none');
@@ -2121,7 +2190,7 @@
 
             if (overwrite && !currentTemplateId) {
                 if (errorBox) {
-                    errorBox.textContent = 'Nincs kiválasztott sablon, amit felül lehetne írni.';
+                    errorBox.textContent = t('workflow.templates.none_selected_overwrite');
                     errorBox.classList.remove('d-none');
                 }
                 return;
@@ -2129,7 +2198,7 @@
 
             if (!name && !overwrite) {
                 if (errorBox) {
-                    errorBox.textContent = 'Adj meg egy nevet a workflow sablonnak.';
+                    errorBox.textContent = t('workflow.templates.name_required');
                     errorBox.classList.remove('d-none');
                 }
                 return;
@@ -2154,7 +2223,7 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Nem sikerült elmenteni a workflow sablont.');
+                throw new Error(result.error || t('workflow.templates.save_failed'));
                 }
                 if (workflowSaveModal) {
                     workflowSaveModal.hide();
@@ -2164,7 +2233,7 @@
                 defaultWorkflow = cloneSteps(workflowState);
                 await refreshWorkflowTemplates(currentTemplateId);
                 populateWorkflowTemplateSelect(currentTemplateId);
-                updateInfoBox('success', `Workflow sablon elmentve: ${savedTemplate.name || currentTemplateId}.`);
+                updateInfoBox('success', t('workflow.templates.saved', { name: savedTemplate.name || currentTemplateId }));
             } catch (error) {
                 console.error('Workflow sablon mentési hiba:', error);
                 if (errorBox) {
@@ -2200,16 +2269,16 @@
             if (resetBtn) {
                 resetBtn.addEventListener('click', () => {
                     if (!defaultWorkflow.length) {
-                        alert('Nincs elérhető alapértelmezett workflow.');
+                        alert(t('workflow.templates.default_missing'));
                         return;
                     }
-                    if (!confirm('Biztosan visszaállítod az alapértelmezett lépéssort?')) {
+                    if (!confirm(t('workflow.templates.reset_confirm'))) {
                         return;
                     }
                     workflowSteps = cloneSteps(defaultWorkflow);
                     markWorkflowDirty();
                     renderWorkflowSteps();
-                    updateInfoBox('info', 'Az alapértelmezett lépéssor betöltve.');
+                    updateInfoBox('info', t('workflow.templates.default_loaded'));
                 });
             }
 
@@ -2297,8 +2366,8 @@
             }
 
             const positions = [
-                { key: 'above', label: 'Beszúrás fölé' },
-                { key: 'below', label: 'Beszúrás alá' }
+                { key: 'above', label: t('workflow.context_menu.insert_above') },
+                { key: 'below', label: t('workflow.context_menu.insert_below') }
             ];
 
             positions.forEach(position => {
@@ -2373,7 +2442,7 @@
             if (hasRootScripts) {
                 const rootItem = document.createElement('div');
                 rootItem.className = 'workflow-context-item has-submenu';
-                rootItem.textContent = 'Gyökér';
+                rootItem.textContent = t('workflow.file_tree.root_label');
                 const rootSubmenu = document.createElement('div');
                 rootSubmenu.className = 'workflow-context-submenu';
                 appendScriptsToMenu(rootSubmenu, scriptTree.scripts, position);
@@ -2386,7 +2455,7 @@
             if (!workflowWidgets.length && !hasAnyScripts) {
                 const empty = document.createElement('div');
                 empty.className = 'workflow-context-item disabled';
-                empty.textContent = 'Nincs elérhető elem';
+                empty.textContent = t('workflow.file_tree.empty');
                 submenu.append(empty);
             }
 
@@ -2585,7 +2654,7 @@
                 const response = await fetch(`/api/workflow-options/${encodeURIComponent(projectName)}`);
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba');
+                    throw new Error(result.error || t('workflow.errors.unknown_error'));
                 }
 
                 availableScripts = result.scripts || [];
@@ -2634,13 +2703,13 @@
                 const runnableSegment = collectScriptStepsForRun(0);
                 if (statusText) {
                     if (!hasScriptSteps) {
-                        statusText.textContent = 'Adj hozzá futtatható lépéseket az indításhoz.';
+                        statusText.textContent = t('workflow.status_texts.add_steps');
                     } else if (!hasEnabledScripts) {
-                        statusText.textContent = 'Engedélyezz legalább egy lépést az indításhoz.';
+                        statusText.textContent = t('workflow.status_texts.enable_steps');
                     } else if (!runnableSegment.length) {
-                        statusText.textContent = 'Az első widget előtt nincs futtatható lépés. Használd a Continue gombot.';
+                        statusText.textContent = t('workflow.status_texts.no_steps_before_widget');
                     } else {
-                        statusText.textContent = 'Workflow készen áll az indításra.';
+                        statusText.textContent = t('workflow.status_texts.ready');
                     }
                 }
 
@@ -2653,12 +2722,12 @@
             } catch (error) {
                 console.error('Hiba a workflow opciók betöltésekor:', error);
                 if (statusText) {
-                    statusText.textContent = `Hiba: ${error.message}`;
+                    statusText.textContent = t('workflow.status_texts.error', { error: error.message }, `Hiba: ${error.message}`);
                 }
                 if (startButton) {
                     startButton.disabled = true;
                 }
-                updateInfoBox('danger', `Nem sikerült betölteni a workflow opciókat: ${error.message}`);
+                updateInfoBox('danger', t('workflow.messages.options_load_failed', { error: error.message }));
             } finally {
                 workflowSuppressAutoSave = false;
             }
@@ -2675,7 +2744,7 @@
                 row.className = 'text-muted';
                 const cell = document.createElement('td');
                 cell.colSpan = 5;
-                cell.textContent = 'Még nem adtál hozzá lépéseket.';
+                cell.textContent = t('workflow.table_empty');
                 row.append(cell);
                 tbody.append(row);
                 updateMissingBadge();
@@ -2725,7 +2794,7 @@
                 if (isWidget) {
                     const title = document.createElement('div');
                     title.className = 'fw-semibold';
-                    title.textContent = widget ? widget.name : 'Speciális widget';
+                    title.textContent = widget ? widget.name : t('workflow.labels_extra.special_widget');
                     infoCell.append(title);
 
                     if (widget && widget.description) {
@@ -2755,7 +2824,7 @@
                     const hasRemainingScripts = collectScriptStepsForRun(index + 1).length > 0;
                     continueBtn.disabled = step.enabled === false || !hasRemainingScripts;
                     if (!hasRemainingScripts) {
-                        continueBtn.title = 'Nincs további futtatható lépés.';
+                        continueBtn.title = t('workflow.messages.no_more_steps');
                     }
                     continueBtn.addEventListener('click', () => handleWidgetContinue(index));
 
@@ -2804,7 +2873,8 @@
                     if (script && script.api) {
                         const apiInfoLine = document.createElement('div');
                         apiInfoLine.className = 'small mt-1 script-api-highlight';
-                        apiInfoLine.textContent = `API használat: ${String(script.api).toUpperCase()}`;
+                        const apiUsageLabel = t('workflow.labels_extra.api_usage');
+                        apiInfoLine.textContent = `${apiUsageLabel}: ${String(script.api).toUpperCase()}`;
                         infoCell.append(apiInfoLine);
                     }
 
@@ -2826,7 +2896,7 @@
                 if (isWidget) {
                     const widgetBadge = document.createElement('span');
                     widgetBadge.className = 'badge workflow-env-badge';
-                    widgetBadge.textContent = 'Widget';
+                    widgetBadge.textContent = t('workflow.labels_extra.widget_badge', {}, 'Widget');
                     envCell.append(widgetBadge);
                 } else if (script && script.environment) {
                     const envBadge = document.createElement('span');
@@ -2855,7 +2925,9 @@
                     });
                     const haltLabel = document.createElement('label');
                     haltLabel.className = 'form-check-label small';
-                    haltLabel.textContent = haltCheckbox.checked ? 'Megáll hibánál' : 'Tovább hiba után';
+                    haltLabel.textContent = haltCheckbox.checked
+                        ? t('workflow.labels_extra.halt_on_fail')
+                        : t('workflow.labels_extra.continue_on_fail');
                     haltWrapper.append(haltCheckbox, haltLabel);
                     haltCell.append(haltWrapper);
                 }
@@ -2867,14 +2939,14 @@
                     const editBtn = document.createElement('button');
                     editBtn.type = 'button';
                     editBtn.className = 'btn btn-sm btn-outline-primary me-2';
-                    editBtn.textContent = 'Paraméterek';
+                    editBtn.textContent = t('workflow.buttons_extra.parameters');
                     editBtn.addEventListener('click', () => openWorkflowParams(index));
                     actionsCell.append(editBtn);
                 } else if (widget && Array.isArray(widget.parameters) && widget.parameters.length) {
                     const editBtn = document.createElement('button');
                     editBtn.type = 'button';
                     editBtn.className = 'btn btn-sm btn-outline-primary me-2';
-                    editBtn.textContent = 'Paraméterek';
+                    editBtn.textContent = t('workflow.buttons_extra.parameters');
                     editBtn.addEventListener('click', () => openWorkflowWidgetParams(index));
                     actionsCell.append(editBtn);
                 }
@@ -2927,13 +2999,13 @@
                 const hasEnabledScripts = workflowSteps.some(step => step.type !== 'widget' && step.enabled !== false);
                 const runnableSegment = collectScriptStepsForRun(0);
                 if (!hasAnyScript) {
-                    statusText.textContent = 'Adj hozzá futtatható lépéseket az indításhoz.';
+                    statusText.textContent = t('workflow.status_texts.add_steps');
                 } else if (!hasEnabledScripts) {
-                    statusText.textContent = 'Engedélyezz legalább egy lépést az indításhoz.';
+                    statusText.textContent = t('workflow.status_texts.enable_steps');
                 } else if (!runnableSegment.length) {
-                    statusText.textContent = 'Az első widget előtt nincs futtatható lépés. Használd a Continue gombot.';
+                    statusText.textContent = t('workflow.status_texts.no_steps_before_widget');
                 } else {
-                    statusText.textContent = 'Workflow készen áll az indításra.';
+                    statusText.textContent = t('workflow.status_texts.ready');
                 }
             }
         }
@@ -2964,7 +3036,7 @@
             if (!filtered.length) {
                 const empty = document.createElement('div');
                 empty.className = 'list-group-item text-muted';
-                empty.textContent = 'Nincs a keresésnek megfelelő szkript.';
+                empty.textContent = t('workflow.search.no_results');
                 list.append(empty);
                 return;
             }
@@ -3006,7 +3078,7 @@
                 const addBtn = document.createElement('button');
                 addBtn.type = 'button';
                 addBtn.className = 'btn btn-sm btn-primary';
-                addBtn.textContent = 'Hozzáadás';
+                addBtn.textContent = t('workflow.buttons.add_step');
                 addBtn.addEventListener('click', () => {
                     addWorkflowStep(script.id);
                     if (workflowStepModal) {
@@ -3020,14 +3092,14 @@
                 if (script.environment) {
                     const envInfo = document.createElement('div');
                     envInfo.className = 'small mt-1';
-                    envInfo.innerHTML = `<strong>Környezet:</strong> ${script.environment}`;
+                    envInfo.innerHTML = `<strong>${t('workflow.details.environment_label')}</strong> ${script.environment}`;
                     item.append(envInfo);
                 }
 
                 if (script.api) {
                     const apiInfo = document.createElement('div');
                     apiInfo.className = 'small mt-1 script-api-highlight';
-                    apiInfo.innerHTML = `<strong>API:</strong> ${String(script.api).toUpperCase()}`;
+                    apiInfo.innerHTML = `<strong>${t('workflow.details.api_label', {}, 'API:')}</strong> ${String(script.api).toUpperCase()}`;
                     item.append(apiInfo);
                 }
 
@@ -3035,14 +3107,14 @@
                 if (requiredParams.length) {
                     const reqInfo = document.createElement('div');
                     reqInfo.className = 'small mt-1';
-                    reqInfo.innerHTML = `<strong>Kötelező paraméterek:</strong> ${requiredParams.map(param => param.name).join(', ')}`;
+                    reqInfo.innerHTML = `<strong>${t('workflow.details.required_params_label')}</strong> ${requiredParams.map(param => param.name).join(', ')}`;
                     item.append(reqInfo);
                 }
 
                 if (script.required_keys && script.required_keys.length) {
                     const keyInfo = document.createElement('div');
                     keyInfo.className = 'small mt-1';
-                    keyInfo.innerHTML = `<strong>Szükséges kulcsok:</strong> ${script.required_keys.join(', ')}`;
+                    keyInfo.innerHTML = `<strong>${t('workflow.details.required_keys_label')}</strong> ${script.required_keys.join(', ')}`;
                     item.append(keyInfo);
                 }
 
@@ -3085,7 +3157,7 @@
             groupedEntries.forEach(([groupName, scriptsInGroup]) => {
                 const header = document.createElement('div');
                 header.className = 'list-group-item list-group-item-secondary fw-semibold';
-                header.textContent = groupName ? groupName : 'scripts/ (gyökér)';
+                header.textContent = groupName ? groupName : t('workflow.groups.root_label');
                 list.append(header);
 
                 scriptsInGroup.forEach(script => {
@@ -3097,7 +3169,7 @@
         function addWorkflowStep(scriptId, insertIndex = workflowSteps.length) {
             const script = findScriptById(scriptId);
             if (!script) {
-                alert(`Ismeretlen szkript: ${scriptId}`);
+                alert(t('workflow.errors.unknown_script', { name: scriptId }));
                 return;
             }
             const currentMatch = workflowSteps.find(step => step && step.type !== 'widget' && step.script === script.id);
@@ -3116,13 +3188,13 @@
             workflowSteps.splice(targetIndex, 0, newStep);
             markWorkflowDirty();
             renderWorkflowSteps();
-            updateInfoBox('secondary', `${script.display_name || script.script} hozzáadva a workflow-hoz.`);
+            updateInfoBox('secondary', t('workflow.messages.script_added', { name: script.display_name || script.script }));
         }
 
         function addWorkflowWidget(widgetId, insertIndex = workflowSteps.length) {
             const widget = findWidgetById(widgetId);
             if (!widget) {
-                alert(`Ismeretlen widget: ${widgetId}`);
+                alert(t('workflow.errors.unknown_widget', { name: widgetId }));
                 return;
             }
             const defaultParams = {};
@@ -3147,12 +3219,12 @@
             workflowSteps.splice(targetIndex, 0, newStep);
             markWorkflowDirty();
             renderWorkflowSteps();
-            updateInfoBox('secondary', `${widget.name} widget hozzáadva a workflow-hoz.`);
+            updateInfoBox('secondary', t('workflow.messages.widget_added', { name: widget.name }));
         }
 
         async function handleWidgetContinue(widgetIndex) {
             if (currentWorkflowJobId) {
-                updateInfoBox('warning', 'Már fut egy workflow. Várj a befejezésig.');
+                updateInfoBox('warning', t('workflow.messages.already_running'));
                 return;
             }
             const widgetStep = workflowSteps[widgetIndex];
@@ -3160,7 +3232,7 @@
                 return;
             }
             if (widgetStep.enabled === false) {
-                updateInfoBox('info', 'Ez a widget le van tiltva.');
+                updateInfoBox('info', t('workflow.messages.widget_disabled'));
                 return;
             }
             const widget = findWidgetById(widgetStep.widget);
@@ -3170,13 +3242,16 @@
             }
             const validation = validateWorkflowSegment(widgetIndex + 1);
             if (!validation.hasRunnableStep) {
-                updateInfoBox('info', 'Nincs további futtatható lépés.');
+                updateInfoBox('info', t('workflow.messages.no_more_steps'));
                 return;
             }
             if (!validation.valid) {
                 const messages = [...validation.errors];
                 validation.missingSummary.forEach(item => {
-                    messages.push(`${item.script.display_name || item.script.script}: hiányzó paraméterek – ${item.missing.join(', ')}`);
+                    messages.push(t('workflow.messages.missing_params_list', {
+                        name: item.script.display_name || item.script.script,
+                        missing: item.missing.join(', ')
+                    }));
                 });
                 updateInfoBox('warning', messages.join(' | '));
                 updateMissingBadge();
@@ -3185,7 +3260,7 @@
 
             const segment = collectWorkflowSegment(widgetIndex + 1);
             if (!segment.steps.length) {
-                updateInfoBox('info', 'Nincs további futtatható lépés.');
+                updateInfoBox('info', t('workflow.messages.no_more_steps'));
                 return;
             }
             const payload = buildRunPayload(widgetIndex + 1, segment);
@@ -3203,7 +3278,7 @@
                 await executeWorkflow(payload, context);
             } catch (error) {
                 console.error('Widget folytatási hiba:', error);
-                alert('Nem sikerült folytatni a workflow-t: ' + error.message);
+                alert(t('workflow.errors.continue_failed', { error: error.message }));
             }
         }
 
@@ -3226,9 +3301,9 @@
                 let label = removed.script;
                 if (removed.type === 'widget') {
                     const widget = findWidgetById(removed.widget);
-                    label = widget ? widget.name : 'Widget';
+                    label = widget ? widget.name : t('workflow.labels_extra.widget_badge', {}, 'Widget');
                 }
-                updateInfoBox('secondary', `${label} eltávolítva a workflow-ból.`);
+                updateInfoBox('secondary', t('workflow.messages.step_removed', { name: label }));
             }
         }
 
@@ -3242,7 +3317,7 @@
             }
             const script = findScriptById(step.script);
             if (!script) {
-                alert(`Ismeretlen szkript: ${step.script}`);
+                alert(t('workflow.errors.unknown_script', { name: step.script }));
                 return;
             }
             selectedStepIndex = index;
@@ -3250,7 +3325,9 @@
             selectedWidgetConfig = null;
             const titleEl = document.getElementById('workflowParamsTitle');
             if (titleEl) {
-                titleEl.textContent = `${script.display_name || script.script} – paraméterek`;
+                titleEl.textContent = t('workflow.modals.params.script_title', {
+                    name: script.display_name || script.script
+                }, `${script.display_name || script.script} – parameters`);
             }
             renderWorkflowParamsForm(script, step);
             if (workflowParamsModal) {
@@ -3265,7 +3342,7 @@
             }
             const widget = findWidgetById(step.widget);
             if (!widget) {
-                alert(`Ismeretlen widget: ${step.widget}`);
+                alert(t('workflow.errors.unknown_widget', { name: step.widget }));
                 return;
             }
             selectedStepIndex = index;
@@ -3273,7 +3350,9 @@
             selectedWidgetConfig = widget;
             const titleEl = document.getElementById('workflowParamsTitle');
             if (titleEl) {
-                titleEl.textContent = `${widget.name} – beállítások`;
+                titleEl.textContent = t('workflow.modals.params.widget_title', {
+                    name: widget.name
+                }, `${widget.name} – settings`);
             }
             renderWidgetParamsForm(widget, step);
             if (workflowParamsModal) {
@@ -3303,7 +3382,7 @@
             helpBox.innerHTML = '';
             const title = document.createElement('h6');
             title.className = 'mb-2';
-            title.textContent = 'Segédlet';
+            title.textContent = t('workflow.modals.params.help_title', {}, 'Help');
             const block = document.createElement('div');
             block.className = 'small bg-body-tertiary p-3 border rounded';
             if (isMarkdown) {
@@ -3357,7 +3436,7 @@
             if (!params.length) {
                 const placeholder = document.createElement('div');
                 placeholder.className = 'text-muted';
-                placeholder.textContent = 'Ehhez a lépéshez nem szükséges beállítás.';
+                placeholder.textContent = t('workflow.modals.params.no_settings');
                 container.append(placeholder);
                 updateWorkflowParamsHelp(script);
                 return;
@@ -3380,8 +3459,8 @@
                     const help = document.createElement('div');
                     help.className = 'small text-muted';
                     help.textContent = param.autofill === 'project_name'
-                        ? 'Automatikus érték: projektnév'
-                        : 'Automatikus érték: projekt könyvtár teljes elérési útja';
+                        ? t('workflow.labels_extra.auto_value_project')
+                        : t('workflow.labels_extra.auto_value_path');
                     group.append(label, help);
                     container.append(group);
                     return;
@@ -3437,7 +3516,9 @@
                     if (defaultFlag !== undefined) {
                         const defaultInfo = document.createElement('div');
                         defaultInfo.className = 'form-text';
-                        defaultInfo.textContent = `Alapértelmezett: ${defaultFlag ? 'bekapcsolva' : 'kikapcsolva'}`;
+                        defaultInfo.textContent = defaultFlag
+                            ? t('workflow.labels_extra.default_flag_on')
+                            : t('workflow.labels_extra.default_flag_off');
                         group.append(defaultInfo);
                     }
                 } else {
@@ -3466,41 +3547,41 @@
                             input.placeholder = '••••••';
                             input.dataset.original = storedValue;
                         } else {
-                            input.placeholder = 'API kulcs';
+                            input.placeholder = t('workflow.labels_extra.key_placeholder', {}, 'API kulcs');
                         }
                         input.value = '';
                         helper = document.createElement('div');
                         helper.className = 'form-text';
                         helper.textContent = hasExisting
-                            ? 'Kulcs jelenleg el van mentve. Hagyd üresen, ha nem módosítod.'
-                            : 'Adja meg az API kulcsot.';
+                            ? t('workflow.labels_extra.key_saved_hint')
+                            : t('workflow.labels_extra.key_enter_value');
                         if (hasExisting) {
                             clearBtn = document.createElement('button');
                             clearBtn.type = 'button';
                             clearBtn.className = 'btn btn-sm btn-outline-danger mt-2';
-                            clearBtn.textContent = 'Kulcs törlése';
+                            clearBtn.textContent = t('workflow.labels_extra.key_clear_button');
                             clearBtn.addEventListener('click', () => {
                                 input.value = '';
-                                input.placeholder = 'Kulcs törlésre jelölve';
+                                input.placeholder = t('workflow.labels_extra.key_clear_placeholder');
                                 input.dataset.cleared = 'true';
                                 input.dataset.original = '';
                                 input.dataset.hasExisting = 'false';
-                                helper.textContent = 'Kulcs törlésre kerül mentéskor.';
+                                helper.textContent = t('workflow.labels_extra.key_clear_hint');
                             });
                         }
                         input.addEventListener('input', () => {
                             const trimmed = input.value.trim();
                             if (trimmed.length === 0) {
                                 if (input.dataset.cleared === 'true') {
-                                    helper.textContent = 'Kulcs törlésre kerül mentéskor.';
+                                    helper.textContent = t('workflow.labels_extra.key_clear_hint');
                                 } else if (input.dataset.hasExisting === 'true') {
-                                    helper.textContent = 'Kulcs jelenleg el van mentve. Hagyd üresen, ha nem módosítod.';
+                                    helper.textContent = t('workflow.labels_extra.key_saved_hint');
                                 } else {
-                                    helper.textContent = 'Adja meg az API kulcsot.';
+                                    helper.textContent = t('workflow.labels_extra.key_enter_value');
                                 }
                             } else {
                                 input.dataset.cleared = 'false';
-                                helper.textContent = 'Új kulcs kerül mentésre.';
+                                helper.textContent = t('workflow.labels_extra.key_new_hint');
                             }
                         });
                     } else {
@@ -3526,7 +3607,7 @@
                 if (param.flags && param.flags.length) {
                     const flagInfo = document.createElement('div');
                     flagInfo.className = 'form-text';
-                    flagInfo.textContent = `Kapcsolók: ${param.flags.join(', ')}`;
+                    flagInfo.textContent = `${t('workflow.labels_extra.flags_prefix')}: ${param.flags.join(', ')}`;
                     group.append(flagInfo);
                 }
 
@@ -3551,7 +3632,7 @@
             if (!parameters.length) {
                 const placeholder = document.createElement('div');
                 placeholder.className = 'text-muted';
-                placeholder.textContent = 'Ehhez a widgethez nem szükséges beállítás.';
+                placeholder.textContent = t('workflow.modals.params.no_widget_settings');
                 container.append(placeholder);
                 updateWorkflowParamsHelp(widget);
                 return;
@@ -3689,7 +3770,7 @@
 
             const missing = getMissingParams({ ...step, params: newParams }, script);
             if (missing.length && alertBox) {
-                alertBox.textContent = `Hiányzó kötelező mezők: ${missing.join(', ')}`;
+                alertBox.textContent = t('workflow.messages.missing_required', { missing: missing.join(', ') });
                 alertBox.classList.remove('d-none');
                 return;
             }
@@ -3730,9 +3811,10 @@
                 }
                 const rawValue = input.value ?? '';
                 const trimmed = rawValue.trim();
+                const fieldLabel = param.label || param.name;
                 if (!trimmed) {
                     if (param.required) {
-                        errors.push(param.label || param.name);
+                        errors.push(fieldLabel);
                         return;
                     }
                     if (param.default !== undefined) {
@@ -3742,16 +3824,16 @@
                 }
                 if ((param.type || 'text') === 'number') {
                     if (!/^[-+]?\d+$/.test(trimmed)) {
-                        errors.push(`${param.label || param.name} (érvénytelen szám)`);
+                        errors.push(t('workflow.validation.number_invalid', { field: fieldLabel }));
                         return;
                     }
                     const numericValue = Number.parseInt(trimmed, 10);
                     if (param.min !== undefined && numericValue < param.min) {
-                        errors.push(`${param.label || param.name} (min. ${param.min})`);
+                        errors.push(t('workflow.validation.min_value', { field: fieldLabel, min: param.min }));
                         return;
                     }
                     if (param.max !== undefined && numericValue > param.max) {
-                        errors.push(`${param.label || param.name} (max. ${param.max})`);
+                        errors.push(t('workflow.validation.max_value', { field: fieldLabel, max: param.max }));
                         return;
                     }
                     newParams[param.name] = numericValue;
@@ -3761,7 +3843,7 @@
             });
             if (errors.length) {
                 if (alertBox) {
-                    alertBox.textContent = `Ellenőrizd a következő mezőket: ${errors.join(', ')}`;
+                    alertBox.textContent = t('workflow.messages.check_fields', { fields: errors.join(', ') });
                     alertBox.classList.remove('d-none');
                 }
                 return;
@@ -3796,8 +3878,8 @@
             const segment = collectWorkflowSegment(startIndex);
             if (!segment.steps.length) {
                 updateInfoBox('info', startIndex === 0
-                    ? 'Nincs futtatható lépés az első widget előtt. Használd a Continue gombot.'
-                    : 'Nincs további futtatható lépés a workflow-ban.');
+                    ? t('workflow.status_texts.no_steps_before_widget')
+                    : t('workflow.messages.no_more_steps'));
                 return false;
             }
             const payload = buildRunPayload(startIndex, segment);
@@ -3815,7 +3897,7 @@
                 return true;
             } catch (error) {
                 console.error('Workflow indítási hiba:', error);
-                alert('Workflow indítása sikertelen: ' + error.message);
+                alert(t('workflow.errors.start_failed', { error: error.message }));
                 return false;
             }
         }
@@ -3837,8 +3919,8 @@
             }
             const safeIteration = Math.max(0, iteration);
             display.textContent = safeIteration === 0
-                ? 'Ciklus előkészítése...'
-                : `Ciklus: ${safeIteration}/${total}`;
+                ? t('workflow.cycle.preparing')
+                : t('workflow.cycle.progress', { current: safeIteration, total });
         }
 
         function clearCycleDisplay(widgetIndex) {
@@ -3871,11 +3953,11 @@
             const repeatCount = Number.parseInt(String(repeatRaw ?? ''), 10);
             const stepBackCount = Number.parseInt(String(stepBackRaw ?? ''), 10);
             if (!Number.isInteger(repeatCount) || repeatCount < 1) {
-                updateInfoBox('warning', 'A ciklus ismétlésszámának legalább 1-nek kell lennie.');
+                updateInfoBox('warning', t('workflow.messages.cycle_repeat_invalid'));
                 return null;
             }
             if (!Number.isInteger(stepBackCount) || stepBackCount < 1) {
-                updateInfoBox('warning', 'A ciklus visszalépési értékének legalább 1-nek kell lennie.');
+                updateInfoBox('warning', t('workflow.messages.cycle_step_back_invalid'));
                 return null;
             }
             const {
@@ -3883,22 +3965,25 @@
                 collectedCount
             } = collectScriptStepsBefore(widgetIndex, stepBackCount);
             if (!cycleSteps.length) {
-                updateInfoBox('info', 'Nincs futtatható lépés a widget előtt a ciklushoz.');
+                updateInfoBox('info', t('workflow.messages.no_steps_before_cycle'));
                 return null;
             }
             if (collectedCount < stepBackCount) {
-                updateInfoBox('warning', 'Nincs elegendő aktív lépés a widget előtt a megadott ciklushoz.');
+                updateInfoBox('warning', t('workflow.messages.cycle_not_enough_steps'));
                 return null;
             }
             const validation = validateStepCollection(cycleSteps);
             if (!validation.hasRunnableStep) {
-                updateInfoBox('info', 'Nincs futtatható lépés a widget előtt a ciklushoz.');
+                updateInfoBox('info', t('workflow.messages.no_steps_before_cycle'));
                 return null;
             }
             if (!validation.valid) {
                 const messages = [...validation.errors];
                 validation.missingSummary.forEach(item => {
-                    messages.push(`${item.script.display_name || item.script.script}: hiányzó paraméterek – ${item.missing.join(', ')}`);
+                    messages.push(t('workflow.messages.missing_params_list', {
+                        name: item.script.display_name || item.script.script,
+                        missing: item.missing.join(', ')
+                    }));
                 });
                 updateInfoBox('warning', messages.join(' | '));
                 updateMissingBadge();
@@ -3933,12 +4018,12 @@
                 activeIteration: null
             };
             updateCycleDisplay(widgetIndex, 0, state.repeatCount);
-            updateInfoBox('secondary', `Ciklus indítása ${state.repeatCount} ismétléssel.`);
+            updateInfoBox('secondary', t('workflow.messages.cycle_start', { count: state.repeatCount }));
             try {
                 await launchNextCycleIteration();
             } catch (error) {
                 console.error('Ciklus indítási hiba:', error);
-                updateInfoBox('danger', 'Nem sikerült elindítani a ciklust: ' + error.message);
+                updateInfoBox('danger', t('workflow.messages.cycle_start_failed', { error: error.message }));
                 clearCycleDisplay(widgetIndex);
                 cycleState = null;
             }
@@ -4005,12 +4090,12 @@
             clearCycleDisplay(widgetIndex);
             cycleState = null;
             if (success) {
-                updateInfoBox('success', 'Ciklus futása befejeződött. Folytatás a következő lépésekkel.');
+                updateInfoBox('success', t('workflow.messages.cycle_complete'));
                 setTimeout(() => {
                     startSegmentRun(widgetIndex + 1);
                 }, 0);
             } else {
-                updateInfoBox('danger', 'A ciklus futása megszakadt.');
+                updateInfoBox('danger', t('workflow.messages.cycle_cancelled'));
             }
         }
 
@@ -4028,7 +4113,7 @@
                     console.error('Automatikus ciklus hiba:', error);
                 });
             } else {
-                updateInfoBox('info', `${widget.name} widgethez értünk. Használd a Continue gombot a folytatáshoz.`);
+                updateInfoBox('info', t('workflow.messages.widget_continue_hint', { name: widget.name }));
             }
         }
 
@@ -4047,7 +4132,7 @@
                     if (context.widgetIndex !== null && context.widgetIndex !== undefined) {
                         autoTriggerWidget(context.widgetIndex);
                     } else {
-                        updateInfoBox('success', 'A workflow szakasz sikeresen lefutott.');
+                        updateInfoBox('success', t('workflow.messages.segment_success'));
                     }
                 } else if (currentRunContext.type === 'cycle') {
                     currentRunContext.completionHandled = true;
@@ -4058,7 +4143,7 @@
                         setTimeout(() => {
                             launchNextCycleIteration().catch(error => {
                                 console.error('Ciklus folytatás hiba:', error);
-                                updateInfoBox('danger', 'Nem sikerült a ciklus következő futásának indítása.');
+                                updateInfoBox('danger', t('workflow.messages.cycle_next_failed'));
                                 finalizeCycleSequence(false);
                             });
                         }, 0);
@@ -4080,7 +4165,7 @@
         async function handleStartWorkflow() {
             const validation = validateWorkflowSegment(0);
             if (!validation.hasRunnableStep) {
-                updateInfoBox('info', 'Nincs futtatható lépés az első widget előtt. Használd a Continue gombot a folytatáshoz.');
+                updateInfoBox('info', t('workflow.status_texts.no_steps_before_widget'));
                 return;
             }
             if (!validation.valid) {
@@ -4088,7 +4173,10 @@
                 if (validation.missingSummary.length) {
                     validation.missingSummary.forEach(item => {
                         const script = item.script;
-                        messages.push(`${script.display_name || script.script}: hiányzó paraméterek – ${item.missing.join(', ')}`);
+                        messages.push(t('workflow.messages.missing_params_list', {
+                            name: script.display_name || script.script,
+                            missing: item.missing.join(', ')
+                        }));
                     });
                 }
                 updateInfoBox('warning', messages.join(' | '));
@@ -4098,7 +4186,7 @@
 
             const segment = collectWorkflowSegment(0);
             if (!segment.steps.length) {
-                updateInfoBox('info', 'Nincs futtatható lépés az első widget előtt. Használd a Continue gombot a folytatáshoz.');
+                updateInfoBox('info', t('workflow.status_texts.no_steps_before_widget'));
                 return;
             }
             const payload = buildRunPayload(0, segment);
@@ -4115,7 +4203,7 @@
                 await executeWorkflow(payload, context);
             } catch (error) {
                 console.error('Workflow indítási hiba:', error);
-                alert('Workflow indítása sikertelen: ' + error.message);
+                alert(t('workflow.errors.start_failed', { error: error.message }));
             }
         }
 
@@ -4127,7 +4215,7 @@
             });
             const result = await response.json();
             if (!response.ok || !result.success) {
-                throw new Error(result.error || 'Nem sikerült ellenőrizni az API kulcsokat.');
+                throw new Error(result.error || t('workflow.errors.key_status_failed'));
             }
             const missing = Object.entries(result.keys || {}).filter(([, info]) => info.required && !info.present);
             if (!missing.length) {
@@ -4142,7 +4230,9 @@
             if (workflowKeysModal) {
                 workflowKeysModal.show();
             } else {
-                alert('Hiányzó API kulcsok: ' + missingList.map(item => item.label).join(', '));
+                alert(t('workflow.keys.missing_alert', {
+                    keys: missingList.map(item => item.label).join(', ')
+                }));
             }
             return false;
         }
@@ -4161,8 +4251,8 @@
             });
             const info = document.getElementById('workflowKeysInfo');
             if (info) {
-                const labels = missingList.map(item => item.label);
-                info.textContent = 'A workflow indításához add meg a következő kulcsokat: ' + labels.join(', ');
+                const labels = missingList.map(item => item.label).join(', ');
+                info.textContent = t('workflow.keys.list_instructions', { keys: labels });
             }
         }
 
@@ -4179,7 +4269,7 @@
             });
             const info = document.getElementById('workflowKeysInfo');
             if (info) {
-                info.textContent = 'A workflow indításához add meg a hiányzó API kulcsokat.';
+                info.textContent = t('workflow.modals.api_keys.instructions');
             }
         }
 
@@ -4212,7 +4302,7 @@
 
             if (firstEmpty) {
                 firstEmpty.focus();
-                alert('Kérjük add meg az összes hiányzó kulcsot.');
+                alert(t('workflow.keys.fill_all'));
                 return;
             }
             if (!Object.keys(payload).length) {
@@ -4237,7 +4327,7 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Nem sikerült menteni az API kulcsokat.');
+                    throw new Error(result.error || t('workflow.errors.keys_save_failed_generic'));
                 }
                 const payloadToRun = pendingWorkflowPayload;
                 const contextToRun = pendingWorkflowContext;
@@ -4255,7 +4345,8 @@
                     await executeWorkflow(payloadToRun, contextToRun || null);
                 }
             } catch (error) {
-                alert('API kulcs mentése sikertelen: ' + error.message);
+                console.error('API kulcs mentése sikertelen:', error);
+                alert(t('workflow.errors.keys_save_failed', { error: error.message }));
             } finally {
                 if (submitBtn) {
                     submitBtn.disabled = false;
@@ -4297,9 +4388,9 @@
                 spinner.classList.remove('d-none');
             }
             if (statusText) {
-                statusText.textContent = 'Workflow indítása...';
+                statusText.textContent = t('workflow.run.starting');
             }
-            updateInfoBox('secondary', 'Workflow indítása folyamatban. Az első lépés néhány másodpercig eltarthat.');
+            updateInfoBox('secondary', t('workflow.run.starting_info'));
 
             if (stopButton) {
                 stopButton.classList.remove('d-none');
@@ -4309,15 +4400,15 @@
                 stopSpinner.classList.add('d-none');
             }
             if (stopLabel) {
-                stopLabel.textContent = 'Workflow megszakítása';
+                stopLabel.textContent = t('workflow.buttons_extra.stop');
             }
             if (logLink) {
                 logLink.innerHTML = '';
             }
             if (logContent) {
-                logContent.textContent = 'Log inicializálása...';
+                logContent.textContent = t('workflow.log_messages.log_initializing');
             }
-            updateLogStatus('Workflow indítása... várakozás a logra.', 'muted');
+            updateLogStatus(t('workflow.run.waiting_log'), 'muted');
 
             try {
                 const response = await fetch(`/api/run-workflow/${encodeURIComponent(PROJECT_NAME)}`, {
@@ -4327,7 +4418,7 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba a workflow indításakor.');
+                    throw new Error(result.error || t('workflow.errors.start_unknown'));
                 }
                 if (context) {
                     currentRunContext = {
@@ -4339,13 +4430,13 @@
                     currentRunContext = null;
                 }
                 if (statusText) {
-                    statusText.textContent = 'Workflow elindult, állapot frissítése folyamatban...';
+                    statusText.textContent = t('workflow.run.started');
                 }
                 startWorkflowPolling(result.job_id);
             } catch (error) {
                 console.error('Workflow indítási hiba:', error);
                 if (statusText) {
-                    statusText.textContent = `Hiba: ${error.message}`;
+                    statusText.textContent = t('workflow.status_texts.error', { error: error.message }, `Hiba: ${error.message}`);
                 }
                 if (startButton) {
                     startButton.disabled = false;
@@ -4358,8 +4449,8 @@
                     stopButton.classList.add('d-none');
                     stopButton.disabled = false;
                 }
-                updateInfoBox('danger', `Workflow indítása sikertelen: ${error.message}`);
-                updateLogStatus('A log a workflow indítása után jelenik meg.', 'muted');
+                updateInfoBox('danger', t('workflow.errors.start_failed', { error: error.message }));
+                updateLogStatus(t('workflow.log_status'), 'muted');
                 currentRunContext = null;
             }
         }
@@ -4388,7 +4479,7 @@
                 const response = await fetch(`/api/workflow-status/${currentWorkflowJobId}`);
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Nem sikerült lekérdezni az állapotot.');
+                    throw new Error(result.error || t('workflow.errors.status_check_failed'));
                 }
                 const job = result.job;
                 renderWorkflowStatus(job);
@@ -4417,21 +4508,23 @@
             const hint = document.getElementById('workflowStatusHint');
 
             const statusLabels = {
-                queued: 'Sorban áll',
-                running: 'Folyamatban',
-                completed: 'Kész',
-                failed: 'Hiba',
-                cancelling: 'Megszakítás folyamatban',
-                cancelled: 'Megszakítva'
+                queued: t('workflow.status_labels.queued'),
+                running: t('workflow.status_labels.running'),
+                completed: t('workflow.status_labels.completed'),
+                failed: t('workflow.status_labels.failed'),
+                cancelling: t('workflow.status_labels.cancelling'),
+                cancelled: t('workflow.status_labels.cancelled')
             };
 
             if (!job) {
                 if (badge) {
-                    badge.textContent = 'Nincs aktív feladat';
+                    badge.textContent = t('workflow.status_none');
                     setWorkflowBadge(null);
                 }
                 if (statusText) {
-                    statusText.textContent = collectScriptStepsForRun(0).length ? 'Workflow még nem futott ezen a projekten.' : 'Adj hozzá lépéseket az indításhoz.';
+                    statusText.textContent = collectScriptStepsForRun(0).length
+                        ? t('workflow.status_texts.never_run')
+                        : t('workflow.status_texts.add_steps');
                 }
                 if (logLink) {
                     logLink.innerHTML = '';
@@ -4448,14 +4541,14 @@
                     stopButton.disabled = false;
                 }
                 if (hint) {
-                    hint.textContent = 'Állítsd össze a futtatandó lépéseket, konfiguráld a paramétereket, majd indítsd a workflow-t.';
+                    hint.textContent = t('workflow.hint');
                 }
-                updateLogStatus('A log a workflow indítása után jelenik meg.');
+                updateLogStatus(t('workflow.log_status'));
                 return;
             }
 
             if (badge) {
-                badge.textContent = statusLabels[job.status] || job.status || 'Ismeretlen';
+                badge.textContent = statusLabels[job.status] || job.status || t('workflow.status_labels.unknown');
                 setWorkflowBadge(job.status);
             }
 
@@ -4478,7 +4571,9 @@
                     stopSpinner.classList.toggle('d-none', Boolean(job.cancel_requested));
                 }
                 if (stopLabel) {
-                    stopLabel.textContent = job.cancel_requested ? 'Megszakítás kérése folyamatban...' : 'Workflow megszakítása';
+                    stopLabel.textContent = job.cancel_requested
+                        ? t('workflow.stop.requesting_label')
+                        : t('workflow.buttons_extra.stop');
                 }
                 const activeJobId = currentWorkflowJobId || job.job_id;
                 if (activeJobId) {
@@ -4500,7 +4595,7 @@
                     stopSpinner.classList.add('d-none');
                 }
                 if (stopLabel) {
-                    stopLabel.textContent = 'Workflow megszakítása';
+                    stopLabel.textContent = t('workflow.buttons_extra.stop');
                 }
                 stopLogPolling();
             }
@@ -4514,36 +4609,36 @@
 
             if (hint) {
                 if (job.status === 'queued') {
-                    hint.textContent = 'Feladat sorban áll – néhány másodpercen belül indul.';
+                    hint.textContent = t('workflow.log_messages.queued');
                 } else if (job.status === 'running') {
-                    hint.textContent = 'Folyamatban lévő workflow – a logban követheted a lépéseket.';
+                    hint.textContent = t('workflow.log_messages.running');
                 } else if (job.status === 'cancelling') {
-                    hint.textContent = 'Megszakítás folyamatban – várakozás a folyamat leállítására.';
+                    hint.textContent = t('workflow.log_messages.cancelling');
                 } else if (job.status === 'failed') {
-                    hint.textContent = 'Hiba történt – nyisd meg a logot és ellenőrizd, melyik lépés állt le.';
+                    hint.textContent = t('workflow.log_messages.failed');
                 } else if (job.status === 'cancelled') {
-                    hint.textContent = 'Workflow megszakítva – szükség esetén indíts új feldolgozást.';
+                    hint.textContent = t('workflow.log_messages.cancelled');
                 } else if (job.status === 'completed') {
-                    hint.textContent = 'Workflow sikeresen lefutott – a fájlok a projekt könyvtárban találhatók.';
+                    hint.textContent = t('workflow.log_messages.completed');
                 }
             }
 
             if (logLink) {
                 if (job.log && job.log.url) {
-                    logLink.innerHTML = `<a href="${job.log.url}" target="_blank" rel="noopener">Log megnyitása</a>`;
+                    logLink.innerHTML = `<a href="${job.log.url}" target="_blank" rel="noopener">${t('workflow.log_messages.open_log')}</a>`;
                 } else {
                     logLink.innerHTML = '';
                 }
             }
 
             if (job.status === 'failed') {
-                updateLogStatus('A workflow hibával leállt. Ellenőrizd a logot.', 'danger');
+                updateLogStatus(t('workflow.log_messages.failed_short'), 'danger');
             } else if (job.status === 'cancelled') {
-                updateLogStatus('A workflow megszakítva.', 'danger');
+                updateLogStatus(t('workflow.log_messages.cancelled_short'), 'danger');
             } else if (job.status === 'completed') {
-                updateLogStatus('A workflow befejeződött.', 'success');
+                updateLogStatus(t('workflow.log_messages.completed_short'), 'success');
             } else if (isActive) {
-                updateLogStatus('A workflow fut – a log folyamatosan frissül.', 'info');
+                updateLogStatus(t('workflow.log_messages.running_short'), 'info');
             }
 
             handleRunContextJobUpdate(job);
@@ -4638,16 +4733,19 @@
                 const response = await fetch(`/api/workflow-log/${jobId}`);
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Nem sikerült beolvasni a logot.');
+                    throw new Error(result.error || t('workflow.errors.log_fetch_failed'));
                 }
                 const logContent = document.getElementById('workflowLogContent');
                 if (logContent) {
                     logContent.textContent = result.log || '—';
                 }
-                updateLogStatus(result.completed ? 'A workflow befejeződött.' : 'A log folyamatosan frissül.', result.completed ? 'success' : 'info');
+                updateLogStatus(
+                    result.completed ? t('workflow.log_messages.completed_short') : t('workflow.log_messages.running_short'),
+                    result.completed ? 'success' : 'info'
+                );
             } catch (error) {
                 console.error('Log olvasási hiba:', error);
-                updateLogStatus('Nem sikerült frissíteni a logot.', 'danger');
+                updateLogStatus(t('workflow.log_messages.log_refresh_failed'), 'danger');
             }
         }
 
@@ -4667,7 +4765,7 @@
                 stopSpinner.classList.remove('d-none');
             }
             if (stopLabel) {
-                stopLabel.textContent = 'Megszakítás kérve...';
+                stopLabel.textContent = t('workflow.stop.requesting');
             }
 
             try {
@@ -4676,15 +4774,15 @@
                 });
                 const result = await response.json();
                 if (!response.ok || !result.success) {
-                    throw new Error(result.error || 'Ismeretlen hiba a megszakítás során.');
+                    throw new Error(result.error || t('workflow.stop.unknown_error'));
                 }
                 if (statusText) {
-                    statusText.textContent = result.message || 'Megszakítás kérve. Várakozás a leállásra...';
+                    statusText.textContent = result.message || t('workflow.log_messages.stop_pending');
                 }
-                updateLogStatus('Megszakítás kérve. Várakozás a folyamat leállítására.', 'info');
+                updateLogStatus(t('workflow.log_messages.stop_pending'), 'info');
             } catch (error) {
                 console.error('Workflow megszakítási hiba:', error);
-                alert('Nem sikerült megszakítani a workflow-t: ' + error.message);
+                alert(t('workflow.errors.stop_failed', { error: error.message }));
                 if (stopButton) {
                     stopButton.disabled = false;
                 }
@@ -4692,13 +4790,31 @@
                     stopSpinner.classList.add('d-none');
                 }
                 if (stopLabel) {
-                    stopLabel.textContent = 'Workflow megszakítása';
+                    stopLabel.textContent = t('workflow.buttons_extra.stop');
                 }
             }
         }
 
 
         document.addEventListener('DOMContentLoaded', () => {
+            const languageSelect = document.getElementById('languageSelect');
+            const t = typeof window.translateText === 'function'
+                ? window.translateText
+                : (key, replacements = {}, fallback) => (fallback || key);
+
+            if (languageSelect) {
+                languageSelect.addEventListener('change', event => {
+                    const selected = event.target.value;
+                    const targetUrl = new URL(window.location.href);
+                    if (selected) {
+                        targetUrl.searchParams.set('lang', selected);
+                    } else {
+                        targetUrl.searchParams.delete('lang');
+                    }
+                    window.location.assign(targetUrl.toString());
+                });
+            }
+
             initPreviewModals();
             if (window.AudioTrimmer && typeof AudioTrimmer.init === 'function') {
                 AudioTrimmer.init({
@@ -4734,8 +4850,8 @@
                             <summary class="file-browser-summary">
                                 <span class="file-browser-label">{{ entry.name }}</span>
                                 <div class="file-browser-actions">
-                                    <button type="button" class="btn btn-sm btn-outline-secondary file-upload-trigger" data-path="{{ entry.path }}" title="Fájl feltöltése ebbe a mappába">Feltöltés</button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger file-directory-clear-btn" data-path="{{ entry.path }}" title="Könyvtár tartalmának törlése">Tartalom törlése</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary file-upload-trigger" data-path="{{ entry.path }}" title="{{ translate('file_browser.upload_title') }}">{{ translate('file_browser.upload_button') }}</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger file-directory-clear-btn" data-path="{{ entry.path }}" title="{{ translate('file_browser.clear_title') }}">{{ translate('file_browser.clear_button') }}</button>
                                 </div>
                             </summary>
                             <div class="file-browser-children">
@@ -4769,9 +4885,9 @@
                                 <span class="file-browser-note small text-muted">{{ entry.failed_original_text_display }}</span>
                             {% endif %}
                             <div class="file-browser-actions">
-                                <button type="button" class="btn btn-sm btn-outline-danger file-delete-btn" title="Fájl törlése">Törlés</button>
+                                <button type="button" class="btn btn-sm btn-outline-danger file-delete-btn" title="{{ translate('file_browser.delete_title') }}">{{ translate('file_browser.delete_button') }}</button>
                                 {%- if entry.enable_failed_move and extension == '.wav' %}
-                                    <button type="button" class="btn btn-sm btn-outline-primary file-move-to-translated-btn" title="Áthelyezés a fordított szegmensek közé">Áthelyezés</button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary file-move-to-translated-btn" title="{{ translate('file_browser.move_title') }}">{{ translate('file_browser.move_button') }}</button>
                                 {%- endif %}
                             </div>
                         </div>
@@ -4781,7 +4897,17 @@
         </ul>
     {%- endmacro %}
     <div class="theme-controls">
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Téma váltása">
+        {% if language_options %}
+        <div class="language-selector">
+            <label for="languageSelect" class="visually-hidden">{{ translate('general.language_selector_label') }}</label>
+            <select id="languageSelect" class="form-select form-select-sm" aria-label="{{ translate('general.language_selector_aria') }}">
+                {% for option in language_options %}
+                <option value="{{ option.code }}" {% if option.code == active_language %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="{{ translate('general.theme_toggle_aria') }}">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
             <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
         </svg>
@@ -4790,48 +4916,48 @@
 
     <div class="container mt-4">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
-            <h1 class="mb-0">Projekt: {{ project.name }}</h1>
-            <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+            <h1 class="mb-0">{{ translate('header.title', project=project.name) }}</h1>
+            <a href="/" class="btn btn-secondary">{{ translate('header.back_to_home') }}</a>
         </div>
 
         <div class="card mb-4">
             <div class="card-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <h5 class="mb-0">Moduláris AI workflow</h5>
-                    <span id="workflowStatusBadge" class="badge bg-secondary">Nincs aktív feladat</span>
+                    <h5 class="mb-0">{{ translate('workflow.title') }}</h5>
+                    <span id="workflowStatusBadge" class="badge bg-secondary">{{ translate('workflow.status_none') }}</span>
                 </div>
-                <small id="workflowStatusHint" class="text-muted">Állítsd össze a futtatandó lépéseket, konfiguráld a paramétereket, majd indítsd a workflow-t.</small>
+                <small id="workflowStatusHint" class="text-muted">{{ translate('workflow.hint') }}</small>
             </div>
             <div class="card-body">
                 <div class="alert alert-info small mb-3" role="alert" id="workflowInfo">
-                    Válaszd ki a scripts mappában elérhető lépéseket, állítsd be a paramétereket egyenként, majd indítsd el a kívánt munkafolyamatot. A projektnév automatikusan kitöltésre kerül minden lépésnél.
+                    {{ translate('workflow.info') }}
                 </div>
                 <div class="d-flex flex-column gap-2 mb-3">
                     <div class="d-flex flex-wrap align-items-center gap-2">
-                        <label for="workflowTemplateSelect" class="form-label mb-0">Mentett workflow</label>
+                        <label for="workflowTemplateSelect" class="form-label mb-0">{{ translate('workflow.template_label') }}</label>
                         <select class="form-select form-select-sm" id="workflowTemplateSelect" style="min-width: 220px;"></select>
-                        <button type="button" class="btn btn-outline-success btn-sm" id="saveWorkflowBtn">Mentés sablonként</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="resetWorkflowBtn">Alapértelmezés visszaállítása</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" id="saveWorkflowBtn">{{ translate('workflow.save_template') }}</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="resetWorkflowBtn">{{ translate('workflow.reset_default') }}</button>
                     </div>
                     <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="text-muted small">Jobb klikk a táblázatban a lépések beszúrásához.</span>
-                        <span class="badge bg-warning text-dark d-none" id="workflowMissingBadge">Hiányzó paraméterek</span>
+                        <span class="text-muted small">{{ translate('workflow.table_hint') }}</span>
+                        <span class="badge bg-warning text-dark d-none" id="workflowMissingBadge">{{ translate('workflow.missing_badge') }}</span>
                     </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle workflow-table" id="workflowStepsTable">
                         <thead>
                             <tr>
-                                <th scope="col" style="width: 70px;">Aktív</th>
-                                <th scope="col">Lépés</th>
-                                <th scope="col" style="width: 140px;">Környezet</th>
-                                <th scope="col" style="width: 150px;">Hiba esetén</th>
-                                <th scope="col" style="width: 220px;">Műveletek</th>
+                                <th scope="col" style="width: 70px;">{{ translate('workflow.table_headers.active') }}</th>
+                                <th scope="col">{{ translate('workflow.table_headers.step') }}</th>
+                                <th scope="col" style="width: 140px;">{{ translate('workflow.table_headers.environment') }}</th>
+                                <th scope="col" style="width: 150px;">{{ translate('workflow.table_headers.on_failure') }}</th>
+                                <th scope="col" style="width: 220px;">{{ translate('workflow.table_headers.actions') }}</th>
                             </tr>
                         </thead>
                         <tbody id="workflowStepsBody">
                             <tr class="text-muted">
-                                <td colspan="5">Még nem adtál hozzá lépéseket.</td>
+                                <td colspan="5">{{ translate('workflow.table_empty') }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -4839,27 +4965,27 @@
                 <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
                     <button type="button" class="btn btn-success d-flex align-items-center gap-2" id="startWorkflowBtn">
                         <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="workflowSpinner"></span>
-                        <span>Workflow indítása</span>
+                        <span>{{ translate('workflow.start_button') }}</span>
                     </button>
                     <button type="button" class="btn btn-outline-danger d-flex align-items-center gap-2 d-none" id="stopWorkflowBtn">
                         <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true" id="stopWorkflowSpinner"></span>
-                        <span id="stopWorkflowLabel">Workflow megszakítása</span>
+                        <span id="stopWorkflowLabel">{{ translate('workflow.stop_button') }}</span>
                     </button>
-                    <span id="workflowStatusText" class="text-muted small flex-grow-1">Állapot frissítése folyamatban...</span>
+                    <span id="workflowStatusText" class="text-muted small flex-grow-1">{{ translate('workflow.status_text') }}</span>
                 </div>
                 <div class="log-panel mt-4">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">Workflow log</h6>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshWorkflowLogBtn">Frissítés</button>
+                        <h6 class="mb-0">{{ translate('workflow.log_title') }}</h6>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshWorkflowLogBtn">{{ translate('workflow.refresh_button') }}</button>
                     </div>
                     <div id="workflowLogStatus" class="small text-muted mb-2">
-                        A log a workflow indítása után jelenik meg.
+                        {{ translate('workflow.log_status') }}
                     </div>
                     <div id="workflowLogLink" class="small mb-2"></div>
                     <pre id="workflowLogContent" class="log-viewer">—</pre>
                 </div>
                 <div id="workflowTips" class="small text-muted mt-3">
-                    Tipp: a lépések paraméterei egyenként módosíthatók. A logban minden végrehajtott parancs kimenete megjelenik.
+                    {{ translate('workflow.tip') }}
                 </div>
             </div>
         </div>
@@ -4869,19 +4995,19 @@
             <div class="modal-dialog modal-lg modal-dialog-scrollable">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Új workflow lépés hozzáadása</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <h5 class="modal-title">{{ translate('workflow.modals.add_step.title') }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                     </div>
                     <div class="modal-body">
                         <div class="mb-3">
-                            <input type="search" class="form-control" id="workflowStepSearch" placeholder="Szűrés név alapján...">
+                            <input type="search" class="form-control" id="workflowStepSearch" placeholder="{{ translate('workflow.modals.add_step.search_placeholder') }}">
                         </div>
                         <div class="list-group" id="workflowStepList">
-                            <div class="list-group-item text-muted">Betöltés folyamatban...</div>
+                            <div class="list-group-item text-muted">{{ translate('workflow.modals.add_step.loading') }}</div>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.close') }}</button>
                     </div>
                 </div>
             </div>
@@ -4892,8 +5018,8 @@
             <div class="modal-dialog modal-lg modal-dialog-scrollable">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="workflowParamsTitle">Paraméterek szerkesztése</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <h5 class="modal-title" id="workflowParamsTitle">{{ translate('workflow.modals.params.title') }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                     </div>
                     <div class="modal-body">
                         <div id="workflowParamsAlert" class="alert alert-warning small d-none"></div>
@@ -4903,8 +5029,8 @@
                         <div id="workflowParamsHelp" class="mt-4 d-none"></div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
-                        <button type="button" class="btn btn-primary" id="workflowParamsSaveBtn">Mentés</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.cancel') }}</button>
+                        <button type="button" class="btn btn-primary" id="workflowParamsSaveBtn">{{ translate('buttons.save') }}</button>
                     </div>
                 </div>
             </div>
@@ -4912,18 +5038,18 @@
 
         <div class="card mb-4">
             <div class="card-header d-flex flex-column flex-lg-row align-items-lg-center justify-content-lg-between gap-2">
-                <h5 class="mb-0">Projekt fájlok</h5>
-                <small class="text-muted">A lista a workdir/{{ project.name }} könyvtár aktuális tartalmát mutatja.</small>
+                <h5 class="mb-0">{{ translate('files.card_title') }}</h5>
+                <small class="text-muted">{{ translate('files.description', path='workdir/' + project.name) }}</small>
             </div>
             <div class="card-body">
                 <div class="d-flex flex-wrap gap-2 mb-3">
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="rootUploadBtn">Fájl feltöltése a gyökérbe</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshFileBrowserBtn">Lista frissítése</button>
-                    <button type="button" class="btn btn-outline-success btn-sm" id="projectBackupBtn">Biztonsági mentés letöltése</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="rootUploadBtn">{{ translate('files.root_upload') }}</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshFileBrowserBtn">{{ translate('files.refresh_list') }}</button>
+                    <button type="button" class="btn btn-outline-success btn-sm" id="projectBackupBtn">{{ translate('files.download_backup') }}</button>
                 </div>
                 <div id="failedGenerationLegend" class="file-browser-legend small{% if not has_failed_generation_highlights %} d-none{% endif %}">
                     <span class="file-browser-legend-swatch" aria-hidden="true"></span>
-                    <span class="text-muted">Jelölt almappák: találtunk egyező fordított szegmenst a {{ config['PROJECT_SUBDIRS']['translated_splits'] }} mappában.</span>
+                    <span class="text-muted">{{ translate('files.legend_text', directory=config['PROJECT_SUBDIRS']['translated_splits']) }}</span>
                 </div>
                 <input type="file" id="projectFileUploadInput" class="d-none">
                 {% if project_tree %}
@@ -4931,24 +5057,23 @@
                         {{ render_file_tree(project_tree) }}
                     </div>
                 {% else %}
-                    <p class="mb-0">A projekt mappa üres.</p>
+                    <p class="mb-0">{{ translate('files.empty_project') }}</p>
                 {% endif %}
                 <hr class="my-4">
                 <div class="tts-operations border rounded-3 p-3 bg-body-tertiary">
                     <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
                         <div>
-                            <h6 class="mb-1">F5-TTS modellek kezelése</h6>
+                            <h6 class="mb-1">{{ translate('tts.section_title') }}</h6>
                             <p class="mb-2 small text-muted mb-lg-0">
-                                Itt tölthetsz fel F5-TTS modelleket a <code>{{ config['DIRECTORIES'].get('TTS', 'TTS') }}</code>
-                                könyvtár bármely almappájába, amit később használhatsz a TTS generáláshoz.
+                                {{ translate('tts.section_description', directory=config['DIRECTORIES'].get('TTS', 'TTS')) | safe }}
                             </p>
                         </div>
                     </div>
                     <div class="mt-3">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="small fw-semibold">TTS almappák</span>
+                            <span class="small fw-semibold">{{ translate('tts.subfolders_label') }}</span>
                             {% if tts_root_path %}
-                                <span class="small text-muted">Gyökér: {{ tts_root_path }}</span>
+                                <span class="small text-muted">{{ translate('tts.root_label', path=tts_root_path) }}</span>
                             {% endif %}
                         </div>
                         {% if tts_directories %}
@@ -4961,40 +5086,40 @@
                             </ul>
                         {% else %}
                             <div class="alert alert-secondary small mb-3">
-                                Nem találtunk almappát a TTS könyvtárban.
+                                {{ translate('tts.no_subfolders') }}
                             </div>
                         {% endif %}
                     </div>
                     <div class="row g-2 align-items-end mt-3">
                         <div class="col-lg-8">
-                            <label for="ttsUploadTargetInput" class="form-label mb-1">Cél almappa</label>
-                            <input type="text" class="form-control form-control-sm" id="ttsUploadTargetInput" placeholder="Pl.: F5-TTS_custom" required>
-                            <div class="form-text text-danger d-none" id="ttsUploadTargetError">A cél almappa megadása kötelező.</div>
-                            <div class="form-text">A megadott útvonal a TTS gyökérhez képest értendő (pl. <code>F5-TTS_custom</code>).</div>
+                            <label for="ttsUploadTargetInput" class="form-label mb-1">{{ translate('tts.target_label') }}</label>
+                            <input type="text" class="form-control form-control-sm" id="ttsUploadTargetInput" placeholder="{{ translate('tts.target_placeholder') }}" required>
+                            <div class="form-text text-danger d-none" id="ttsUploadTargetError">{{ translate('tts.target_error') }}</div>
+                            <div class="form-text">{{ translate('tts.target_help') | safe }}</div>
                         </div>
                     </div>
                     <div class="row g-2 align-items-end mt-1">
                         <div class="col-md-4">
-                            <label for="ttsUploadModelInput" class="form-label mb-1">Model fájl</label>
+                            <label for="ttsUploadModelInput" class="form-label mb-1">{{ translate('tts.model_label') }}</label>
                             <input type="file" class="form-control form-control-sm" id="ttsUploadModelInput">
                         </div>
                         <div class="col-md-4">
-                            <label for="ttsUploadVocabInput" class="form-label mb-1">vocab.txt</label>
+                            <label for="ttsUploadVocabInput" class="form-label mb-1">{{ translate('tts.vocab_label') }}</label>
                             <input type="file" class="form-control form-control-sm" id="ttsUploadVocabInput" accept=".txt,text/plain">
                         </div>
                         <div class="col-md-4">
-                            <label for="ttsUploadConfigInput" class="form-label mb-1">Konfiguráció (JSON)</label>
+                            <label for="ttsUploadConfigInput" class="form-label mb-1">{{ translate('tts.config_label') }}</label>
                             <input type="file" class="form-control form-control-sm" id="ttsUploadConfigInput" accept=".json,application/json">
                         </div>
                     </div>
                     <div class="row g-2 align-items-end mt-2">
                         <div class="col-lg-3 col-md-4">
                             <button type="button" class="btn btn-sm btn-success w-100" id="ttsUploadBtn">
-                                Model csomag feltöltése
+                                {{ translate('tts.upload_button') }}
                             </button>
                         </div>
                         <div class="col-lg-9 col-md-8">
-                            <div class="progress" role="progressbar" aria-label="F5-TTS feltöltés állapota">
+                            <div class="progress" role="progressbar" aria-label="{{ translate('tts.progress_aria') }}">
                                 <div class="progress-bar" id="ttsUploadProgressBar" style="width: 0%">0%</div>
                             </div>
                             <div class="small text-muted mt-1" id="ttsUploadProgressText"></div>
@@ -5006,9 +5131,9 @@
 
         <div class="d-flex justify-content-end gap-2 my-3">
             <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#projectHelpModal">
-                Súgó
+                {{ translate('help.button_label') }}
             </button>
-            <a href="/" class="btn btn-secondary">Vissza a főoldalra</a>
+            <a href="/" class="btn btn-secondary">{{ translate('header.back_to_home') }}</a>
         </div>
     </div>
 
@@ -5016,51 +5141,46 @@
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="projectHelpModalLabel">AI Dubbing projektoldal súgó</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title" id="projectHelpModalLabel">{{ translate('help.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <p class="mb-3">
-                        Ez az oldal a projekt teljes kezelését biztosítja: itt állíthatod össze és futtathatod a workflow-kat, követheted az állapotukat, és hozzáférsz a projektfájlokhoz.
+                        {{ translate('help.intro') }}
                     </p>
-                    <h6 class="fw-bold">Általános munkafolyamat</h6>
+                    <h6 class="fw-bold">{{ translate('help.general.title') }}</h6>
                     <ul class="mb-4">
-                        <li>Válaszd ki a futtatni kívánt lépéseket a moduláris workflow táblázatban.</li>
-                        <li>Töltsd ki a szükséges paramétereket a lépsekhez kapcsolódó űrlapokon.</li>
-                        <li>Használd a futtatási vezérlőket a folyamat indításához, megállításához vagy folytatásához.</li>
-                        <li>Ellenőrizd a naplókat és az állapotjelzőket, hogy nyomon kövesd a végrehajtást.</li>
+                        {% for item in translate('help.general.items') %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Widgetek részletes leírása</h6>
+                    <h6 class="fw-bold">{{ translate('help.widgets.title') }}</h6>
                     <ul class="mb-4">
-                        <li>
-                            <strong>Review + Continue</strong>: Megállítja a futást egy ellenőrzési pontnál, ahol áttekintheted a korábbi lépéseket, módosíthatod a paramétereket, majd a megfelelő gombbal folytathatod vagy újrafuttathatod a workflow-t. A widget folyamata addig szünetel, amíg döntést nem hozol.
-                        </li>
-                        <li>
-                            <strong>Ciklus</strong>: Ismétlődő futtatást tesz lehetővé. A beállított ismétlésszám szerint egymás után újra lefuttatja az előtte szereplő, engedélyezett szkripteket. A "Visszalépés lépéseinek száma" értékkel adhatod meg, hány korábbi futtatható lépést építsen vissza a ciklusba. Ideális olyan feladatoknál, ahol többször kell azonos előkészítést vagy feldolgozást végezni.
-                        </li>
+                        {% for item in translate('help.widgets.items') %}
+                        <li>{{ item | safe }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Workflow szekció</h6>
+                    <h6 class="fw-bold">{{ translate('help.workflow.title') }}</h6>
                     <ul class="mb-4">
-                        <li>A badge jelzi, fut-e aktív feladat; a segítő szöveg összegzi az aktuális teendőt.</li>
-                        <li>A sablonválasztóval betöltheted mentett workflow-kat, a gombokkal pedig elmentheted vagy visszaállíthatod az alapértelmezett lépéslistát.</li>
-                        <li>A táblázatban kapcsolhatod az egyes lépéseket, megadhatod az execution környezetet és dönthetsz arról, mi történjen hiba esetén.</li>
-                        <li>A táblázat melletti vezérlők indítják, leállítják vagy folytatják a futtatást, továbbá itt érhetők el a napló- és státusznézetek.</li>
-                        <li>A workflow paraméterpanelen megjelenő figyelmeztetések segítenek a kötelező mezők kitöltésében.</li>
+                        {% for item in translate('help.workflow.items') %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Projektfájlok</h6>
+                    <h6 class="fw-bold">{{ translate('help.files.title') }}</h6>
                     <ul class="mb-4">
-                        <li>A fájlkezelő a projekt könyvtárának teljes struktúráját mutatja, a kijelzett jelölések pedig a fordított szegmenseket emelik ki.</li>
-                        <li>Az eszköztárból tölthetsz fel új fájlokat a gyökérbe, illetve frissítheted a listát a háttérben végzett módosítások után.</li>
-                        <li>Az egyes elemeknél gyorsműveletek érhetők el: megnyitás új lapon, törlés vagy – ahol elérhető – áthelyezés a fordított tartományba.</li>
+                        {% for item in translate('help.files.items') %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
                     </ul>
-                    <h6 class="fw-bold">Előnézeti és segédablakok</h6>
+                    <h6 class="fw-bold">{{ translate('help.previews.title') }}</h6>
                     <ul class="mb-0">
-                        <li>Az audió, videó és JSON előnézetek külön modális ablakban jelennek meg, ahol a trim funkciókkal testre szabhatod a fájlokat vagy áttekintheted a tartalmat.</li>
-                        <li>A workflow mentésekor, API kulcsok megadásakor vagy paraméterek összeállításakor modális felület segít a strukturált adatbevitelben.</li>
+                        {% for item in translate('help.previews.items') %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.close') }}</button>
                 </div>
             </div>
         </div>
@@ -5071,33 +5191,33 @@
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="audioPreviewTitle">Audió szerkesztése</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title" id="audioPreviewTitle">{{ translate('audio_modal.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <div class="audio-waveform mb-3">
                         <div id="audioWaveform"></div>
-                        <div id="audioWaveformLoading" class="waveform-loading-overlay d-none">Betöltés...</div>
+                        <div id="audioWaveformLoading" class="waveform-loading-overlay d-none">{{ translate('audio_modal.loading') }}</div>
                     </div>
                     <div class="small text-muted">
-                        Húzd az egeret a hullámformán a kijelöléshez, vagy állítsd a csúszkákkal a kezdő és záró pontot.
+                        {{ translate('audio_modal.instructions') }}
                     </div>
                     <div class="audio-trim-info d-flex flex-wrap align-items-center gap-3 mt-3">
-                        <div>Kezdet: <span id="trimStartDisplay">—</span></div>
-                        <div>Vége: <span id="trimEndDisplay">—</span></div>
-                        <div>Hossz: <span id="trimDurationDisplay">—</span></div>
+                        <div>{{ translate('audio_modal.start_label') }} <span id="trimStartDisplay">—</span></div>
+                        <div>{{ translate('audio_modal.end_label') }} <span id="trimEndDisplay">—</span></div>
+                        <div>{{ translate('audio_modal.duration_label') }} <span id="trimDurationDisplay">—</span></div>
                     </div>
                     <div class="mt-3">
-                        <label for="trimStartRange" class="form-label mb-1">Kezdőpont</label>
+                        <label for="trimStartRange" class="form-label mb-1">{{ translate('audio_modal.start_slider') }}</label>
                         <input type="range" class="form-range" id="trimStartRange" min="0" max="0" step="0.01" value="0" disabled>
                     </div>
                     <div class="mt-3">
-                        <label for="trimEndRange" class="form-label mb-1">Végpont</label>
+                        <label for="trimEndRange" class="form-label mb-1">{{ translate('audio_modal.end_slider') }}</label>
                         <input type="range" class="form-range" id="trimEndRange" min="0" max="0" step="0.01" value="0" disabled>
                     </div>
                     <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="trimResetSelectionBtn" disabled>Teljes fájl kijelölése</button>
-                        <span class="small text-muted">Mentéskor az eredeti fájl felülíródik.</span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="trimResetSelectionBtn" disabled>{{ translate('audio_modal.reset_selection') }}</button>
+                        <span class="small text-muted">{{ translate('audio_modal.reset_hint') }}</span>
                     </div>
                     <div class="alert alert-danger py-2 px-3 small mt-3 d-none" id="trimErrorAlert"></div>
                 </div>
@@ -5106,8 +5226,8 @@
                         <div class="spinner-border spinner-border-sm text-primary d-none" role="status" id="trimSaveSpinner"></div>
                         <span class="small text-muted" id="trimStatusText"></span>
                     </div>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bezárás</button>
-                    <button type="button" class="btn btn-primary" id="trimSaveBtn" disabled>Mentés</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.close') }}</button>
+                    <button type="button" class="btn btn-primary" id="trimSaveBtn" disabled>{{ translate('buttons.save') }}</button>
                 </div>
             </div>
         </div>
@@ -5117,8 +5237,8 @@
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="videoPreviewTitle">Videó lejátszása</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title" id="videoPreviewTitle">{{ translate('video_modal.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <video id="videoPreviewPlayer" class="w-100" controls preload="metadata" playsinline style="max-height: 70vh;"></video>
@@ -5131,8 +5251,8 @@
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="jsonPreviewTitle">Fájl előnézete</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title" id="jsonPreviewTitle">{{ translate('json_modal.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <pre id="jsonPreviewContent" class="json-preview"></pre>
@@ -5146,28 +5266,28 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Workflow sablon mentése</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title">{{ translate('workflow.modals.template_save.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <div id="workflowSaveError" class="alert alert-danger small d-none"></div>
                     <div class="mb-3">
-                        <label for="workflowSaveName" class="form-label">Sablon neve</label>
-                        <input type="text" class="form-control" id="workflowSaveName" placeholder="Pl. Alap beállítások">
+                        <label for="workflowSaveName" class="form-label">{{ translate('workflow.modals.template_save.name_label') }}</label>
+                        <input type="text" class="form-control" id="workflowSaveName" placeholder="{{ translate('workflow.modals.template_save.name_placeholder') }}">
                     </div>
                     <div class="mb-3">
-                        <label for="workflowSaveDescription" class="form-label">Leírás (opcionális)</label>
-                        <textarea class="form-control" id="workflowSaveDescription" rows="2" placeholder="Rövid megjegyzés a sablonhoz"></textarea>
+                        <label for="workflowSaveDescription" class="form-label">{{ translate('workflow.modals.template_save.description_label') }}</label>
+                        <textarea class="form-control" id="workflowSaveDescription" rows="2" placeholder="{{ translate('workflow.modals.template_save.description_placeholder') }}"></textarea>
                     </div>
                     <div class="form-check mb-2">
                         <input type="checkbox" class="form-check-input" id="workflowSaveOverwrite">
-                        <label class="form-check-label" for="workflowSaveOverwrite">Aktuális sablon felülírása</label>
+                        <label class="form-check-label" for="workflowSaveOverwrite">{{ translate('workflow.modals.template_save.overwrite_label') }}</label>
                     </div>
                     <div class="small text-muted d-none" id="workflowSaveOverwriteInfo"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
-                    <button type="button" class="btn btn-primary" id="workflowSaveConfirmBtn">Mentés</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.cancel') }}</button>
+                    <button type="button" class="btn btn-primary" id="workflowSaveConfirmBtn">{{ translate('buttons.save') }}</button>
                 </div>
             </div>
         </div>
@@ -5178,36 +5298,37 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">API kulcsok megadása</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <h5 class="modal-title">{{ translate('workflow.modals.api_keys.title') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-warning small" id="workflowKeysInfo">
-                        A workflow indításához add meg a hiányzó API kulcsokat.
+                        {{ translate('workflow.modals.api_keys.instructions') }}
                     </div>
                     <div class="mb-3 d-none" id="workflowKeyFieldChatgpt">
-                        <label for="workflowKeyChatgpt" class="form-label">OpenAI / ChatGPT API kulcs</label>
-                        <input type="password" class="form-control" id="workflowKeyChatgpt" placeholder="sk-..." autocomplete="off">
+                        <label for="workflowKeyChatgpt" class="form-label">{{ translate('workflow.modals.api_keys.labels.chatgpt') }}</label>
+                        <input type="password" class="form-control" id="workflowKeyChatgpt" placeholder="{{ translate('workflow.modals.api_keys.placeholders.chatgpt') }}" autocomplete="off">
                     </div>
                     <div class="mb-3 d-none" id="workflowKeyFieldDeepl">
-                        <label for="workflowKeyDeepl" class="form-label">DeepL API kulcs</label>
-                        <input type="password" class="form-control" id="workflowKeyDeepl" placeholder="DeepL API kulcs" autocomplete="off">
+                        <label for="workflowKeyDeepl" class="form-label">{{ translate('workflow.modals.api_keys.labels.deepl') }}</label>
+                        <input type="password" class="form-control" id="workflowKeyDeepl" placeholder="{{ translate('workflow.modals.api_keys.placeholders.deepl') }}" autocomplete="off">
                     </div>
                     <div class="mb-3 d-none" id="workflowKeyFieldHuggingface">
-                        <label for="workflowKeyHuggingface" class="form-label">Hugging Face token</label>
-                        <input type="password" class="form-control" id="workflowKeyHuggingface" placeholder="hf_..." autocomplete="off">
+                        <label for="workflowKeyHuggingface" class="form-label">{{ translate('workflow.modals.api_keys.labels.huggingface') }}</label>
+                        <input type="password" class="form-control" id="workflowKeyHuggingface" placeholder="{{ translate('workflow.modals.api_keys.placeholders.huggingface') }}" autocomplete="off">
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ translate('buttons.cancel') }}</button>
                     <button type="button" class="btn btn-primary d-flex align-items-center gap-2" id="workflowKeysSubmitBtn">
                         <span class="spinner-border spinner-border-sm d-none" id="workflowKeysSpinner" role="status" aria-hidden="true"></span>
-                        <span id="workflowKeysSubmitLabel">Mentés és indítás</span>
+                        <span id="workflowKeysSubmitLabel">{{ translate('buttons.save_and_start') }}</span>
                     </button>
                 </div>
             </div>
         </div>
     </div>
+
 
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 </body>

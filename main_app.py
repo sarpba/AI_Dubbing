@@ -6,7 +6,8 @@ from flask import (
     send_from_directory,
     url_for,
     send_file,
-    after_this_request
+    after_this_request,
+    make_response
 )
 import os
 import json
@@ -53,6 +54,11 @@ AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac'}
 VIDEO_EXTENSIONS = {
     '.mp4', '.mkv', '.avi', '.mov', '.webm', '.wmv', '.flv', '.mts', '.m2ts', '.mpg', '.mpeg'
 }
+
+DEFAULT_UI_LANGUAGE = 'hun'
+UI_LANGUAGE_COOKIE = 'ui_language'
+language_cache_lock = threading.Lock()
+language_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
 
 def derive_project_prefix(name: str) -> str:
@@ -1717,6 +1723,212 @@ def persist_config(updated_config):
             json.dump(config, config_file, indent=2, ensure_ascii=False)
         CONFIG_MTIME = CONFIG_FILE_PATH.stat().st_mtime
 
+
+def _normalize_language_code(code: Optional[str]) -> Optional[str]:
+    if not code:
+        return None
+    normalized = str(code).strip().lower()
+    return normalized or None
+
+
+def get_languages_root_directory() -> Path:
+    directories = {}
+    try:
+        directories = config.get('DIRECTORIES') if isinstance(config, dict) else {}
+    except NameError:
+        directories = {}
+    languages_rel_path = (directories or {}).get('languages', 'languages')
+    return Path(app.root_path) / languages_rel_path
+
+
+def list_language_directories() -> List[str]:
+    languages_root = get_languages_root_directory()
+    if not languages_root.is_dir():
+        return []
+    return sorted(
+        entry.name
+        for entry in languages_root.iterdir()
+        if entry.is_dir()
+    )
+
+
+def load_language_payload(lang_code: Optional[str], file_name: str = 'index') -> Optional[Dict[str, Any]]:
+    normalized_code = _normalize_language_code(lang_code)
+    if not normalized_code:
+        return None
+
+    languages_root = get_languages_root_directory()
+    lang_file = languages_root / normalized_code / f'{file_name}.json'
+    if not lang_file.is_file():
+        return None
+
+    file_mtime = lang_file.stat().st_mtime
+    cache_key = (normalized_code, file_name)
+    with language_cache_lock:
+        cached = language_cache.get(cache_key)
+        if cached and cached.get('mtime') == file_mtime:
+            return cached.get('data')
+
+    try:
+        with lang_file.open('r', encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logging.warning("Nem sikerült beolvasni a(z) %s nyelvi fájlt: %s", lang_file, exc)
+        return None
+
+    with language_cache_lock:
+        language_cache[cache_key] = {
+            'mtime': file_mtime,
+            'data': payload
+        }
+
+    return payload
+
+
+def get_language_strings(lang_code: Optional[str], file_name: str = 'index') -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    payload = load_language_payload(lang_code, file_name=file_name)
+    if not isinstance(payload, dict):
+        return {}, {}
+
+    strings = payload.get('strings')
+    if not isinstance(strings, dict):
+        strings = {key: value for key, value in payload.items() if key != 'meta'}
+
+    meta = payload.get('meta')
+    if not isinstance(meta, dict):
+        meta = {}
+
+    return strings, meta
+
+
+def list_language_options() -> List[Dict[str, str]]:
+    options: List[Dict[str, str]] = []
+    for code in list_language_directories():
+        payload = load_language_payload(code, file_name='index')
+        meta = payload.get('meta') if isinstance(payload, dict) else {}
+        label = None
+        if isinstance(meta, dict):
+            label = meta.get('label') or meta.get('name') or meta.get('native_label')
+        options.append({
+            'code': code,
+            'label': label or code.upper()
+        })
+    return options
+
+
+def build_translation_helper(strings: Optional[Dict[str, Any]]):
+    safe_strings = strings or {}
+
+    def translate(key: str, default: Optional[str] = None, **kwargs):
+        value: Any = safe_strings
+        for part in key.split('.'):
+            if isinstance(value, dict):
+                value = value.get(part)
+            else:
+                value = None
+                break
+
+        if value is None:
+            value = default if default is not None else key
+
+        if isinstance(value, str) and kwargs:
+            try:
+                value = value.format(**kwargs)
+            except KeyError:
+                pass
+        return value
+
+    return translate
+
+
+def resolve_language_context(preferred_code: Optional[str], file_name: str = 'index') -> Dict[str, Any]:
+    available_codes = list_language_directories()
+    normalized_preference = _normalize_language_code(preferred_code)
+    requested_code = normalized_preference if normalized_preference in available_codes else None
+
+    strings: Dict[str, Any] = {}
+    meta: Dict[str, Any] = {}
+    resolved_code: Optional[str] = None
+
+    if requested_code:
+        candidate_strings, candidate_meta = get_language_strings(requested_code, file_name=file_name)
+        if candidate_strings:
+            strings = candidate_strings
+            meta = candidate_meta
+            resolved_code = requested_code
+
+    if not resolved_code:
+        fallback_priority: List[str] = []
+        if DEFAULT_UI_LANGUAGE in available_codes:
+            fallback_priority.append(DEFAULT_UI_LANGUAGE)
+        fallback_priority.extend(code for code in available_codes if code not in fallback_priority)
+        if requested_code and requested_code not in fallback_priority:
+            fallback_priority.append(requested_code)
+
+        for candidate in fallback_priority:
+            candidate_strings, candidate_meta = get_language_strings(candidate, file_name=file_name)
+            if candidate_strings:
+                strings = candidate_strings
+                meta = candidate_meta
+                resolved_code = candidate
+                break
+
+    if not strings:
+        strings = {}
+    if not meta:
+        meta = {}
+    if not resolved_code:
+        resolved_code = requested_code or DEFAULT_UI_LANGUAGE
+
+    return {
+        'requested': requested_code,
+        'resolved': resolved_code,
+        'strings': strings,
+        'meta': meta
+    }
+
+
+def render_with_language(template_name: str, *, file_name: str = 'index', **context):
+    preferred_language = request.args.get('lang') or request.cookies.get(UI_LANGUAGE_COOKIE)
+    language_context = resolve_language_context(preferred_language, file_name=file_name)
+    translation_helper = build_translation_helper(language_context.get('strings'))
+    language_options = list_language_options()
+
+    active_language_code = (
+        language_context.get('requested')
+        or language_context.get('resolved')
+        or DEFAULT_UI_LANGUAGE
+    )
+    resolved_language_code = language_context.get('resolved') or DEFAULT_UI_LANGUAGE
+    language_meta = language_context.get('meta') or {}
+    html_lang = language_meta.get('html_lang') or language_meta.get('code') or resolved_language_code
+
+    context.update({
+        'translations': language_context.get('strings') or {},
+        'translate': translation_helper,
+        'language_options': language_options,
+        'active_language': active_language_code,
+        'resolved_language': resolved_language_code,
+        'language_meta': language_meta,
+        'html_lang': html_lang
+    })
+
+    response = make_response(render_template(template_name, **context))
+    cookie_value = request.cookies.get(UI_LANGUAGE_COOKIE)
+    should_update_cookie = (
+        active_language_code
+        and active_language_code != cookie_value
+        and (request.args.get('lang') or not cookie_value)
+    )
+    if should_update_cookie:
+        response.set_cookie(
+            UI_LANGUAGE_COOKIE,
+            active_language_code,
+            max_age=60 * 60 * 24 * 365,
+            samesite='Lax'
+        )
+    return response
+
 def update_workflow_job(job_id, **kwargs):
     with workflow_lock:
         if 'workflow' in kwargs:
@@ -2017,7 +2229,12 @@ def index():
             key=str.lower
         )
     project_entries = build_project_entries(projects)
-    return render_template('index.html', projects=projects, project_entries=project_entries)
+    return render_with_language(
+        'index.html',
+        file_name='index',
+        projects=projects,
+        project_entries=project_entries
+    )
 
 
 @app.route('/api/project/<project_name>', methods=['DELETE'])
@@ -2056,7 +2273,7 @@ def delete_project(project_name):
 
 @app.route('/template-editor')
 def template_editor():
-    return render_template('template_editor.html')
+    return render_with_language('template_editor.html', file_name='template_editor')
 
 @app.route('/project/<project_name>')
 def show_project(project_name):
@@ -2209,20 +2426,23 @@ def show_project(project_name):
         except OSError as exc:
             logging.warning("Nem sikerült beolvasni a TTS könyvtárat: %s", exc)
 
-    return render_template('project.html', 
-                         project=project_data,
-                         project_tree=build_directory_tree(project_dir),
-                         config=config,
-                         tts_root_path=tts_root_abs,
-                         tts_directories=tts_directories,
-                         audio_extensions=AUDIO_EXTENSIONS,
-                         video_extensions=VIDEO_EXTENSIONS,
-                         audio_mime_map=AUDIO_MIME_MAP,
-                         video_mime_map=VIDEO_MIME_MAP,
-                         can_review=can_review,
-                         has_transcribable_audio=has_transcribable_audio,
-                         has_failed_generation_highlights=bool(highlight_map),
-                         secret_param_names=sorted(SECRET_PARAM_NAMES))
+    return render_with_language(
+        'project.html',
+        file_name='project',
+        project=project_data,
+        project_tree=build_directory_tree(project_dir),
+        config=config,
+        tts_root_path=tts_root_abs,
+        tts_directories=tts_directories,
+        audio_extensions=AUDIO_EXTENSIONS,
+        video_extensions=VIDEO_EXTENSIONS,
+        audio_mime_map=AUDIO_MIME_MAP,
+        video_mime_map=VIDEO_MIME_MAP,
+        can_review=can_review,
+        has_transcribable_audio=has_transcribable_audio,
+        has_failed_generation_highlights=bool(highlight_map),
+        secret_param_names=sorted(SECRET_PARAM_NAMES)
+    )
 
 
 @app.route('/api/project-tree/<project_name>', methods=['GET'])
@@ -3005,13 +3225,16 @@ def review_project(project_name):
     if audio_file_name:
         audio_url = url_for('serve_workdir', filename=f"{secure_filename(project_name)}/{config['PROJECT_SUBDIRS']['separated_audio_speech']}/{audio_file_name}")
 
-    return render_template('review.html', 
-                           project_name=project_name, 
-                           audio_file_name=audio_file_name,
-                           audio_url=audio_url,
-                           segments_data=segments_data,
-                           json_file_name=json_file_name,
-                           app_config=config)  # Átadjuk a konfigurációt app_config néven
+    return render_with_language(
+        'review.html',
+        file_name='review',
+        project_name=project_name,
+        audio_file_name=audio_file_name,
+        audio_url=audio_url,
+        segments_data=segments_data,
+        json_file_name=json_file_name,
+        app_config=config  # Átadjuk a konfigurációt app_config néven
+    )
 
 @app.route('/api/restore-project', methods=['POST'])
 def restore_project_backup():

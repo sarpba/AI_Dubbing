@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="hu" data-bs-theme="auto">
+<html lang="{{ html_lang }}" data-bs-theme="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Színsablon szerkesztő | AI Dubbing</title>
+    <title>{{ translate('document.title') }}</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style id="themeVariables"></style>
@@ -61,7 +61,17 @@
 </head>
 <body>
     <div class="theme-controls">
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Téma váltása">
+        {% if language_options %}
+        <div class="language-selector">
+            <label for="languageSelect" class="visually-hidden">{{ translate('general.language_selector_label') }}</label>
+            <select id="languageSelect" class="form-select form-select-sm" aria-label="{{ translate('general.language_selector_aria') }}">
+                {% for option in language_options %}
+                <option value="{{ option.code }}" {% if option.code == active_language %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="{{ translate('general.theme_toggle_aria') }}">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
             </svg>
@@ -71,13 +81,13 @@
     <div class="container mt-4 theme-editor">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
             <div>
-                <h1 class="mb-1">Színsablon szerkesztő</h1>
-                <p class="text-muted mb-0">Állítsd be külön a világos és a sötét téma színeit, majd mentsd a változtatásokat.</p>
+                <h1 class="mb-1">{{ translate('hero.heading') }}</h1>
+                <p class="text-muted mb-0">{{ translate('hero.description') }}</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Vissza a főoldalra</a>
-                <button type="button" class="btn btn-outline-primary" id="restoreSavedBtn">Mentett értékek visszatöltése</button>
-                <button type="button" class="btn btn-outline-danger" id="restoreDefaultBtn">Alapértelmezett színek</button>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">{{ translate('hero.back_button') }}</a>
+                <button type="button" class="btn btn-outline-primary" id="restoreSavedBtn">{{ translate('hero.restore_saved') }}</button>
+                <button type="button" class="btn btn-outline-danger" id="restoreDefaultBtn">{{ translate('hero.restore_default') }}</button>
             </div>
         </div>
 
@@ -95,22 +105,22 @@
             'timeline-segment-bg'
         ] %}
         {% set color_labels = {
-            'primary-color': 'Elsődleges kiemelőszín',
-            'secondary-color': 'Másodlagos kiemelőszín',
-            'success-color': 'Siker szín (pozitív állapotok)',
-            'background-color': 'Alap háttérszín',
-            'text-color': 'Alap szövegszín',
-            'card-bg': 'Kártyák háttérszíne',
-            'border-color': 'Alap keretszín',
-            'waveform-bg': 'Hullámforma háttér',
-            'timeline-segment-bg': 'Idővonal szegmensek'
+            'primary-color': translate('colors.labels.primary'),
+            'secondary-color': translate('colors.labels.secondary'),
+            'success-color': translate('colors.labels.success'),
+            'background-color': translate('colors.labels.background'),
+            'text-color': translate('colors.labels.text'),
+            'card-bg': translate('colors.labels.card'),
+            'border-color': translate('colors.labels.border'),
+            'waveform-bg': translate('colors.labels.waveform'),
+            'timeline-segment-bg': translate('colors.labels.timeline')
         } %}
 
         <form id="themeEditorForm" class="row g-4">
             <div class="col-12 col-lg-6">
                 <div class="card theme-editor-card h-100">
                     <div class="card-header">
-                        <h2 class="h5 mb-0">Világos mód</h2>
+                        <h2 class="h5 mb-0">{{ translate('panels.light_mode') }}</h2>
                     </div>
                     <div class="card-body">
                         {% for key in color_order %}
@@ -128,7 +138,7 @@
                                     data-key="{{ key }}"
                                 >
                             </div>
-                            <div class="form-text">Alapértelmezett: <code>{{ default_theme_colors.light[key] }}</code></div>
+                            <div class="form-text">{{ translate('form.default_prefix') }} <code>{{ default_theme_colors.light[key] }}</code></div>
                         </div>
                         {% endfor %}
                     </div>
@@ -137,7 +147,7 @@
             <div class="col-12 col-lg-6">
                 <div class="card theme-editor-card h-100">
                     <div class="card-header">
-                        <h2 class="h5 mb-0">Sötét mód</h2>
+                        <h2 class="h5 mb-0">{{ translate('panels.dark_mode') }}</h2>
                     </div>
                     <div class="card-body">
                         {% for key in color_order %}
@@ -155,7 +165,7 @@
                                     data-key="{{ key }}"
                                 >
                             </div>
-                            <div class="form-text">Alapértelmezett: <code>{{ default_theme_colors.dark[key] }}</code></div>
+                            <div class="form-text">{{ translate('form.default_prefix') }} <code>{{ default_theme_colors.dark[key] }}</code></div>
                         </div>
                         {% endfor %}
                     </div>
@@ -165,15 +175,58 @@
                 <div class="card">
                     <div class="card-body d-flex flex-column flex-md-row justify-content-md-between align-items-md-center gap-3">
                         <div class="text-muted small">
-                            Mentés után a beállítások azonnal érvénybe lépnek minden oldalon.
+                            {{ translate('form.notice') }}
                         </div>
-                        <button type="submit" class="btn btn-success btn-lg px-4">Változtatások mentése</button>
+                        <button type="submit" class="btn btn-success btn-lg px-4">{{ translate('form.submit') }}</button>
                     </div>
                 </div>
             </div>
         </form>
     </div>
 
+    <script id="ui-translations-data" type="application/json">{{ translations | tojson }}</script>
+    <script>
+        (function() {
+            const dataElement = document.getElementById('ui-translations-data');
+            let dictionary = {};
+            if (dataElement) {
+                try {
+                    dictionary = JSON.parse(dataElement.textContent || '{}') || {};
+                } catch (error) {
+                    console.warn('Failed to parse UI translations:', error);
+                }
+            }
+
+            function resolveKey(key) {
+                if (!key) {
+                    return undefined;
+                }
+                return key.split('.').reduce((acc, part) => {
+                    if (acc && typeof acc === 'object' && part in acc) {
+                        return acc[part];
+                    }
+                    return undefined;
+                }, dictionary);
+            }
+
+            window.translateText = function(key, replacements = {}, fallback) {
+                const template = resolveKey(key);
+                if (typeof template !== 'string') {
+                    return typeof fallback === 'string' ? fallback : key;
+                }
+                return template.replace(/\{(\w+)\}/g, (match, token) => {
+                    if (Object.prototype.hasOwnProperty.call(replacements, token)) {
+                        return replacements[token];
+                    }
+                    return match;
+                });
+            };
+
+            window.getUiTranslations = function() {
+                return dictionary;
+            };
+        })();
+    </script>
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -184,6 +237,23 @@
             const restoreSavedBtn = document.getElementById('restoreSavedBtn');
             const restoreDefaultBtn = document.getElementById('restoreDefaultBtn');
             const apiUrl = "{{ url_for('theme_colors_api') }}";
+            const languageSelect = document.getElementById('languageSelect');
+            const t = typeof window.translateText === 'function'
+                ? window.translateText
+                : (key, replacements = {}, fallback) => (fallback || key);
+
+            if (languageSelect) {
+                languageSelect.addEventListener('change', event => {
+                    const selected = event.target.value;
+                    const targetUrl = new URL(window.location.href);
+                    if (selected) {
+                        targetUrl.searchParams.set('lang', selected);
+                    } else {
+                        targetUrl.searchParams.delete('lang');
+                    }
+                    window.location.assign(targetUrl.toString());
+                });
+            }
 
             function emptyColors() {
                 return { light: {}, dark: {} };
@@ -217,7 +287,7 @@
                     const parsed = JSON.parse(holder.textContent || '{}');
                     return normalizeColors(parsed);
                 } catch (error) {
-                    console.warn('Nem sikerült beolvasni a színeket a következő elemről:', scriptId, error);
+                    console.warn(t('errors.parse_colors'), scriptId, error);
                     return emptyColors();
                 }
             }
@@ -306,14 +376,14 @@
                     const response = await fetch(apiUrl);
                     const result = await response.json();
                     if (!response.ok || !result.success) {
-                        throw new Error(result.error || 'Nem sikerült betölteni a mentett színeket.');
+                        throw new Error(result.error || t('errors.load_failed'));
                     }
                     lastSavedColors = cloneColors(result.colors);
                     applyColors(result.colors);
                     clearStatus();
                 } catch (error) {
                     applyColors(initialColors);
-                    showStatus(error.message || 'Nem sikerült betölteni a mentett színeket. Az induló értékek maradnak érvényben.', 'warning');
+                    showStatus(error.message || t('messages.load_failed_fallback'), 'warning');
                 }
             }
 
@@ -338,24 +408,24 @@
                     });
                     const result = await response.json();
                     if (!response.ok || !result.success) {
-                        throw new Error(result.error || 'Nem sikerült elmenteni a témaszíneket.');
+                        throw new Error(result.error || t('errors.save_failed'));
                     }
                     lastSavedColors = cloneColors(result.colors);
                     applyColors(result.colors);
-                    showStatus('Sikeres mentés! Az új színek már érvényben vannak.', 'success');
+                    showStatus(t('messages.save_success'), 'success');
                 } catch (error) {
-                    showStatus(error.message || 'Nem sikerült elmenteni a témaszíneket.', 'danger');
+                    showStatus(error.message || t('errors.save_failed'), 'danger');
                 }
             });
 
             restoreSavedBtn.addEventListener('click', () => {
                 applyColors(lastSavedColors);
-                showStatus('Visszatöltve a legutóbb mentett értékek.', 'info');
+                showStatus(t('messages.restore_saved'), 'info');
             });
 
             restoreDefaultBtn.addEventListener('click', () => {
                 applyColors(defaultColors);
-                showStatus('Alapértelmezett színek visszaállítva. Mentsd a változtatásokat a véglegesítéshez.', 'info');
+                showStatus(t('messages.restore_default'), 'info');
             });
 
             applyColors(initialColors);

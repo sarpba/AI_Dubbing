@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="hu" data-bs-theme="auto">
+<html lang="{{ html_lang }}" data-bs-theme="auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Dubbing Szerkesztő</title>
+    <title>{{ translate('document.title') }}</title>
     <link href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
@@ -23,7 +23,7 @@
             try {
                 themeConfig = JSON.parse(configEl.textContent) || null;
             } catch (error) {
-                console.warn('Téma konfiguráció beolvasása sikertelen:', error);
+                console.warn('Failed to parse theme configuration:', error);
                 return;
             }
 
@@ -100,12 +100,22 @@
 </head>
 <body>
     <div class="theme-controls">
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Téma váltása">
+        {% if language_options %}
+        <div class="language-selector">
+            <label for="languageSelect" class="visually-hidden">{{ translate('general.language_selector_label') }}</label>
+            <select id="languageSelect" class="form-select form-select-sm" aria-label="{{ translate('general.language_selector_aria') }}">
+                {% for option in language_options %}
+                <option value="{{ option.code }}" {% if option.code == active_language %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="{{ translate('general.theme_toggle_aria') }}">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
             <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/>
         </svg>
         </button>
-        <a class="theme-editor-button" href="{{ url_for('template_editor') }}" aria-label="Sablonszínek szerkesztése">
+        <a class="theme-editor-button" href="{{ url_for('template_editor') }}" aria-label="{{ translate('general.theme_editor_aria') }}">
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 0a5.53 5.53 0 0 0-5.5 5.5c0 1.23.507 2.557 1.377 3.566a.5.5 0 0 1 .123.332l-.067 1.297a.75.75 0 0 0 1.086.707l1.216-.608a.75.75 0 0 1 .335-.08h1.43A5.53 5.53 0 0 0 13.5 5.5 5.53 5.53 0 0 0 8 0Zm0 1a4.53 4.53 0 0 1 4.5 4.5A4.53 4.53 0 0 1 8 10H6.57a1.75 1.75 0 0 0-.782.186l-1.217.609.068-1.298a1.5 1.5 0 0 0-.369-.996A4.53 4.53 0 0 1 3.5 5.5 4.53 4.53 0 0 1 8 1Z"/>
                 <path d="M10.5 5.5a.5.5 0 0 1-.5.5h-.5v.5a.5.5 0 0 1-1 0V6H8a.5.5 0 0 1 0-1h.5v-.5a.5.5 0 0 1 1 0V5h.5a.5.5 0 0 1 .5.5Z"/>
@@ -114,17 +124,17 @@
     </div>
 
     <div class="container mt-4">
-        <h1 class="mb-4">AI Dubbing Szerkesztő</h1>
+        <h1 class="mb-4">{{ translate('general.app_heading') }}</h1>
 
         <div class="row">
             <div class="col-md-6">
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Videó feltöltése</h5>
+                        <h5 class="mb-0">{{ translate('cards.upload_title') }}</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-4">
-                            <h5>Meglévő projektek</h5>
+                            <h5>{{ translate('cards.existing_projects_title') }}</h5>
                             {% if project_entries %}
                                 <div class="list-group mb-3">
                                     {% for entry in project_entries %}
@@ -150,8 +160,8 @@
                                                             <button type="button"
                                                                 class="btn btn-outline-danger btn-sm project-delete-btn"
                                                                 data-project-name="{{ project }}"
-                                                                aria-label="{{ project }} projekt törlése">
-                                                                Törlés
+                                                                aria-label="{{ translate('projects.delete_aria', project=project) }}">
+                                                                {{ translate('projects.delete_button') }}
                                                             </button>
                                                         </div>
                                                     {% endfor %}
@@ -165,72 +175,72 @@
                                                 <button type="button"
                                                     class="btn btn-outline-danger btn-sm project-delete-btn"
                                                     data-project-name="{{ entry.name }}"
-                                                    aria-label="{{ entry.name }} projekt törlése">
-                                                    Törlés
+                                                    aria-label="{{ translate('projects.delete_aria', project=entry.name) }}">
+                                                    {{ translate('projects.delete_button') }}
                                                 </button>
                                             </div>
                                         {% endif %}
                                     {% endfor %}
                                 </div>
                             {% else %}
-                                <p class="text-muted mb-3">Nincsenek projektek</p>
+                                <p class="text-muted mb-3">{{ translate('projects.empty_state') }}</p>
                             {% endif %}
                         </div>
 
                         <div id="newProjectForm">
-                            <h5>Új projekt létrehozása</h5>
+                            <h5>{{ translate('new_project.title') }}</h5>
                             <form id="uploadForm" enctype="multipart/form-data" novalidate>
                                 <div class="mb-3">
-                                    <label for="projectName" class="form-label">Projektnév</label>
+                                    <label for="projectName" class="form-label">{{ translate('new_project.name_label') }}</label>
                                     <input type="text" class="form-control" id="projectName" name="projectName" required>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label d-block">Forrás típusa</label>
+                                    <label class="form-label d-block">{{ translate('new_project.source_type_label') }}</label>
                                     <input type="hidden" id="sourceTypeInput" name="sourceType" value="upload">
                                     <div class="nav nav-tabs nav-fill" id="sourceTypeTabs" role="tablist">
                                         <button type="button" class="nav-link active source-type-tab" id="sourceTypeUploadTab" data-source="upload" role="tab" aria-selected="true">
-                                            Videó fájl feltöltése
+                                            {{ translate('new_project.source_upload') }}
                                         </button>
                                         <button type="button" class="nav-link source-type-tab" id="sourceTypeYoutubeTab" data-source="youtube" role="tab" aria-selected="false">
-                                            YouTube letöltés (yt-dlp)
+                                            {{ translate('new_project.source_youtube') }}
                                         </button>
                                         <button type="button" class="nav-link source-type-tab" id="sourceTypeRestoreTab" data-source="restore" role="tab" aria-selected="false">
-                                            Mentés visszaállítása
+                                            {{ translate('new_project.source_restore') }}
                                         </button>
                                     </div>
                                 </div>
                                 <div class="mb-3" id="fileInputGroup">
-                                    <label for="videoFile" class="form-label">Videó fájl</label>
+                                    <label for="videoFile" class="form-label">{{ translate('new_project.video_label') }}</label>
                                     <input type="file" class="form-control" id="videoFile" name="file" accept="video/*">
                                 </div>
                                 <div class="mb-3 d-none" id="youtubeInputGroup">
-                                    <label for="youtubeUrl" class="form-label">YouTube hivatkozás</label>
-                                    <input type="url" class="form-control" id="youtubeUrl" name="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." inputmode="url">
-                                    <small class="text-muted">A videó yt-dlp segítségével MKV konténerbe kerül letöltésre.</small>
+                                    <label for="youtubeUrl" class="form-label">{{ translate('new_project.youtube_label') }}</label>
+                                    <input type="url" class="form-control" id="youtubeUrl" name="youtubeUrl" placeholder="{{ translate('new_project.youtube_placeholder') }}" inputmode="url">
+                                    <small class="text-muted">{{ translate('new_project.youtube_helper') }}</small>
                                 </div>
                                 <div class="mb-3 d-none" id="restoreInputGroup">
-                                    <label for="restoreArchive" class="form-label">Projekt mentés (.tar.gz vagy .zip)</label>
+                                    <label for="restoreArchive" class="form-label">{{ translate('new_project.restore_label') }}</label>
                                     <input type="file" class="form-control" id="restoreArchive" name="backupFile" accept=".tar,.tar.gz,.tgz,.zip,application/gzip,application/x-tar">
-                                    <small class="text-muted">Töltsd fel a letöltött projekt mentést; a rendszer visszaállítja a teljes mappát a workdir könyvtárba.</small>
+                                    <small class="text-muted">{{ translate('new_project.restore_helper') }}</small>
                                 </div>
                                 <div class="mb-3 subtitle-input-group">
-                                    <label for="subtitleFile" class="form-label">Felirat fájl (opcionális)</label>
+                                    <label for="subtitleFile" class="form-label">{{ translate('new_project.subtitle_label') }}</label>
                                     <input type="file" class="form-control" id="subtitleFile" name="subtitleFile" accept=".srt">
-                                    <small class="text-muted">Csak .srt felirat fájl tölthető fel.</small>
+                                    <small class="text-muted">{{ translate('new_project.subtitle_helper') }}</small>
                                 </div>
                                 <div class="mb-3 subtitle-input-group">
-                                    <label for="subtitleSuffix" class="form-label">Felirat kiegészítés (pl. _hu, _en)</label>
-                                    <input type="text" class="form-control" id="subtitleSuffix" name="subtitleSuffix" placeholder="_hu">
-                                    <small class="text-muted">Formátum: egy aláhúzás és két betűs nyelvi kód (pl. _hu vagy _en). A mentett felirat neve a videó bázisnév + kiegészítés lesz.</small>
+                                    <label for="subtitleSuffix" class="form-label">{{ translate('new_project.subtitle_suffix_label') }}</label>
+                                    <input type="text" class="form-control" id="subtitleSuffix" name="subtitleSuffix" placeholder="{{ translate('new_project.subtitle_suffix_placeholder') }}">
+                                    <small class="text-muted">{{ translate('new_project.subtitle_suffix_helper') }}</small>
                                 </div>
                                 <div class="mb-3 d-none" id="uploadProgressContainer">
-                                    <label class="form-label">Feltöltés állapota</label>
+                                    <label class="form-label">{{ translate('new_project.progress_label') }}</label>
                                     <div class="progress">
                                         <div class="progress-bar progress-bar-striped progress-bar-animated" id="uploadProgressBar" role="progressbar" style="width: 0%" aria-valuemin="0" aria-valuemax="100">0%</div>
                                     </div>
                                     <div class="small text-muted mt-1" id="uploadProgressText"></div>
                                 </div>
-                                <button type="submit" class="btn btn-primary w-100">Projekt létrehozása</button>
+                                <button type="submit" class="btn btn-primary w-100">{{ translate('new_project.submit_button') }}</button>
                             </form>
                         </div>
                     </div>
@@ -240,20 +250,63 @@
             <div class="col-md-6">
                 <div class="card mb-4">
                     <div class="card-header">
-                        <h5 class="mb-0">Tippek</h5>
+                        <h5 class="mb-0">{{ translate('cards.tips_title') }}</h5>
                     </div>
                     <div class="card-body">
-                        <p class="mb-2"><strong>Projektlista:</strong> a bal oldali táblázatban látod a korábban létrehozott projekteket. A névre kattintva betöltheted a workflow-t, a mellette lévő „Törlés” gomb végleg eltávolítja a projekt mappáját.</p>
-                        <p class="mb-2"><strong>Új projekt létrehozása:</strong> add meg a projektnév mezőt, majd válaszd ki a forrás típusát a felső fülek segítségével. Videó feltöltéshez adj meg helyi fájlt, YouTube letöltéshez illeszd be a teljes hivatkozást (https://…).</p>
-                        <p class="mb-2"><strong>Feltöltési állapot:</strong> videó fájl feltöltésekor a folyamatjelző mutatja a haladást és a méretet, YouTube link esetén a letöltés automatikusan indul, és a státusz jelzi, ha a konvertálás befejeződött.</p>
-                        <p class="mb-2"><strong>Feliratok:</strong> opcionálisan tölthetsz fel .srt fájlt. Adj meg egy `_hu` vagy hasonló kiegészítést, így a rendszer a videó nevéhez illeszti a feliratot.</p>
-                        <p class="mb-0"><strong>Téma és sablon:</strong> a jobb felső sarokban válthatsz világos/sötét megjelenés között, a chat ikonra kattintva pedig megnyithatod a sablonszín szerkesztőt, ahol a teljes UI színezését testre szabhatod.</p>
+                        <p class="mb-2"><strong>{{ translate('tips.project_list.title') }}</strong> {{ translate('tips.project_list.body') }}</p>
+                        <p class="mb-2"><strong>{{ translate('tips.new_project.title') }}</strong> {{ translate('tips.new_project.body') }}</p>
+                        <p class="mb-2"><strong>{{ translate('tips.upload_status.title') }}</strong> {{ translate('tips.upload_status.body') }}</p>
+                        <p class="mb-2"><strong>{{ translate('tips.subtitles.title') }}</strong> {{ translate('tips.subtitles.body') }}</p>
+                        <p class="mb-0"><strong>{{ translate('tips.theme.title') }}</strong> {{ translate('tips.theme.body') }}</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <script id="ui-translations-data" type="application/json">{{ translations | tojson }}</script>
+    <script>
+        (function() {
+            const dataElement = document.getElementById('ui-translations-data');
+            let dictionary = {};
+            if (dataElement) {
+                try {
+                    dictionary = JSON.parse(dataElement.textContent || '{}') || {};
+                } catch (error) {
+                    console.warn('Failed to parse UI translations:', error);
+                }
+            }
+
+            function resolveKey(key) {
+                if (!key) {
+                    return undefined;
+                }
+                return key.split('.').reduce((acc, part) => {
+                    if (acc && typeof acc === 'object' && part in acc) {
+                        return acc[part];
+                    }
+                    return undefined;
+                }, dictionary);
+            }
+
+            window.translateText = function(key, replacements = {}, fallback) {
+                const template = resolveKey(key);
+                if (typeof template !== 'string') {
+                    return typeof fallback === 'string' ? fallback : key;
+                }
+                return template.replace(/\{(\w+)\}/g, (match, token) => {
+                    if (Object.prototype.hasOwnProperty.call(replacements, token)) {
+                        return replacements[token];
+                    }
+                    return match;
+                });
+            };
+
+            window.getUiTranslations = function() {
+                return dictionary;
+            };
+        })();
+    </script>
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
     <script>
         const uploadForm = document.getElementById('uploadForm');
@@ -270,7 +323,24 @@
         const projectDeleteButtons = document.querySelectorAll('.project-delete-btn');
         const sourceTypeInput = document.getElementById('sourceTypeInput');
         const sourceTabs = document.querySelectorAll('.source-type-tab');
+        const languageSelect = document.getElementById('languageSelect');
         const DEFAULT_CHUNK_SIZE_BYTES = 99 * 1024 * 1024;
+        const t = typeof window.translateText === 'function'
+            ? window.translateText
+            : (key, replacements = {}, fallback) => (fallback || key);
+
+        if (languageSelect) {
+            languageSelect.addEventListener('change', event => {
+                const selected = event.target.value;
+                const url = new URL(window.location.href);
+                if (selected) {
+                    url.searchParams.set('lang', selected);
+                } else {
+                    url.searchParams.delete('lang');
+                }
+                window.location.assign(url.toString());
+            });
+        }
 
         function getSelectedSource() {
             return sourceTypeInput.value || 'upload';
@@ -335,7 +405,8 @@
                     return;
                 }
 
-                const confirmed = confirm(`Biztosan törölni szeretnéd a(z) "${projectName}" projektet? A teljes könyvtár véglegesen törlődik.`);
+                const confirmationMessage = t('projects.delete_confirmation', { project: projectName });
+                const confirmed = confirm(confirmationMessage);
                 if (!confirmed) {
                     return;
                 }
@@ -351,13 +422,13 @@
                     });
                     const payload = await response.json().catch(() => ({}));
                     if (!response.ok || payload.success === false) {
-                        throw new Error(payload.error || 'Nem sikerült törölni a projektet.');
+                        throw new Error(payload.error || t('projects.delete_failed'));
                     }
                     button.dataset.deletionComplete = 'true';
                     location.reload();
                 } catch (error) {
-                    console.error('Projekt törlési hiba:', error);
-                    alert(error.message || 'Nem sikerült törölni a projektet.');
+                    console.error('Project deletion error:', error);
+                    alert(error.message || t('projects.delete_failed'));
                 } finally {
                     if (button.dataset.deletionComplete !== 'true') {
                         button.innerHTML = originalContent;
@@ -373,7 +444,7 @@
 
             const projectName = document.getElementById('projectName').value.trim();
             if (!projectName) {
-                alert('Add meg a projekt nevét!');
+                alert(t('errors.project_name_required'));
                 return;
             }
 
@@ -382,26 +453,26 @@
 
             if (sourceType === 'upload') {
                 if (!videoInput.files.length) {
-                    alert('Válassz videó fájlt!');
+                    alert(t('errors.video_required'));
                     return;
                 }
             } else if (sourceType === 'youtube') {
                 if (!youtubeUrl) {
-                    alert('Add meg a YouTube hivatkozást!');
+                    alert(t('errors.youtube_required'));
                     return;
                 }
                 if (!/^https?:\/\//i.test(youtubeUrl)) {
-                    alert('Adj meg érvényes YouTube hivatkozást (https://...)!');
+                    alert(t('errors.youtube_invalid'));
                     return;
                 }
                 youtubeUrlInput.value = youtubeUrl;
             } else if (sourceType === 'restore') {
                 if (!restoreFileInput || !restoreFileInput.files.length) {
-                    alert('Válassz egy korábban letöltött mentés fájlt!');
+                    alert(t('errors.restore_required'));
                     return;
                 }
             } else {
-                alert('Ismeretlen forrástípus.');
+                alert(t('errors.unknown_source'));
                 return;
             }
 
@@ -413,15 +484,15 @@
 
             if (sourceType !== 'restore') {
                 if (subtitleInput.files.length && !subtitleInput.files[0].name.toLowerCase().endsWith('.srt')) {
-                    alert('Csak .srt felirat fájl tölthető fel.');
+                    alert(t('errors.subtitle_extension'));
                     return;
                 }
                 if (subtitleInput.files.length && !subtitleSuffix) {
-                    alert('Adj meg felirat kiegészítést (pl. _hu) a feltöltött felirathoz.');
+                    alert(t('errors.subtitle_suffix_required'));
                     return;
                 }
                 if (subtitleSuffix && !/^_[a-z]{2}$/.test(subtitleSuffix)) {
-                    alert('A felirat kiegészítés formátuma: aláhúzás + két betűs nyelvi kód (pl. _hu).');
+                    alert(t('errors.subtitle_suffix_format'));
                     return;
                 }
             }
@@ -435,13 +506,14 @@
                         subtitleSuffix
                     });
                 } catch (error) {
-                    console.error('Chunkelt feltöltés hiba:', error);
+                    console.error('Chunked upload error:', error);
                     uploadProgressContainer.classList.remove('d-none');
                     uploadProgressBar.classList.add('bg-danger');
                     uploadProgressBar.style.width = '100%';
                     uploadProgressBar.textContent = '';
-                    uploadProgressText.textContent = error.message || 'Hiba történt a feltöltés során.';
-                    alert(error.message || 'Hiba történt a feltöltés során.');
+                    const uploadErrorMessage = error.message || t('errors.upload_generic');
+                    uploadProgressText.textContent = uploadErrorMessage;
+                    alert(uploadErrorMessage);
                 }
                 return;
             }
@@ -453,13 +525,14 @@
                         backupFile: restoreFileInput.files[0]
                     });
                 } catch (error) {
-                    console.error('Mentés feltöltés hiba:', error);
+                    console.error('Backup upload error:', error);
                     uploadProgressContainer.classList.remove('d-none');
                     uploadProgressBar.classList.add('bg-danger');
                     uploadProgressBar.style.width = '100%';
                     uploadProgressBar.textContent = '';
-                    uploadProgressText.textContent = error.message || 'Hiba történt a feltöltés során.';
-                    alert(error.message || 'Hiba történt a feltöltés során.');
+                    const uploadErrorMessage = error.message || t('errors.upload_generic');
+                    uploadProgressText.textContent = uploadErrorMessage;
+                    alert(uploadErrorMessage);
                 }
                 return;
             }
@@ -480,7 +553,7 @@
             uploadProgressBar.classList.remove('bg-success', 'bg-danger');
             uploadProgressBar.style.width = '100%';
             uploadProgressBar.textContent = '';
-            uploadProgressText.textContent = 'YouTube videó letöltése és MKV konvertálása folyamatban...';
+            uploadProgressText.textContent = t('uploads.youtube_in_progress');
 
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/api/upload-video', true);
@@ -496,27 +569,28 @@
                     if (xhr.status >= 200 && xhr.status < 300 && responsePayload.success !== false) {
                         uploadProgressBar.classList.add('bg-success');
                         const successMessage = responsePayload.message
-                            || 'Letöltés befejezve. Az oldal frissítése folyamatban...';
+                            || t('uploads.youtube_success');
                         uploadProgressText.textContent = successMessage;
                         setTimeout(() => location.reload(), 800);
                     } else {
-                        throw new Error(responsePayload.error || 'Ismeretlen hiba történt a feltöltés közben.');
+                        throw new Error(responsePayload.error || t('errors.upload_unknown'));
                     }
                 } catch (error) {
-                    console.error('Hiba:', error);
+                    console.error('Upload error:', error);
                     if (responsePayload && responsePayload.details) {
-                        console.error('Részletek:', responsePayload.details);
+                        console.error('Details:', responsePayload.details);
                     }
                     uploadProgressBar.classList.add('bg-danger');
-                    uploadProgressText.textContent = error.message;
-                    alert(`Hiba történt a feltöltés során: ${error.message}`);
+                    uploadProgressText.textContent = error.message || t('errors.upload_generic');
+                    alert(t('errors.upload_with_reason', { reason: error.message }));
                 }
             };
 
             xhr.onerror = function() {
                 uploadProgressBar.classList.add('bg-danger');
-                uploadProgressText.textContent = 'Hálózati hiba történt a feltöltés során.';
-                alert('Hálózati hiba történt a feltöltés során.');
+                const networkErrorText = t('errors.upload_network');
+                uploadProgressText.textContent = networkErrorText;
+                alert(networkErrorText);
             };
 
             xhr.send(formData);
@@ -546,7 +620,7 @@
             uploadProgressBar.classList.remove('bg-success', 'bg-danger');
             uploadProgressBar.style.width = '0%';
             uploadProgressBar.textContent = '0%';
-            uploadProgressText.textContent = 'Feltöltés előkészítése...';
+            uploadProgressText.textContent = t('uploads.chunk_prepare');
 
             for (let index = 0; index < totalChunks; index++) {
                 const start = index * chunkSizeBytes;
@@ -571,7 +645,7 @@
                     }
                 }
 
-                uploadProgressText.textContent = `Darab ${index + 1}/${totalChunks} feltöltése...`;
+                uploadProgressText.textContent = t('uploads.chunk_status', { current: index + 1, total: totalChunks });
 
                 const response = await fetch('/api/upload-video', {
                     method: 'POST',
@@ -580,18 +654,21 @@
                 const payload = await response.json().catch(() => ({}));
 
                 if (!response.ok || payload.success === false) {
-                    throw new Error(payload.error || 'Ismeretlen hiba történt a feltöltés közben.');
+                    throw new Error(payload.error || t('errors.upload_unknown'));
                 }
 
                 uploadedBytes = end;
                 const percent = Math.round((uploadedBytes / videoFile.size) * 100);
                 uploadProgressBar.style.width = `${percent}%`;
                 uploadProgressBar.textContent = `${percent}%`;
-                uploadProgressText.textContent = `Feltöltve: ${formatBytes(uploadedBytes)} / ${formatBytes(videoFile.size)}`;
+                uploadProgressText.textContent = t('uploads.bytes_uploaded', {
+                    uploaded: formatBytes(uploadedBytes),
+                    total: formatBytes(videoFile.size)
+                });
             }
 
             uploadProgressBar.classList.add('bg-success');
-            uploadProgressText.textContent = 'Feltöltés befejezve. Az oldal frissítése folyamatban...';
+            uploadProgressText.textContent = t('uploads.upload_success');
             setTimeout(() => location.reload(), 800);
         }
 
@@ -605,7 +682,7 @@
             uploadProgressBar.classList.remove('bg-success', 'bg-danger');
             uploadProgressBar.style.width = '0%';
             uploadProgressBar.textContent = '0%';
-            uploadProgressText.textContent = 'Mentés feltöltése előkészítése...';
+            uploadProgressText.textContent = t('uploads.backup_prepare');
 
             for (let index = 0; index < totalChunks; index++) {
                 const start = index * chunkSizeBytes;
@@ -620,7 +697,7 @@
                 formData.append('fileName', backupFile.name);
                 formData.append('backupFile', chunk, backupFile.name);
 
-                uploadProgressText.textContent = `Mentés darab ${index + 1}/${totalChunks} feltöltése...`;
+                uploadProgressText.textContent = t('uploads.backup_chunk_status', { current: index + 1, total: totalChunks });
 
                 const response = await fetch('/api/restore-project', {
                     method: 'POST',
@@ -629,24 +706,27 @@
                 const payload = await response.json().catch(() => ({}));
 
                 if (!response.ok || payload.success === false) {
-                    throw new Error(payload.error || 'Ismeretlen hiba történt a feltöltés közben.');
+                    throw new Error(payload.error || t('errors.upload_unknown'));
                 }
 
                 uploadedBytes = end;
                 const percent = Math.round((uploadedBytes / backupFile.size) * 100);
                 uploadProgressBar.style.width = `${percent}%`;
                 uploadProgressBar.textContent = `${percent}%`;
-                uploadProgressText.textContent = `Mentés feltöltve: ${formatBytes(uploadedBytes)} / ${formatBytes(backupFile.size)}`;
+                uploadProgressText.textContent = t('uploads.backup_bytes_uploaded', {
+                    uploaded: formatBytes(uploadedBytes),
+                    total: formatBytes(backupFile.size)
+                });
             }
 
             uploadProgressBar.classList.add('bg-success');
-            uploadProgressText.textContent = 'Mentés visszaállítva. Az oldal frissítése folyamatban...';
+            uploadProgressText.textContent = t('uploads.backup_success');
             setTimeout(() => location.reload(), 800);
         }
 
         function formatBytes(bytes) {
             if (!bytes) {
-                return '0 B';
+                return t('uploads.zero_bytes', {}, '0 B');
             }
 
             const units = ['B', 'KB', 'MB', 'GB', 'TB'];

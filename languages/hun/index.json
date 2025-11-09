@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "code": "hun",
+    "label": "Magyar",
+    "html_lang": "hu"
+  },
+  "strings": {
+    "document": {
+      "title": "AI Dubbing Szerkesztő"
+    },
+    "general": {
+      "app_heading": "AI Dubbing Szerkesztő",
+      "theme_toggle_aria": "Téma váltása",
+      "theme_editor_aria": "Sablonszínek szerkesztése",
+      "language_selector_label": "Nyelv",
+      "language_selector_aria": "Felület nyelvének kiválasztása"
+    },
+    "cards": {
+      "upload_title": "Videó feltöltése",
+      "existing_projects_title": "Meglévő projektek",
+      "tips_title": "Tippek"
+    },
+    "projects": {
+      "delete_button": "Törlés",
+      "delete_aria": "{project} projekt törlése",
+      "delete_confirmation": "Biztosan törölni szeretnéd a(z) \"{project}\" projektet? A teljes könyvtár véglegesen törlődik.",
+      "delete_failed": "Nem sikerült törölni a projektet.",
+      "empty_state": "Nincsenek projektek"
+    },
+    "new_project": {
+      "title": "Új projekt létrehozása",
+      "name_label": "Projektnév",
+      "source_type_label": "Forrás típusa",
+      "source_upload": "Videó fájl feltöltése",
+      "source_youtube": "YouTube letöltés (yt-dlp)",
+      "source_restore": "Mentés visszaállítása",
+      "video_label": "Videó fájl",
+      "youtube_label": "YouTube hivatkozás",
+      "youtube_placeholder": "https://www.youtube.com/watch?v=...",
+      "youtube_helper": "A videó yt-dlp segítségével MKV konténerbe kerül letöltésre.",
+      "restore_label": "Projekt mentés (.tar.gz vagy .zip)",
+      "restore_helper": "Töltsd fel a letöltött projekt mentést; a rendszer visszaállítja a teljes mappát a workdir könyvtárba.",
+      "subtitle_label": "Felirat fájl (opcionális)",
+      "subtitle_helper": "Csak .srt felirat fájl tölthető fel.",
+      "subtitle_suffix_label": "Felirat kiegészítés (pl. _hu, _en)",
+      "subtitle_suffix_placeholder": "_hu",
+      "subtitle_suffix_helper": "Formátum: egy aláhúzás és két betűs nyelvi kód (pl. _hu vagy _en). A mentett felirat neve a videó bázisnév + kiegészítés lesz.",
+      "progress_label": "Feltöltés állapota",
+      "submit_button": "Projekt létrehozása"
+    },
+    "tips": {
+      "project_list": {
+        "title": "Projektlista:",
+        "body": "a bal oldali táblázatban látod a korábban létrehozott projekteket. A névre kattintva betöltheted a workflow-t, a mellette lévő „Törlés” gomb végleg eltávolítja a projekt mappáját."
+      },
+      "new_project": {
+        "title": "Új projekt létrehozása:",
+        "body": "add meg a projektnév mezőt, majd válaszd ki a forrás típusát a felső fülek segítségével. Videó feltöltéshez adj meg helyi fájlt, YouTube letöltéshez illeszd be a teljes hivatkozást (https://…)."
+      },
+      "upload_status": {
+        "title": "Feltöltési állapot:",
+        "body": "videó fájl feltöltésekor a folyamatjelző mutatja a haladást és a méretet, YouTube link esetén a letöltés automatikusan indul, és a státusz jelzi, ha a konvertálás befejeződött."
+      },
+      "subtitles": {
+        "title": "Feliratok:",
+        "body": "opcionálisan tölthetsz fel .srt fájlt. Adj meg egy `_hu` vagy hasonló kiegészítést, így a rendszer a videó nevéhez illeszti a feliratot."
+      },
+      "theme": {
+        "title": "Téma és sablon:",
+        "body": "a jobb felső sarokban válthatsz világos/sötét megjelenés között, a chat ikonra kattintva pedig megnyithatod a sablonszín szerkesztőt, ahol a teljes UI színezését testre szabhatod."
+      }
+    },
+    "uploads": {
+      "youtube_in_progress": "YouTube videó letöltése és MKV konvertálása folyamatban...",
+      "youtube_success": "Letöltés befejezve. Az oldal frissítése folyamatban...",
+      "chunk_prepare": "Feltöltés előkészítése...",
+      "chunk_status": "Darab {current}/{total} feltöltése...",
+      "bytes_uploaded": "Feltöltve: {uploaded} / {total}",
+      "upload_success": "Feltöltés befejezve. Az oldal frissítése folyamatban...",
+      "backup_prepare": "Mentés feltöltése előkészítése...",
+      "backup_chunk_status": "Mentés darab {current}/{total} feltöltése...",
+      "backup_bytes_uploaded": "Mentés feltöltve: {uploaded} / {total}",
+      "backup_success": "Mentés visszaállítva. Az oldal frissítése folyamatban...",
+      "zero_bytes": "0 B"
+    },
+    "errors": {
+      "project_name_required": "Add meg a projekt nevét!",
+      "video_required": "Válassz videó fájlt!",
+      "youtube_required": "Add meg a YouTube hivatkozást!",
+      "youtube_invalid": "Adj meg érvényes YouTube hivatkozást (https://...)!",
+      "restore_required": "Válassz egy korábban letöltött mentés fájlt!",
+      "unknown_source": "Ismeretlen forrástípus.",
+      "subtitle_extension": "Csak .srt felirat fájl tölthető fel.",
+      "subtitle_suffix_required": "Adj meg felirat kiegészítést (pl. _hu) a feltöltött felirathoz.",
+      "subtitle_suffix_format": "A felirat kiegészítés formátuma: aláhúzás + két betűs nyelvi kód (pl. _hu).",
+      "upload_generic": "Hiba történt a feltöltés során.",
+      "upload_unknown": "Ismeretlen hiba történt a feltöltés közben.",
+      "upload_network": "Hálózati hiba történt a feltöltés során.",
+      "upload_with_reason": "Hiba történt a feltöltés során: {reason}",
+      "project_delete_error_prefix": "Projekt törlési hiba:"
+    }
+  }
+}

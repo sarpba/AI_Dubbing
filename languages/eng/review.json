@@ -1,0 +1,158 @@
+{
+  "meta": {
+    "code": "eng",
+    "label": "English",
+    "html_lang": "en"
+  },
+  "strings": {
+    "document": {
+      "title": "Active project: {project}"
+    },
+    "general": {
+      "theme_toggle_aria": "Toggle theme",
+      "language_selector_label": "Language",
+      "language_selector_aria": "Select interface language",
+      "close_aria": "Close"
+    },
+    "buttons": {
+      "close": "Close",
+      "save": "Save"
+    },
+    "audio_modal": {
+      "title": "Edit audio",
+      "loading": "Loading…",
+      "instructions": "Drag on the waveform to select a region, or use the sliders to adjust start and end.",
+      "start_label": "Start:",
+      "end_label": "End:",
+      "duration_label": "Length:",
+      "start_slider": "Start point",
+      "end_slider": "End point",
+      "reset_selection": "Select full file",
+      "reset_hint": "Saving overwrites the original file."
+    },
+    "header": {
+      "title": "Active project: {project}",
+      "back_button": "Back to project",
+      "audio_file_label": "Audio file:",
+      "json_file_label": "JSON file:",
+      "segment_count": "{count} segments",
+      "play_button": "Play"
+    },
+    "player": {
+      "pause": "Pause"
+    },
+    "alerts": {
+      "audio_without_segments": "Audio file loaded ({audio}) but no segments are available in {json}.",
+      "associated_json": "the associated JSON file",
+      "audio_missing": "No audio file found for review.",
+      "help_cta": "Need help? Click the <strong>Help</strong> button in the bottom-right corner for a detailed walkthrough."
+    },
+    "context_menu": {
+      "insert": "Insert segment after",
+      "delete": "Delete segment",
+      "regenerate": "Regenerate (TTS)"
+    },
+    "segments": {
+      "play_button": "Play",
+      "no_tts": "No TTS",
+      "play_tooltip": "Open this segment’s audio in the modal player.",
+      "no_tts_tooltip": "No synthesized audio is available for this segment yet.",
+      "original_placeholder": "Original text",
+      "translated_placeholder": "Translated text",
+      "translation_missing": "No translation"
+    },
+    "help": {
+      "button_label": "Help",
+      "button_aria": "Review help dialog",
+      "title": "Review workspace help",
+      "intro": "Use this screen to review, edit, and regenerate the audio/text segments of the selected project while monitoring their status.",
+      "navigation": {
+        "title": "Navigation & file info",
+        "items": [
+          "The header shows the current project name plus a “Back to project” button to return to the main page.",
+          "The file info block indicates which audio/JSON pair is loaded and how many segments are available."
+        ]
+      },
+      "playback": {
+        "title": "Playback & timeline",
+        "items": [
+          "Use the top <strong>Play</strong> button to start/stop audio; during playback it switches to <em>Pause</em>.",
+          "Scroll sideways on the waveform with the mouse wheel or touchpad; the timeline adapts automatically to long recordings.",
+          "Blue highlights are Wavesurfer regions: click to preview a section or drag the edges to fine-tune start/end points."
+        ]
+      },
+      "editing": {
+        "title": "Editing segments",
+        "items": [
+          "Each segment has original and translated text fields that auto-resize, making long sentences easier to read.",
+          "Playback pauses when you focus a field; changes are saved automatically when you leave the field or press Enter.",
+          "Virtual scrolling ensures only visible segments are rendered so large projects stay responsive."
+        ]
+      },
+      "operations": {
+        "title": "Segment operations",
+        "items": [
+          "Right-click any colored bar to open the context menu for inserting, deleting, or triggering TTS regeneration.",
+          "When inserting a segment the system refreshes numbering and, if needed, fetches fresh data from the server.",
+          "Deleting a segment also removes the visual highlights and Wavesurfer region so the UI stays in sync."
+        ]
+      },
+      "tts": {
+        "title": "TTS & audio handling",
+        "items": [
+          "The <strong>Play</strong> button on each segment is enabled only when a synthesized clip exists. Clicking it launches the AudioTrimmer modal.",
+          "If there is no TTS yet, the button is greyed out and shows <em>No TTS</em> as a reminder to regenerate audio.",
+          "After regeneration the UI refreshes automatically so the button reflects the newly available clip."
+        ]
+      },
+      "regeneration": {
+        "title": "Tracking regeneration",
+        "items": [
+          "Starting <em>Regenerate (TTS)</em> opens the log modal, which displays the live status of the background job.",
+          "Once the job finishes successfully the modal auto-closes, but you can dismiss it manually at any time."
+        ]
+      },
+      "tips": {
+        "title": "Helpful tips",
+        "items": [
+          "For long sessions let scrolling lazily load segments—the background optimization keeps performance high.",
+          "If an error occurs the interface shows feedback, and using the refresh actions pulls the latest data from the server."
+        ]
+      }
+    },
+    "regenerate_modal": {
+      "title": "TTS regeneration log",
+      "preparing": "Preparing processing…",
+      "initial_log": "Initializing log…",
+      "preparing_log": "Preparing log data…",
+      "no_job": "No job ID available for logging.",
+      "log_fetch_error": "Log fetch error: {error}",
+      "status": {
+        "queued": "Job queued…",
+        "running": "Processing…",
+        "cancelling": "Cancelling…",
+        "cancelled": "Job cancelled.",
+        "completed": "Processing finished successfully.",
+        "failed": "Processing failed.",
+        "default": "Updating status…"
+      }
+    },
+    "messages": {
+      "regeneration_started": "Regeneration started."
+    },
+    "errors": {
+      "unknown": "Unknown error",
+      "segment_save": "Error saving segment: {error}",
+      "segment_space": "Not enough room to insert a new segment (minimum 50 ms).",
+      "segment_add": "Error adding new segment: {error}",
+      "generic": "Error: {error}",
+      "segment_delete": "Error deleting segment: {error}",
+      "missing_json": "Missing JSON file name, regeneration cannot start.",
+      "regenerate_failed": "Regeneration failed: {error}",
+      "regenerate_error": "Regeneration error: {error}"
+    },
+    "prompts": {
+      "delete_confirm": "Delete segment {index}?"
+    }
+  }
+}
