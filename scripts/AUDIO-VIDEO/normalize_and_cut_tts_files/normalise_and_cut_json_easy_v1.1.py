@@ -49,8 +49,20 @@ TARGET_SAMPLE_RATE = 16000
 TAIL_SILENCE_MS = 100  # mindig hagyjunk 0.1s csendet a fájlok végén
 TRIM_SILENCE_THRESHOLD_DB = -50.0
 TRIM_SILENCE_CHUNK_MS = 5
+TAIL_SAFETY_MIN_RATIO = 0.70  # ne legyen a végeredmény a referencia 70%-ánál rövidebb
+TAIL_SAFETY_THRESHOLD_STEP_DB = 5.0  # ennyivel visszavesszük a küszöböt, ha túl agresszív volt
+TAIL_SAFETY_MIN_THRESHOLD_DB = -80.0  # ne menjünk -80 dB alá
 FFMPEG_SILENCE_DURATION_S = 0.5
 FFMPEG_SILENCE_THRESHOLD_DB = -50.0
+
+def get_audio_duration_ms(path: str):
+    """
+    Biztonságosan visszaadja az audió hosszát ezredmásodpercben.
+    """
+    try:
+        return len(AudioSegment.from_file(path))
+    except Exception:
+        return None
 
 def convert_to_allowed_format(path):
     temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -98,7 +110,8 @@ def get_speech_start_time(audio_path):
 
 def apply_ffmpeg_silenceremove(audio_path: str,
                                silence_duration: float = FFMPEG_SILENCE_DURATION_S,
-                               silence_threshold_db: float = FFMPEG_SILENCE_THRESHOLD_DB):
+                               silence_threshold_db: float = FFMPEG_SILENCE_THRESHOLD_DB,
+                               reference_duration_ms: int = None):
     """
     Eltávolítja a megadott küszöbnél halkabb csendet az audió végéről az ffmpeg silenceremove szűrőjével.
     Csak akkor vág, ha legalább silence_duration hosszú a csend.
@@ -109,41 +122,87 @@ def apply_ffmpeg_silenceremove(audio_path: str,
     original_ext = os.path.splitext(audio_path)[1].lower()
     tmp_suffix = original_ext if original_ext in (".wav", ".mp3") else ".wav"
 
-    threshold = f"{silence_threshold_db}dB"
-    filter_spec = (
-        "silenceremove="
-        f"start_periods=0:"
-        f"stop_periods=1:stop_duration={silence_duration}:stop_threshold={threshold}"
-    )
+    ratio_limit_ms = None
+    if reference_duration_ms and reference_duration_ms > 0:
+        ratio_limit_ms = reference_duration_ms * TAIL_SAFETY_MIN_RATIO
 
-    fd, tmp_output = tempfile.mkstemp(suffix=tmp_suffix)
-    os.close(fd)
+    def build_command(output_path, threshold_db):
+        threshold = f"{threshold_db}dB"
+        filter_spec = (
+            "silenceremove="
+            f"start_periods=0:"
+            f"stop_periods=1:stop_duration={silence_duration}:stop_threshold={threshold}"
+        )
+        command = ["ffmpeg", "-y", "-i", audio_path, "-af", filter_spec]
+        if original_ext == ".wav":
+            command += ["-c:a", "pcm_s16le"]
+        elif original_ext == ".mp3":
+            command += ["-c:a", "libmp3lame", "-q:a", "2"]
+        else:
+            command += ["-c:a", "pcm_s16le"]
+        command.append(output_path)
+        return command
 
-    command = ["ffmpeg", "-y", "-i", audio_path, "-af", filter_spec]
-    if original_ext == ".wav":
-        command += ["-c:a", "pcm_s16le"]
-    elif original_ext == ".mp3":
-        command += ["-c:a", "libmp3lame", "-q:a", "2"]
-    else:
-        command += ["-c:a", "pcm_s16le"]
-    command.append(tmp_output)
+    def needs_guard_retry(output_duration_ms):
+        if ratio_limit_ms is None or output_duration_ms is None:
+            return False
+        return output_duration_ms < ratio_limit_ms
 
-    try:
-        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        shutil.move(tmp_output, audio_path)
-        return {"status": "success"}
-    except FileNotFoundError:
-        if os.path.exists(tmp_output):
+    result = {"status": "skipped"}
+    current_threshold = silence_threshold_db
+    guard_triggered = False
+
+    while True:
+        fd, tmp_output = tempfile.mkstemp(suffix=tmp_suffix)
+        os.close(fd)
+        command = build_command(tmp_output, current_threshold)
+
+        try:
+            subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except FileNotFoundError:
+            if os.path.exists(tmp_output):
+                os.remove(tmp_output)
+            return {
+                "status": "error_ffmpeg_missing",
+                "message": "Az ffmpeg nem található, a silenceremove lépés kihagyva."
+            }
+        except subprocess.CalledProcessError as exc:
+            if os.path.exists(tmp_output):
+                os.remove(tmp_output)
+            error_message = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
+            return {"status": "error_ffmpeg_failed", "message": error_message}
+
+        output_duration_ms = get_audio_duration_ms(tmp_output)
+        guard_retry = needs_guard_retry(output_duration_ms)
+        can_relax_more = (current_threshold - TAIL_SAFETY_THRESHOLD_STEP_DB) >= TAIL_SAFETY_MIN_THRESHOLD_DB
+
+        if guard_retry and can_relax_more:
+            guard_triggered = True
+            current_threshold -= TAIL_SAFETY_THRESHOLD_STEP_DB
             os.remove(tmp_output)
-        return {
-            "status": "error_ffmpeg_missing",
-            "message": "Az ffmpeg nem található, a silenceremove lépés kihagyva."
-        }
-    except subprocess.CalledProcessError as exc:
-        if os.path.exists(tmp_output):
+            continue
+
+        guard_resolved = not (
+            ratio_limit_ms is not None and
+            (output_duration_ms is None or output_duration_ms < ratio_limit_ms)
+        )
+
+        if guard_resolved:
+            shutil.move(tmp_output, audio_path)
+            result["status"] = "success"
+        else:
             os.remove(tmp_output)
-        error_message = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
-        return {"status": "error_ffmpeg_failed", "message": error_message}
+            result["status"] = "skipped_guard_unresolved"
+            result["message"] = "A silenceremove túl rövid fájlt eredményezett, az eredeti változat maradt meg."
+
+        result["threshold_db"] = current_threshold
+        if ratio_limit_ms is not None:
+            result["guard_triggered"] = guard_triggered
+            result["guard_resolved"] = guard_resolved
+            result["reference_ms"] = reference_duration_ms
+            if output_duration_ms is not None:
+                result["output_ms"] = output_duration_ms
+        return result
 
 # --- Fájlfeldolgozó függvények ---
 def trim_trailing_silence(audio: AudioSegment,
@@ -190,7 +249,7 @@ def trim_trailing_silence(audio: AudioSegment,
 
     return trimmed_audio, trim_amount, padded_ms
 
-def process_single_file_timing(input_audio_path, reference_audio_path, delete_empty):
+def process_single_file_timing(input_audio_path, reference_audio_path, delete_empty, reference_duration_ms=None):
     result = {"status": "skipped_timing", "time_diff": 0.0, "action": "none"}
     input_start_time = get_speech_start_time(input_audio_path)
     reference_start_time = get_speech_start_time(reference_audio_path)
@@ -210,6 +269,13 @@ def process_single_file_timing(input_audio_path, reference_audio_path, delete_em
     except Exception:
         result["status"] = "error_loading_audio"
         return result
+
+    if reference_duration_ms is None:
+        try:
+            reference_duration_ms = len(AudioSegment.from_file(reference_audio_path))
+        except Exception:
+            reference_duration_ms = None
+
     try:
         adjusted_audio = audio
         needs_export = False
@@ -230,12 +296,65 @@ def process_single_file_timing(input_audio_path, reference_audio_path, delete_em
             adjusted_audio = audio[trim_duration:]
             needs_export = True
 
-        trimmed_audio, trimmed_ms, padded_ms = trim_trailing_silence(adjusted_audio)
-        if trimmed_ms > 0 or padded_ms > 0:
-            result["tail_trimmed_ms"] = trimmed_ms
-            result["tail_padded_ms"] = padded_ms
-            adjusted_audio = trimmed_audio
+        base_audio = adjusted_audio
+        current_threshold = TRIM_SILENCE_THRESHOLD_DB
+        trimmed_audio, trimmed_ms, padded_ms = trim_trailing_silence(
+            base_audio,
+            silence_threshold_db=current_threshold
+        )
+
+        final_audio = trimmed_audio
+        final_trimmed_ms = trimmed_ms
+        final_padded_ms = padded_ms
+
+        ratio_limit_ms = None
+        if reference_duration_ms and reference_duration_ms > 0:
+            ratio_limit_ms = reference_duration_ms * TAIL_SAFETY_MIN_RATIO
+
+        guard_needed = (
+            ratio_limit_ms is not None
+            and final_trimmed_ms > 0
+            and len(final_audio) < ratio_limit_ms
+        )
+        guard_applied = False
+
+        while guard_needed:
+            next_threshold = current_threshold - TAIL_SAFETY_THRESHOLD_STEP_DB
+            if next_threshold < TAIL_SAFETY_MIN_THRESHOLD_DB:
+                break
+            current_threshold = next_threshold
+            final_audio, final_trimmed_ms, final_padded_ms = trim_trailing_silence(
+                base_audio,
+                silence_threshold_db=current_threshold
+            )
+            guard_applied = True
+            guard_needed = (
+                ratio_limit_ms is not None
+                and final_trimmed_ms > 0
+                and len(final_audio) < ratio_limit_ms
+            )
+
+        guard_unresolved = bool(
+            ratio_limit_ms is not None
+            and final_trimmed_ms > 0
+            and len(final_audio) < ratio_limit_ms
+        )
+
+        adjusted_audio = final_audio
+        final_length_ms = len(adjusted_audio)
+
+        if final_trimmed_ms > 0 or final_padded_ms > 0:
+            result["tail_trimmed_ms"] = final_trimmed_ms
+            result["tail_padded_ms"] = final_padded_ms
             needs_export = True
+
+        result["tail_trim_threshold_db"] = current_threshold
+        if guard_applied or ratio_limit_ms is not None:
+            result["tail_trim_guard_triggered"] = bool(guard_applied)
+            result["tail_trim_guard_resolved"] = not guard_unresolved
+            if reference_duration_ms:
+                result["tail_trim_reference_ms"] = reference_duration_ms
+                result["tail_trim_final_ms"] = final_length_ms
 
         if needs_export:
             file_format = os.path.splitext(input_audio_path)[1].lstrip('.').lower()
@@ -356,12 +475,6 @@ def process_file_pair(task_args):
         final_result["timing"] = {"status": "error_worker_initialization_failed"}
         return final_result
 
-    silence_trim_result = apply_ffmpeg_silenceremove(input_path)
-    final_result["silence_trim"] = silence_trim_result
-    if silence_trim_result.get("status") not in ("success", "skipped_invalid_duration"):
-        message = silence_trim_result.get("message", "ismeretlen hiba")
-        print(f"[FIGYELEM] Silenceremove nem sikerült a(z) {filename} fájlon: {silence_trim_result.get('status')} - {message}")
-
     start_sec, end_sec = parse_filename_to_seconds(filename)
     if start_sec is None or end_sec is None:
         final_result["timing"] = {"status": "error_parsing_filename"}
@@ -371,11 +484,26 @@ def process_file_pair(task_args):
         start_ms = start_sec * 1000
         end_ms = end_sec * 1000
         reference_chunk = worker_source_audio[start_ms:end_ms]
+        reference_duration_ms = len(reference_chunk)
+
+        silence_trim_result = apply_ffmpeg_silenceremove(
+            input_path,
+            reference_duration_ms=reference_duration_ms
+        )
+        final_result["silence_trim"] = silence_trim_result
+        if silence_trim_result.get("status") not in ("success", "skipped_invalid_duration", "skipped_guard_unresolved"):
+            message = silence_trim_result.get("message", "ismeretlen hiba")
+            print(f"[FIGYELEM] Silenceremove nem sikerült a(z) {filename} fájlon: {silence_trim_result.get('status')} - {message}")
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp_ref_file:
             reference_chunk.export(tmp_ref_file.name, format="wav")
             
-            final_result["timing"] = process_single_file_timing(input_path, tmp_ref_file.name, args.delete_empty)
+            final_result["timing"] = process_single_file_timing(
+                input_path,
+                tmp_ref_file.name,
+                args.delete_empty,
+                reference_duration_ms
+            )
             
             timing_success = final_result.get("timing", {}).get("status") in ["success", "deleted_no_speech", "error_trim_too_long"]
             if timing_success and args.sync_loudness and os.path.exists(input_path):

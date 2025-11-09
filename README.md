@@ -88,7 +88,7 @@ cd AI_Dubbing
 python main_app.py
 ```
 
-### Külső hivatkozások (ha runpodot használtok, akkor kérlek az én templatemmel tegyétek, ezzel az utt elköltött pénzetek 1%-ával támogatjátok a befektetett munkámat)
+### Külső hivatkozások (ha runpodot használtok, akkor kérlek az én templatemmel tegyétek, ezzel az ott elköltött pénzetek 1%-ával támogatjátok a befektetett munkámat)
 
 - Docker: sarpba/ai_dubbing:latest
 - Runpod: https://console.runpod.io/deploy?template=5kqz4o0l31&ref=jwyyc9tv

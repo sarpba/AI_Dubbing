@@ -1,0 +1,71 @@
+{
+  "name": "Vibevocice 1.2 Magyar szinkron készítés.",
+  "steps": [
+    {
+      "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "ASR/canary/canary-easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "source_lang": "en",
+        "target_lang": "en"
+      }
+    },
+    {
+      "script": "TEST_SCRIPTS/chatgpt/translate_chatgpt.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "type": "widget",
+      "widget": "reviewContinue",
+      "enabled": true
+    },
+    {
+      "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "norm": "hun"
+      }
+    },
+    {
+      "script": "AUDIO-VIDEO/normalize_and_cut_tts_files_old_version/normalise_and_cut_json_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/merge_chunks_with_background/merge_chunks_with_background_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/merge_dub_to_video/merge_to_video_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "language": "hun"
+      }
+    }
+  ]
+}
