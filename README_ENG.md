@@ -87,7 +87,8 @@ cd AI_Dubbing
 python main_app.py
 ```
 
-## TODO
 
-- Keep the script catalog above up to date whenever a new `*_help.md` document or module is added.
-- Run an integration test for the VibeVoice 1.2 pitch check and document the proven tolerance/configuration pairs.
+## External links (if you use runpod, please use my template, this way you support my work with 1% of the money you spend)
+
+Docker: sarpba/ai_dubbing:latest
+Runpod: https://console.runpod.io/deploy?template=5kqz4o0l31&ref=jwyyc9tv

@@ -88,7 +88,7 @@ cd AI_Dubbing
 python main_app.py
 ```
 
-## TODO
+## Külső hivatkozások (ha runpodot használtok, akkor kérlek az én templatemmel tegyétek, ezzel az utt elköltött pénzetek 1%-ával támogatjátok a befektetett munkámat)
 
-- Tartsd naprakészen a fenti szkript katalógust, amikor új `*_help.md` dokumentum vagy modul kerül a repóba.
-- Futtass integrációs tesztet a VibeVoice 1.2 pitch ellenőrzéssel, és jegyezd fel a bevált tolerancia/beállítás párosokat.
+Docker: sarpba/ai_dubbing:latest
+Runpod: https://console.runpod.io/deploy?template=5kqz4o0l31&ref=jwyyc9tv
