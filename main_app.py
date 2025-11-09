@@ -2547,6 +2547,147 @@ def create_tts_directory():
 @app.route('/api/tts-upload', methods=['POST'])
 def upload_tts_file():
     target_path_raw = (request.form.get('targetPath') or '').strip()
+    chunk_upload_id = (request.form.get('chunkUploadId') or '').strip()
+    chunk_file_key_raw = (request.form.get('chunkFileKey') or '').strip()
+
+    def _parse_int(value: Any) -> Optional[int]:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    chunk_index = _parse_int(request.form.get('chunkIndex'))
+    total_chunks = _parse_int(request.form.get('totalChunks'))
+    chunk_size_bytes = _parse_int(request.form.get('chunkSize'))
+    requested_filename = (request.form.get('fileName') or '').strip()
+
+    if not target_path_raw:
+        return jsonify({'success': False, 'error': 'Add meg a cél almappát (pl. f5_models/custom).'}), 400
+
+    config_snapshot = get_config_copy()
+    tts_root_abs = get_tts_root_directory(config_snapshot)
+    if not tts_root_abs:
+        return jsonify({'success': False, 'error': 'A TTS könyvtár nincs konfigurálva.'}), 500
+
+    try:
+        os.makedirs(tts_root_abs, exist_ok=True)
+    except OSError as exc:
+        logging.exception("Nem sikerült előkészíteni a TTS könyvtárat: %s", exc)
+        return jsonify({'success': False, 'error': 'Nem sikerült elérni a TTS könyvtárat.'}), 500
+
+    sanitized_relative = ''
+    try:
+        sanitized_relative = sanitize_storage_relative_path(target_path_raw, allow_empty=False)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+
+    destination_dir = tts_root_abs
+    if sanitized_relative:
+        destination_dir = os.path.abspath(os.path.join(tts_root_abs, sanitized_relative))
+        if not is_subpath(destination_dir, tts_root_abs):
+            return jsonify({'success': False, 'error': 'Érvénytelen célkönyvtár a TTS mappában.'}), 400
+        try:
+            os.makedirs(destination_dir, exist_ok=True)
+        except OSError as exc:
+            logging.exception("Nem sikerült létrehozni a célkönyvtárat (%s): %s", destination_dir, exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a célkönyvtárat.'}), 500
+
+    chunk_file_key = chunk_file_key_raw.lower()
+    chunk_mode = (
+        bool(chunk_upload_id)
+        and chunk_file_key in {'model', 'vocab', 'config'}
+        and chunk_index is not None
+        and total_chunks is not None
+        and total_chunks > 0
+    )
+
+    chunk_labels = {
+        'model': 'model fájl',
+        'vocab': 'vocab.txt fájl',
+        'config': 'konfigurációs (JSON) fájl'
+    }
+
+    if chunk_mode:
+        file_storage = (
+            request.files.get('file')
+            or request.files.get('chunk')
+            or request.files.get('modelFile')
+            or request.files.get('vocabFile')
+            or request.files.get('configFile')
+        )
+        if not file_storage or not file_storage.filename:
+            return jsonify({'success': False, 'error': f'Hiányzik a(z) {chunk_labels[chunk_file_key]} darab fájl.'}), 400
+
+        chunk_id_safe = secure_filename(chunk_upload_id) or f"{chunk_file_key}_chunk"
+        chunk_root_base = os.path.join(tts_root_abs, '.chunk_uploads')
+        chunk_parent_root = os.path.join(chunk_root_base, chunk_file_key)
+        chunk_base_dir = os.path.join(chunk_parent_root, chunk_id_safe)
+        try:
+            os.makedirs(chunk_base_dir, exist_ok=True)
+        except OSError as exc:
+            logging.exception("Nem sikerült létrehozni a TTS chunk könyvtárat: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a chunk könyvtárat.'}), 500
+
+        chunk_filename = os.path.join(chunk_base_dir, f"{chunk_index:06d}.part")
+        try:
+            file_storage.save(chunk_filename)
+        except Exception as exc:
+            logging.exception("Nem sikerült menteni a TTS chunkot: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült menteni a chunk fájlt.'}), 500
+
+        if chunk_index + 1 < total_chunks:
+            return jsonify({
+                'success': True,
+                'completed': False,
+                'fileKey': chunk_file_key
+            })
+
+        safe_filename = secure_filename(requested_filename or file_storage.filename) or f"{chunk_file_key}.bin"
+        destination_abs = os.path.abspath(os.path.join(destination_dir, safe_filename))
+        if not is_subpath(destination_abs, tts_root_abs):
+            shutil.rmtree(chunk_base_dir, ignore_errors=True)
+            return jsonify({'success': False, 'error': 'Érvénytelen célfájl elérési útvonal.'}), 400
+        if os.path.exists(destination_abs):
+            shutil.rmtree(chunk_base_dir, ignore_errors=True)
+            return jsonify({'success': False, 'error': f'Már létezik ilyen nevű fájl: {safe_filename}' }), 409
+
+        try:
+            with open(destination_abs, 'wb') as destination:
+                for idx in range(total_chunks):
+                    part_path = os.path.join(chunk_base_dir, f"{idx:06d}.part")
+                    if not os.path.exists(part_path):
+                        shutil.rmtree(chunk_base_dir, ignore_errors=True)
+                        return jsonify({'success': False, 'error': f'Hiányzó mentett chunk: {idx}.'}), 400
+                    with open(part_path, 'rb') as part_file:
+                        shutil.copyfileobj(part_file, destination)
+        except Exception as exc:
+            logging.exception("Nem sikerült összeilleszteni a TTS chunkokat: %s", exc)
+            shutil.rmtree(chunk_base_dir, ignore_errors=True)
+            if os.path.exists(destination_abs):
+                try:
+                    os.remove(destination_abs)
+                except OSError:
+                    pass
+            return jsonify({'success': False, 'error': 'Nem sikerült a chunkok összeillesztése.'}), 500
+        finally:
+            shutil.rmtree(chunk_base_dir, ignore_errors=True)
+            if os.path.isdir(chunk_parent_root):
+                shutil.rmtree(chunk_parent_root, ignore_errors=True)
+            if os.path.isdir(chunk_root_base):
+                try:
+                    os.rmdir(chunk_root_base)
+                except OSError:
+                    pass
+
+        relative_saved_path = os.path.relpath(destination_abs, tts_root_abs).replace('\\', '/')
+        return jsonify({
+            'success': True,
+            'completed': True,
+            'fileKey': chunk_file_key,
+            'path': relative_saved_path,
+            'message': f'A(z) {chunk_labels[chunk_file_key]} feltöltése befejeződött.'
+        })
+
     uploaded_files = {
         'model': request.files.get('modelFile'),
         'vocab': request.files.get('vocabFile'),
@@ -2563,35 +2704,6 @@ def upload_tts_file():
                 'success': False,
                 'error': f'Hiányzik a(z) {required_labels[key]}.'
             }), 400
-
-    config_snapshot = get_config_copy()
-    tts_root_abs = get_tts_root_directory(config_snapshot)
-    if not tts_root_abs:
-        return jsonify({'success': False, 'error': 'A TTS könyvtár nincs konfigurálva.'}), 500
-
-    try:
-        os.makedirs(tts_root_abs, exist_ok=True)
-    except OSError as exc:
-        logging.exception("Nem sikerült előkészíteni a TTS könyvtárat: %s", exc)
-        return jsonify({'success': False, 'error': 'Nem sikerült elérni a TTS könyvtárat.'}), 500
-
-    sanitized_relative = ''
-    if target_path_raw:
-        try:
-            sanitized_relative = sanitize_storage_relative_path(target_path_raw, allow_empty=False)
-        except ValueError as exc:
-            return jsonify({'success': False, 'error': str(exc)}), 400
-
-    destination_dir = tts_root_abs
-    if sanitized_relative:
-        destination_dir = os.path.abspath(os.path.join(tts_root_abs, sanitized_relative))
-        if not is_subpath(destination_dir, tts_root_abs):
-            return jsonify({'success': False, 'error': 'Érvénytelen célkönyvtár a TTS mappában.'}), 400
-        try:
-            os.makedirs(destination_dir, exist_ok=True)
-        except OSError as exc:
-            logging.exception("Nem sikerült létrehozni a célkönyvtárat (%s): %s", destination_dir, exc)
-            return jsonify({'success': False, 'error': 'Nem sikerült előkészíteni a célkönyvtárat.'}), 500
 
     saved_paths: List[Tuple[str, str]] = []
     try:
@@ -3108,8 +3220,8 @@ def restore_project_backup():
         return jsonify({'success': False, 'error': 'Nem sikerült visszaállítani a projektet.'}), 500
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-        if chunk_base_dir:
-            shutil.rmtree(chunk_base_dir, ignore_errors=True)
+        if chunk_parent_root:
+            shutil.rmtree(chunk_parent_root, ignore_errors=True)
 
 
 @app.route('/api/upload-video', methods=['POST'])
@@ -3194,7 +3306,8 @@ def upload_video():
                 return jsonify({'error': 'Érvénytelen darab index.'}), 400
 
             chunk_id_safe = secure_filename(chunk_upload_id) or f"{sanitized_project}_chunk"
-            chunk_base_dir = os.path.join(upload_dir, '.chunks', chunk_id_safe)
+            chunk_parent_root = os.path.join(upload_dir, '.chunks')
+            chunk_base_dir = os.path.join(chunk_parent_root, chunk_id_safe)
 
             try:
                 os.makedirs(chunk_base_dir, exist_ok=True)

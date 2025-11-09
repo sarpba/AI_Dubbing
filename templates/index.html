@@ -203,11 +203,6 @@
                                     <label for="videoFile" class="form-label">Videó fájl</label>
                                     <input type="file" class="form-control" id="videoFile" name="file" accept="video/*">
                                 </div>
-                                <div class="mb-3" id="chunkConfigGroup">
-                                    <label for="chunkSizeMb" class="form-label">Darab méret (MB)</label>
-                                    <input type="number" class="form-control" id="chunkSizeMb" name="chunkSizeMb" min="10" max="512" step="1" value="99">
-                                    <small class="text-muted">A videó vagy mentés feltöltése nagyobb darabokra bontható. Alapértelmezett méret: 99&nbsp;MB.</small>
-                                </div>
                                 <div class="mb-3 d-none" id="youtubeInputGroup">
                                     <label for="youtubeUrl" class="form-label">YouTube hivatkozás</label>
                                     <input type="url" class="form-control" id="youtubeUrl" name="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." inputmode="url">
@@ -266,8 +261,6 @@
         const uploadProgressBar = document.getElementById('uploadProgressBar');
         const uploadProgressText = document.getElementById('uploadProgressText');
         const videoInput = document.getElementById('videoFile');
-        const chunkSizeInput = document.getElementById('chunkSizeMb');
-        const chunkConfigGroup = document.getElementById('chunkConfigGroup');
         const youtubeUrlInput = document.getElementById('youtubeUrl');
         const fileInputGroup = document.getElementById('fileInputGroup');
         const youtubeInputGroup = document.getElementById('youtubeInputGroup');
@@ -277,6 +270,7 @@
         const projectDeleteButtons = document.querySelectorAll('.project-delete-btn');
         const sourceTypeInput = document.getElementById('sourceTypeInput');
         const sourceTabs = document.querySelectorAll('.source-type-tab');
+        const DEFAULT_CHUNK_SIZE_BYTES = 99 * 1024 * 1024;
 
         function getSelectedSource() {
             return sourceTypeInput.value || 'upload';
@@ -289,9 +283,6 @@
             const useRestore = selectedSource === 'restore';
 
             fileInputGroup.classList.toggle('d-none', !useUpload);
-            if (chunkConfigGroup) {
-                chunkConfigGroup.classList.toggle('d-none', !(useUpload || useRestore));
-            }
             youtubeInputGroup.classList.toggle('d-none', !useYoutube);
             if (restoreInputGroup) {
                 restoreInputGroup.classList.toggle('d-none', !useRestore);
@@ -532,15 +523,10 @@
         });
 
         function getChunkSizeBytes(fileSize) {
-            if (!chunkSizeInput) {
-                return fileSize;
+            if (!fileSize) {
+                return DEFAULT_CHUNK_SIZE_BYTES;
             }
-            const value = parseFloat(chunkSizeInput.value);
-            if (!value || value <= 0) {
-                return fileSize;
-            }
-            const bytes = Math.floor(value * 1024 * 1024);
-            return Math.min(Math.max(bytes, 1 * 1024 * 1024), fileSize || bytes);
+            return Math.min(DEFAULT_CHUNK_SIZE_BYTES, fileSize);
         }
 
         function createUploadSessionId(prefix = 'upload') {

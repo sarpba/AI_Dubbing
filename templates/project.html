@@ -377,6 +377,7 @@
     <script>
         const PROJECT_CONFIG = window.__PROJECT_CONFIG__ || {};
         const PROJECT_NAME = PROJECT_CONFIG.projectName || '';
+        const DEFAULT_CHUNK_SIZE_BYTES = 99 * 1024 * 1024;
         let workflowPollInterval = null;
         let workflowLogInterval = null;
         let currentWorkflowJobId = null;
@@ -1208,28 +1209,116 @@
         }
 
         async function uploadFilesToTtsRequest(targetPath, files) {
-            const formData = new FormData();
-            if (targetPath) {
-                formData.append('targetPath', targetPath);
+            const orderedKeys = ['model', 'vocab', 'config'];
+            let lastResponse = null;
+            let processedFiles = 0;
+            const totalFiles = orderedKeys.filter(key => files[key]).length || 1;
+            for (const key of orderedKeys) {
+                const fileObj = files[key];
+                if (!fileObj) {
+                    continue;
+                }
+                lastResponse = await uploadSingleTtsFileChunk(targetPath, key, fileObj, processedFiles, totalFiles);
+                processedFiles += 1;
             }
-            formData.append('modelFile', files.model);
-            formData.append('vocabFile', files.vocab);
-            formData.append('configFile', files.config);
+            return lastResponse || { success: true };
+        }
 
-            const response = await fetch('/api/tts-upload', {
-                method: 'POST',
-                body: formData
-            });
-            let result = {};
-            try {
-                result = await response.json();
-            } catch (error) {
-                // ignore
+        function createTtsChunkUploadId(prefix = 'tts') {
+            if (window.crypto && window.crypto.randomUUID) {
+                return `${prefix}-${crypto.randomUUID()}`;
             }
-            if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || 'Nem sikerült feltölteni a fájlt a TTS könyvtárba.');
+            return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        }
+
+        function getTtsChunkSizeBytes(fileSize) {
+            if (!fileSize) {
+                return DEFAULT_CHUNK_SIZE_BYTES;
             }
-            return result;
+            return Math.min(DEFAULT_CHUNK_SIZE_BYTES, fileSize);
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes) {
+                return '0 B';
+            }
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const unitIndex = Math.floor(Math.log(bytes) / Math.log(1024));
+            const value = bytes / Math.pow(1024, unitIndex);
+            return `${value.toFixed(2)} ${units[unitIndex]}`;
+        }
+
+        async function uploadSingleTtsFileChunk(targetPath, fileKey, fileObj, filesDone, totalFiles) {
+            const chunkSizeBytes = getTtsChunkSizeBytes(fileObj.size);
+            const totalChunks = Math.max(1, Math.ceil(fileObj.size / chunkSizeBytes));
+            const uploadId = createTtsChunkUploadId(fileKey);
+            let uploadedBytes = 0;
+            if (window.__updateTtsProgress) {
+                window.__updateTtsProgress(0, `Feltöltés előkészítése (${fileKey})...`);
+            }
+
+            for (let index = 0; index < totalChunks; index++) {
+                const start = index * chunkSizeBytes;
+                const end = Math.min(fileObj.size, start + chunkSizeBytes);
+                const chunk = fileObj.slice(start, end);
+                const formData = new FormData();
+                if (targetPath) {
+                    formData.append('targetPath', targetPath);
+                }
+                formData.append('chunkUploadId', uploadId);
+                formData.append('chunkFileKey', fileKey);
+                formData.append('chunkIndex', index);
+                formData.append('totalChunks', totalChunks);
+                formData.append('chunkSize', chunkSizeBytes);
+                formData.append('fileName', fileObj.name);
+                formData.append('file', chunk, fileObj.name);
+
+                const response = await fetch('/api/tts-upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                let result = {};
+                try {
+                    result = await response.json();
+                } catch (error) {
+                    // ignore
+                }
+                if (!response.ok || !result.success) {
+                    throw new Error((result && result.error) || 'Nem sikerült feltölteni a fájlt a TTS könyvtárba.');
+                }
+
+                uploadedBytes = end;
+                const chunkPercent = Math.round((uploadedBytes / fileObj.size) * 100);
+                const overallPercent = Math.round(((filesDone + (uploadedBytes / fileObj.size)) / totalFiles) * 100);
+                if (window.__updateTtsProgress) {
+                    window.__updateTtsProgress(
+                        overallPercent,
+                        `Fájl (${fileKey}) darab ${index + 1}/${totalChunks} – ${chunkPercent}% (${formatBytes(uploadedBytes)} / ${formatBytes(fileObj.size)})`
+                    );
+                }
+
+                if (result.completed) {
+                    if (window.__updateTtsProgress) {
+                        window.__updateTtsProgress(
+                            Math.round(((filesDone + 1) / totalFiles) * 100),
+                            `Fájl (${fileKey}) feltöltése befejezve.`,
+                            false,
+                            filesDone + 1 === totalFiles
+                        );
+                    }
+                    return result;
+                }
+            }
+
+            if (window.__updateTtsProgress) {
+                window.__updateTtsProgress(
+                    Math.round(((filesDone + 1) / totalFiles) * 100),
+                    `Fájl (${fileKey}) feltöltése befejezve.`,
+                    false,
+                    filesDone + 1 === totalFiles
+                );
+            }
+            return { success: true };
         }
 
         function extractDownloadFilename(dispositionHeader) {
@@ -1495,6 +1584,8 @@
             const vocabInput = document.getElementById('ttsUploadVocabInput');
             const configInput = document.getElementById('ttsUploadConfigInput');
             const uploadBtn = document.getElementById('ttsUploadBtn');
+            const progressBar = document.getElementById('ttsUploadProgressBar');
+            const progressText = document.getElementById('ttsUploadProgressText');
 
             if (uploadBtn && modelInput && vocabInput && configInput) {
                 uploadBtn.addEventListener('click', async () => {
@@ -1514,6 +1605,17 @@
                         return;
                     }
                     const targetPath = uploadTargetInput ? uploadTargetInput.value.trim() : '';
+                    const targetError = document.getElementById('ttsUploadTargetError');
+                    if (!targetPath) {
+                        if (targetError) {
+                            targetError.classList.remove('d-none');
+                        }
+                        alert('Add meg a cél almappát (pl. F5-TTS_almapa).');
+                        return;
+                    }
+                    if (targetError) {
+                        targetError.classList.add('d-none');
+                    }
                     const originalLabel = uploadBtn.dataset.originalLabel || uploadBtn.textContent;
                     uploadBtn.dataset.originalLabel = originalLabel;
                     uploadBtn.disabled = true;
@@ -1521,6 +1623,7 @@
                     vocabInput.disabled = true;
                     configInput.disabled = true;
                     uploadBtn.textContent = 'Feltöltés...';
+                    resetTtsProgress();
                     try {
                         const result = await uploadFilesToTtsRequest(targetPath, {
                             model: modelFile,
@@ -1536,6 +1639,7 @@
                         console.error('TTS feltöltési hiba:', error);
                         alert(error.message || 'Nem sikerült feltölteni a fájlokat.');
                     } finally {
+                        resetTtsProgress();
                         uploadBtn.disabled = false;
                         modelInput.disabled = false;
                         vocabInput.disabled = false;
@@ -1544,6 +1648,31 @@
                     }
                 });
             }
+
+            function resetTtsProgress() {
+                if (progressBar) {
+                    progressBar.style.width = '0%';
+                    progressBar.classList.remove('bg-success', 'bg-danger');
+                    progressBar.textContent = '0%';
+                }
+                if (progressText) {
+                    progressText.textContent = '';
+                }
+            }
+
+            function updateTtsProgress(percent, text, isError = false, isComplete = false) {
+                if (progressBar) {
+                    progressBar.style.width = `${percent}%`;
+                    progressBar.textContent = `${percent}%`;
+                    progressBar.classList.toggle('bg-success', isComplete && !isError);
+                    progressBar.classList.toggle('bg-danger', isError);
+                }
+                if (progressText) {
+                    progressText.textContent = text || '';
+                }
+            }
+
+            window.__updateTtsProgress = updateTtsProgress;
         }
 
         function initFileBrowser() {
@@ -4838,9 +4967,10 @@
                     </div>
                     <div class="row g-2 align-items-end mt-3">
                         <div class="col-lg-8">
-                            <label for="ttsUploadTargetInput" class="form-label mb-1">Cél almappa (opcionális)</label>
-                            <input type="text" class="form-control form-control-sm" id="ttsUploadTargetInput" placeholder="Pl.: f5_models/custom">
-                            <div class="form-text">A megadott útvonal a TTS gyökérhez képest értendő.</div>
+                            <label for="ttsUploadTargetInput" class="form-label mb-1">Cél almappa</label>
+                            <input type="text" class="form-control form-control-sm" id="ttsUploadTargetInput" placeholder="Pl.: F5-TTS_custom" required>
+                            <div class="form-text text-danger d-none" id="ttsUploadTargetError">A cél almappa megadása kötelező.</div>
+                            <div class="form-text">A megadott útvonal a TTS gyökérhez képest értendő (pl. <code>F5-TTS_custom</code>).</div>
                         </div>
                     </div>
                     <div class="row g-2 align-items-end mt-1">
@@ -4862,6 +4992,12 @@
                             <button type="button" class="btn btn-sm btn-success w-100" id="ttsUploadBtn">
                                 Model csomag feltöltése
                             </button>
+                        </div>
+                        <div class="col-lg-9 col-md-8">
+                            <div class="progress" role="progressbar" aria-label="F5-TTS feltöltés állapota">
+                                <div class="progress-bar" id="ttsUploadProgressBar" style="width: 0%">0%</div>
+                            </div>
+                            <div class="small text-muted mt-1" id="ttsUploadProgressText"></div>
                         </div>
                     </div>
                 </div>
