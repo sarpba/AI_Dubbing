@@ -21,6 +21,8 @@ RUN apt-get update \
         pkg-config \
         rubberband-cli \
         sox \
+        tar \
+        pigz \
         wget \
         curl \
     && rm -rf /var/lib/apt/lists/*
