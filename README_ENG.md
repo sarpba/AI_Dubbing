@@ -88,7 +88,7 @@ python main_app.py
 ```
 
 
-## External links (if you use runpod, please use my template, this way you support my work with 1% of the money you spend)
+### External links (if you use runpod, please use my template, this way you support my work with 1% of the money you spend)
 
-Docker: sarpba/ai_dubbing:latest
-Runpod: https://console.runpod.io/deploy?template=5kqz4o0l31&ref=jwyyc9tv
+- Docker: sarpba/ai_dubbing:latest
+- Runpod: https://console.runpod.io/deploy?template=5kqz4o0l31&ref=jwyyc9tv
