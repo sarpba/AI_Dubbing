@@ -1,7 +1,69 @@
 {
   "name": "Alapértelmezett munkamenet",
   "steps": [
+    {
+      "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "ASR/soniox/soniox.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {
+        "diarize": true,
+        "overwrite": true
+      }
+    },
+    {
+      "script": "ASR/resegment/resegment.py",
+      "enabled": false,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "TEST_SCRIPTS/chatgpt/translate_chatgpt.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "allow_sensitive_content": true,
+        "context": "Invasion skify",
+        "input_language": "any",
+        "output_language": "hun",
+        "platform": "TV",
+        "style_notes": "Legyen benne sok káromkodás",
+        "target_audience": "Felnőtt skifi rajongók",
+        "tone": "tegező hangvételű"
+      }
+    },
+    {
+      "type": "widget",
+      "widget": "reviewContinue",
+      "enabled": true
+    },
+    {
+      "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "norm": "hun",
+        "enable_pitch_check": true,
+        "save_failures": true
+      }
+    }
   ],
-  "description": "Ez a munkamenet az alapértelmezett munkamenet a projektben.",
-  "version": "1.0.0"
+  "description": "Ez a munkamenet az alapértelmezett munkamenet a projektben."
 }
