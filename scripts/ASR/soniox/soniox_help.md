@@ -10,7 +10,7 @@
 
 ## Opcionális paraméterek
 - `model` (`--model`, option, alapértelmezés: `stt-async-v3`): Soniox modell azonosítója.
-- `no_diarize` (`--no-diarize`, flag, alapértelmezés: `false`): Kikapcsolja a globális diarizációt.
+- `diarize` (`--diarize`, flag, alapértelmezés: `false`): Speaker diarizáció bekapcsolása.
 - `api_key` (`--api-key`, option, alapértelmezés: nincs): Soniox API kulcs megadása/mentése (`SONIOX_API_KEY` környezeti változó is használható).
 - `api_host` (`--api-host`, option, alapértelmezés: nincs): Egyedi Soniox host (pl. privát endpoint).
 - `reference_prefix` (`--reference-prefix`, option, alapértelmezés: `soniox`): A Soniox async job `client_reference_id` előtagja.

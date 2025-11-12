@@ -822,11 +822,11 @@ def main() -> None:
         help="Ismert beszélő neve (többször is megadható).",
     )
     parser.add_argument(
-        "--no-diarize",
+        "--diarize",
         dest="diarize",
-        action="store_false",
-        default=True,
-        help="Globális speaker diarizáció kikapcsolása.",
+        action="store_true",
+        default=False,
+        help="Speaker diarizáció bekapcsolása.",
     )
     parser.add_argument(
         "--speaker-identification",

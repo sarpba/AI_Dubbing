@@ -24,9 +24,9 @@
       "default": "stt-async-v3"
     },
     {
-      "name": "no_diarize",
+      "name": "diarize",
       "flags": [
-        "--no-diarize"
+        "--diarize"
       ],
       "type": "flag",
       "default": false
