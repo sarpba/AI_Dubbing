@@ -1,0 +1,131 @@
+{
+  "enviroment": "sync",
+  "script": "ASR/soniox/soniox.py",
+  "api": "soniox",
+  "description": "Soniox ASR aszinkron API használata a projekthez tartozó hangfájlok szó szintű (word_segments) JSON kimenetéhez.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "model",
+      "flags": [
+        "--model"
+      ],
+      "type": "option",
+      "default": "stt-async-v3"
+    },
+    {
+      "name": "min_speakers",
+      "flags": [
+        "--min-speakers"
+      ],
+      "type": "option",
+      "default": 0
+    },
+    {
+      "name": "max_speakers",
+      "flags": [
+        "--max-speakers"
+      ],
+      "type": "option",
+      "default": 0
+    },
+    {
+      "name": "candidate_speaker",
+      "flags": [
+        "--candidate-speaker"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "no_diarize",
+      "flags": [
+        "--no-diarize"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "speaker_identification",
+      "flags": [
+        "--speaker-identification"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "api_key",
+      "flags": [
+        "--api-key"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "api_host",
+      "flags": [
+        "--api-host"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "reference_prefix",
+      "flags": [
+        "--reference-prefix"
+      ],
+      "type": "option",
+      "default": "soniox"
+    },
+    {
+      "name": "poll_interval",
+      "flags": [
+        "--poll-interval"
+      ],
+      "type": "option",
+      "default": 5.0
+    },
+    {
+      "name": "timeout",
+      "flags": [
+        "--timeout"
+      ],
+      "type": "option",
+      "default": 1800
+    },
+    {
+      "name": "chunk_size",
+      "flags": [
+        "--chunk-size"
+      ],
+      "type": "option",
+      "default": 131072
+    },
+    {
+      "name": "overwrite",
+      "flags": [
+        "--overwrite"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

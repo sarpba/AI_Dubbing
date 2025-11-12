@@ -90,5 +90,5 @@ python main_app.py
 
 ### Külső hivatkozások (ha runpodot használtok, akkor kérlek az én templatemmel tegyétek, ezzel az ott elköltött pénzetek 1%-ával támogatjátok a befektetett munkámat)
 
-- Docker: sarpba/ai_dubbing:latest
-- Runpod: https://console.runpod.io/deploy?template=5kqz4o0l31&ref=jwyyc9tv
+- Docker: [sarpba/ai_dubbing:latest](https://hub.docker.com/r/sarpba/ai_dubbing)
+- Runpod: [Template](https://console.runpod.io/deploy?template=5kqz4o0l31&ref=jwyyc9tv)

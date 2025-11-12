@@ -18,3 +18,5 @@ soundfile
 rich
 tqdm
 seaborn
+soniox
+requests

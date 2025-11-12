@@ -1,0 +1,593 @@
+"""
+Soniox ASR integráció – REST alapú aszinkron feldolgozás a projekthez tartozó hangtárra, normalizált szó szintű JSON kimenettel.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import logging
+import os
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+import requests
+from requests import Response, Session
+
+for candidate in Path(__file__).resolve().parents:
+    if (candidate / "tools").is_dir():
+        if str(candidate) not in sys.path:
+            sys.path.insert(0, str(candidate))
+        break
+
+from tools.debug_utils import add_debug_argument, configure_debug_mode
+
+SUPPORTED_EXTENSIONS: Sequence[str] = (".wav", ".mp3", ".flac", ".m4a", ".ogg")
+ENV_API_KEY = "SONIOX_API_KEY"
+KEYHOLDER_FIELD = "soniox_api_key"
+DEFAULT_MODEL = "stt-async-v3"
+DEFAULT_REFERENCE_PREFIX = "soniox"
+DEFAULT_POLL_INTERVAL = 5.0
+DEFAULT_TIMEOUT = 1800
+DEFAULT_CHUNK_SIZE = 131072  # Nem szükséges REST módban, de CLI kompatibilitás miatt marad.
+COMPLETED_STATUSES = {"completed"}
+FAILED_STATUSES = {"error"}
+API_BASE_URL = "https://api.soniox.com"
+
+
+class ConfigurationError(Exception):
+    """Konzisztens hiba jelzés konfigurációs problémákra."""
+
+
+def get_project_root() -> Path:
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "config.json").is_file():
+            return candidate
+    raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
+
+
+def load_config() -> tuple[dict, Path]:
+    project_root = get_project_root()
+    config_path = project_root / "config.json"
+    try:
+        with config_path.open("r", encoding="utf-8") as fp:
+            config = json.load(fp)
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        print(f"Hiba a konfiguráció betöltésekor ({config_path}): {exc}")
+        sys.exit(1)
+    return config, project_root
+
+
+def resolve_project_input(project_name: str, config: dict, project_root: Path) -> Path:
+    try:
+        workdir = project_root / config["DIRECTORIES"]["workdir"]
+        input_subdir = config["PROJECT_SUBDIRS"]["separated_audio_speech"]
+    except KeyError as exc:
+        print(f"Hiba: hiányzó kulcs a config.json-ban: {exc}")
+        sys.exit(1)
+
+    input_dir = workdir / project_name / input_subdir
+    if not input_dir.is_dir():
+        print(f"Hiba: a feldolgozandó mappa nem található: {input_dir}")
+        sys.exit(1)
+    return input_dir
+
+
+def get_keyholder_path(project_root: Path) -> Path:
+    return project_root / "keyholder.json"
+
+
+def save_api_key(project_root: Path, api_key: str) -> None:
+    keyholder_path = get_keyholder_path(project_root)
+    try:
+        data: Dict[str, Any] = {}
+        if keyholder_path.exists():
+            with keyholder_path.open("r", encoding="utf-8") as fp:
+                try:
+                    data = json.load(fp)
+                except json.JSONDecodeError:
+                    logging.warning("A keyholder.json sérült, új struktúra létrehozása.")
+                    data = {}
+        encoded = base64.b64encode(api_key.encode("utf-8")).decode("utf-8")
+        data[KEYHOLDER_FIELD] = encoded
+        with keyholder_path.open("w", encoding="utf-8") as fp:
+            json.dump(data, fp, indent=2)
+        logging.info("Soniox API kulcs elmentve a keyholder.json fájlba.")
+    except Exception as exc:
+        logging.error("Nem sikerült elmenteni a Soniox API kulcsot: %s", exc)
+
+
+def load_api_key(project_root: Path) -> Optional[str]:
+    keyholder_path = get_keyholder_path(project_root)
+    if not keyholder_path.exists():
+        return None
+    try:
+        with keyholder_path.open("r", encoding="utf-8") as fp:
+            data = json.load(fp)
+        encoded = data.get(KEYHOLDER_FIELD)
+        if not encoded:
+            return None
+        return base64.b64decode(encoded.encode("utf-8")).decode("utf-8")
+    except (json.JSONDecodeError, KeyError, base64.binascii.Error) as exc:
+        logging.error("Nem sikerült beolvasni a Soniox API kulcsot: %s", exc)
+        return None
+    except Exception as exc:
+        logging.error("Váratlan hiba kulcs betöltésekor: %s", exc)
+        return None
+
+
+def resolve_api_key(args: argparse.Namespace, project_root: Path) -> Optional[str]:
+    if args.api_key:
+        save_api_key(project_root, args.api_key)
+        return args.api_key
+    env_key = os.environ.get(ENV_API_KEY)
+    if env_key:
+        logging.info("Soniox API kulcs betöltve környezeti változóból (%s).", ENV_API_KEY)
+        return env_key
+    stored_key = load_api_key(project_root)
+    if stored_key:
+        logging.info("Soniox API kulcs betöltve a keyholder.json fájlból.")
+        return stored_key
+    return None
+
+
+def build_endpoints(api_host: Optional[str]) -> Dict[str, str]:
+    base = api_host.rstrip("/") if api_host else API_BASE_URL
+    return {
+        "base": base,
+        "files": f"{base}/v1/files",
+        "transcriptions": f"{base}/v1/transcriptions",
+    }
+
+
+def create_session(api_key: str) -> Session:
+    session = requests.Session()
+    session.headers["Authorization"] = f"Bearer {api_key}"
+    session.headers["User-Agent"] = "AI_Dubbing-Soniox/1.0"
+    return session
+
+
+def handle_response(response: Response, context: str) -> Response:
+    if response.ok:
+        return response
+    try:
+        payload = response.json()
+        message = payload.get("error", payload)
+    except ValueError:
+        message = response.text
+    raise RuntimeError(f"Soniox hiba {context}: {response.status_code} – {message}")
+
+
+def upload_audio(session: Session, endpoints: Dict[str, str], audio_path: Path) -> str:
+    logging.info("Soniox fájl feltöltése: %s", audio_path.name)
+    with audio_path.open("rb") as fp:
+        files = {"file": (audio_path.name, fp, "application/octet-stream")}
+        response = handle_response(session.post(endpoints["files"], files=files, timeout=600), "fájl feltöltés")
+    payload = response.json()
+    file_id = payload.get("id")
+    if not file_id:
+        raise RuntimeError("A Soniox fájl feltöltés nem adott file_id mezőt.")
+    return file_id
+
+
+def build_transcription_payload(
+    *,
+    file_id: str,
+    args: argparse.Namespace,
+    reference_name: str,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "model": args.model,
+        "file_id": file_id,
+        "client_reference_id": reference_name,
+    }
+    payload["enable_speaker_diarization"] = bool(args.diarize)
+    payload["language_hints"] = []
+    if args.min_speakers or args.max_speakers:
+        logging.warning("A Soniox REST API jelenleg nem támogatja a min/max beszélő beállítást – kihagyva.")
+    if args.candidate_speaker:
+        logging.warning("A Soniox REST API nem támogatja a candidate speaker listát – kihagyva.")
+    if args.speaker_identification:
+        logging.warning("A Soniox REST API jelenleg nem támogatja a speaker identification kapcsolót – kihagyva.")
+    return payload
+
+
+def create_transcription(
+    session: Session,
+    endpoints: Dict[str, str],
+    payload: Dict[str, Any],
+) -> str:
+    response = handle_response(
+        session.post(endpoints["transcriptions"], json=payload, timeout=60),
+        "transcription létrehozás",
+    )
+    data = response.json()
+    transcription_id = data.get("id")
+    if not transcription_id:
+        raise RuntimeError("A Soniox nem adott transcription_id mezőt.")
+    return transcription_id
+
+
+def poll_transcription(
+    session: Session,
+    endpoints: Dict[str, str],
+    transcription_id: str,
+    *,
+    poll_interval: float,
+    timeout_seconds: int,
+) -> Dict[str, Any]:
+    status_url = f"{endpoints['transcriptions']}/{transcription_id}"
+    start = time.monotonic()
+    last_status = ""
+    while True:
+        response = handle_response(session.get(status_url, timeout=30), "transcription státusz lekérés")
+        payload = response.json()
+        status = (payload.get("status") or "").lower()
+        if status != last_status:
+            logging.info("Soniox státusz (%s): %s", transcription_id, payload.get("status") or "ismeretlen")
+            last_status = status
+        if status in COMPLETED_STATUSES:
+            return payload
+        if status in FAILED_STATUSES:
+            message = payload.get("error_message") or "Ismeretlen Soniox hiba."
+            raise RuntimeError(f"Soniox transcription hiba: {message}")
+        if timeout_seconds and (time.monotonic() - start) > timeout_seconds:
+            raise TimeoutError(f"Időtúllépés a Soniox transcription befejezésére várva ({transcription_id}).")
+        time.sleep(poll_interval)
+
+
+def download_transcript(session: Session, endpoints: Dict[str, str], transcription_id: str) -> Dict[str, Any]:
+    transcript_url = f"{endpoints['transcriptions']}/{transcription_id}/transcript"
+    response = handle_response(session.get(transcript_url, timeout=120), "transcript letöltés")
+    return response.json()
+
+
+def delete_transcription(session: Session, endpoints: Dict[str, str], transcription_id: str) -> None:
+    try:
+        session.delete(f"{endpoints['transcriptions']}/{transcription_id}", timeout=30)
+    except requests.RequestException:
+        logging.warning("Nem sikerült törölni a Soniox transcription-t (%s).", transcription_id)
+
+
+def delete_file(session: Session, endpoints: Dict[str, str], file_id: str) -> None:
+    try:
+        session.delete(f"{endpoints['files']}/{file_id}", timeout=30)
+    except requests.RequestException:
+        logging.warning("Nem sikerült törölni a Soniox fájlt (%s).", file_id)
+
+
+def convert_timestamp(value: Any, *, assume_ms: bool = False) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        seconds = value.get("seconds")
+        nanos = value.get("nanos", 0)
+        if seconds is None:
+            return None
+        return float(seconds) + float(nanos) / 1_000_000_000
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if assume_ms:
+        return numeric / 1000.0
+    return numeric
+
+
+def extract_timestamp(token: dict, keys: Iterable[Tuple[str, bool]]) -> Optional[float]:
+    for key, assume_ms in keys:
+        if key in token and token[key] is not None:
+            return convert_timestamp(token[key], assume_ms=assume_ms)
+    return None
+
+
+START_KEYS: Tuple[Tuple[str, bool], ...] = (
+    ("start_time", False),
+    ("start", False),
+    ("start_seconds", False),
+    ("start_time_s", False),
+    ("start_time_ms", True),
+    ("start_ms", True),
+)
+END_KEYS: Tuple[Tuple[str, bool], ...] = (
+    ("end_time", False),
+    ("end", False),
+    ("end_seconds", False),
+    ("end_time_s", False),
+    ("end_time_ms", True),
+    ("end_ms", True),
+)
+DURATION_KEYS: Tuple[Tuple[str, bool], ...] = (
+    ("duration", False),
+    ("duration_s", False),
+    ("duration_ms", True),
+)
+
+
+def normalise_tokens(tokens: List[dict]) -> List[dict]:
+    normalised: List[dict] = []
+    for token in tokens:
+        if not isinstance(token, dict):
+            continue
+        text = (token.get("text") or "").strip()
+        if not text:
+            continue
+        start = extract_timestamp(token, START_KEYS)
+        end = extract_timestamp(token, END_KEYS)
+        if start is None:
+            continue
+        if end is None:
+            duration = extract_timestamp(token, DURATION_KEYS)
+            end = start + duration if duration else start
+        confidence = token.get("confidence")
+        try:
+            confidence_val = float(confidence) if confidence is not None else None
+        except (TypeError, ValueError):
+            confidence_val = None
+        normalised.append(
+            {
+                "word": text,
+                "start": round(start, 3),
+                "end": round(end if end >= start else start, 3),
+                "score": round(confidence_val, 4) if confidence_val is not None else None,
+                "speaker": token.get("speaker"),
+                "channel": token.get("channel"),
+            }
+        )
+    normalised.sort(key=lambda item: item["start"])
+    return normalised
+
+
+def timestamp_to_iso(timestamp: Any) -> Optional[str]:
+    if not timestamp:
+        return None
+    if isinstance(timestamp, str):
+        return timestamp
+    seconds = getattr(timestamp, "seconds", None)
+    nanos = getattr(timestamp, "nanos", None)
+    if seconds is None:
+        return None
+    nanos = nanos or 0
+    dt = datetime.fromtimestamp(seconds + nanos / 1_000_000_000, tz=timezone.utc)
+    return dt.isoformat()
+
+
+def build_output_payload(
+    *,
+    word_segments: List[dict],
+    diarize: bool,
+    model: str,
+    transcription_id: str,
+    file_id: str,
+    status_payload: Dict[str, Any],
+) -> dict:
+    metadata = {
+        "transcription_id": transcription_id,
+        "file_id": file_id,
+        "status": status_payload.get("status"),
+        "created": status_payload.get("created_time") or timestamp_to_iso(status_payload.get("created_timestamp")),
+    }
+    return {
+        "word_segments": word_segments,
+        "provider": "soniox",
+        "model": model,
+        "diarization": diarize,
+        "speaker_identification": False,
+        "speaker_labels": [],
+        "metadata": metadata,
+    }
+
+
+def process_audio_file(
+    session: Session,
+    endpoints: Dict[str, str],
+    audio_path: Path,
+    args: argparse.Namespace,
+) -> Optional[dict]:
+    reference_name = f"{args.reference_prefix}/{audio_path.stem}"
+    file_id = upload_audio(session, endpoints, audio_path)
+    transcription_id: Optional[str] = None
+    try:
+        payload = build_transcription_payload(file_id=file_id, args=args, reference_name=reference_name)
+        logging.info("Soniox async beküldés: %s -> %s", audio_path.name, reference_name)
+        transcription_id = create_transcription(session, endpoints, payload)
+        status_payload = poll_transcription(
+            session,
+            endpoints,
+            transcription_id,
+            poll_interval=args.poll_interval,
+            timeout_seconds=args.timeout,
+        )
+        transcript = download_transcript(session, endpoints, transcription_id)
+        tokens = transcript.get("tokens") or []
+        word_segments = normalise_tokens(tokens)
+        if not word_segments:
+            logging.warning("Nem található szó szintű token a Soniox válaszban (%s).", audio_path.name)
+            return None
+        return build_output_payload(
+            word_segments=word_segments,
+            diarize=args.diarize,
+            model=args.model,
+            transcription_id=transcription_id,
+            file_id=file_id,
+            status_payload=status_payload,
+        )
+    finally:
+        if transcription_id:
+            delete_transcription(session, endpoints, transcription_id)
+        delete_file(session, endpoints, file_id)
+
+
+def process_directory(
+    input_dir: Path,
+    *,
+    api_key: str,
+    api_host: Optional[str],
+    args: argparse.Namespace,
+) -> None:
+    audio_files = sorted(
+        [path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS]
+    )
+    if not audio_files:
+        print(f"Nem található támogatott hangfájl a megadott mappában: {input_dir}")
+        return
+
+    endpoints = build_endpoints(api_host)
+    session = create_session(api_key)
+
+    print(f"{len(audio_files)} hangfájl feldolgozása indul a Soniox REST API-val…")
+    for audio_path in audio_files:
+        print("-" * 48)
+        print(f"▶  Feldolgozás: {audio_path.name}")
+        output_path = audio_path.with_suffix(".json")
+        if output_path.exists() and not args.overwrite:
+            print(f"  ↷  Kihagyva (létező kimenet): {output_path.name}")
+            continue
+        try:
+            payload = process_audio_file(session, endpoints, audio_path, args)
+            if not payload:
+                print(f"  ✖  Nem sikerült a Soniox transcript normalizálása: {audio_path.name}")
+                continue
+            with output_path.open("w", encoding="utf-8") as fp:
+                json.dump(payload, fp, indent=2, ensure_ascii=False)
+            print(f"  ✔  Mentve: {output_path.name}")
+        except Exception as exc:
+            logging.exception("Soniox feldolgozási hiba: %s", audio_path.name)
+            print(f"  ✖  Hiba: {exc}")
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    if args.poll_interval <= 0:
+        raise ConfigurationError("A lekérdezési gyakoriságnak pozitívnak kell lennie.")
+    if args.timeout < 0:
+        raise ConfigurationError("A timeout érték nem lehet negatív.")
+    if args.chunk_size <= 0:
+        raise ConfigurationError("A chunk méretének pozitívnak kell lennie (kompatibilitás kedvéért).")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Soniox ASR – aszinkron hangtár feldolgozás normalizált szó szintű JSON kimenettel."
+    )
+    parser.add_argument(
+        "-p",
+        "--project-name",
+        required=True,
+        help="A projekt neve (a workdir alatti mappa), amit fel kell dolgozni.",
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"Soniox modell azonosító (alapértelmezett: {DEFAULT_MODEL}).",
+    )
+    parser.add_argument(
+        "--min-speakers",
+        type=int,
+        default=0,
+        help="Becsült minimum beszélő szám (0 = automatikus).",
+    )
+    parser.add_argument(
+        "--max-speakers",
+        type=int,
+        default=0,
+        help="Becsült maximum beszélő szám (0 = automatikus).",
+    )
+    parser.add_argument(
+        "--candidate-speaker",
+        action="append",
+        help="Ismert beszélő neve (többször is megadható).",
+    )
+    parser.add_argument(
+        "--no-diarize",
+        dest="diarize",
+        action="store_false",
+        default=True,
+        help="Globális speaker diarizáció kikapcsolása.",
+    )
+    parser.add_argument(
+        "--speaker-identification",
+        dest="speaker_identification",
+        action="store_true",
+        default=False,
+        help="Soniox speaker identification bekapcsolása (REST módban nem támogatott).",
+    )
+    parser.add_argument(
+        "--api-key",
+        help=f"Soniox API kulcs. Ha megadod, elmenti a keyholder.json fájlba. Környezeti változó: {ENV_API_KEY}.",
+    )
+    parser.add_argument(
+        "--api-host",
+        help="Soniox API host felülbírálása (pl. https://api.soniox.com).",
+    )
+    parser.add_argument(
+        "--reference-prefix",
+        default=DEFAULT_REFERENCE_PREFIX,
+        help="Async reference név előtag (alapértelmezett: soniox).",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_POLL_INTERVAL,
+        help=f"Státusz lekérdezési intervallum másodpercben (alapértelmezett: {DEFAULT_POLL_INTERVAL}).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help=f"Makszimális várakozási idő másodpercben (0 = végtelen, alap: {DEFAULT_TIMEOUT}).",
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=DEFAULT_CHUNK_SIZE,
+        help=f"Kompatibilitási opció (REST módban nem használt). Alapértelmezett: {DEFAULT_CHUNK_SIZE}.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Meglévő JSON fájl felülírása. Ha nincs beállítva, a meglévő fájlok kimaradnak.",
+    )
+
+    add_debug_argument(parser)
+    args = parser.parse_args()
+
+    log_level = configure_debug_mode(args.debug)
+    logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
+
+    try:
+        validate_args(args)
+    except ConfigurationError as exc:
+        print(f"Hiba: {exc}")
+        sys.exit(1)
+
+    config, project_root = load_config()
+    api_key = resolve_api_key(args, project_root)
+    if not api_key:
+        print(
+            "Hiba: Nem található Soniox API kulcs. Add meg az --api-key kapcsolóval vagy a SONIOX_API_KEY környezeti változóval."
+        )
+        sys.exit(1)
+
+    input_dir = resolve_project_input(args.project_name, config, project_root)
+
+    print("Projekt beállítások betöltve:")
+    print(f"  - Projekt név:        {args.project_name}")
+    print(f"  - Bemeneti mappa:     {input_dir}")
+    print(f"  - Soniox modell:      {args.model}")
+    print(f"  - Diarizáció:         {'BE' if args.diarize else 'KI'}")
+    print(f"  - Reference prefix:   {args.reference_prefix}")
+
+    process_directory(
+        input_dir,
+        api_key=api_key,
+        api_host=args.api_host,
+        args=args,
+    )
+
+
+if __name__ == "__main__":
+    main()
