@@ -24,41 +24,9 @@
       "default": "stt-async-v3"
     },
     {
-      "name": "min_speakers",
-      "flags": [
-        "--min-speakers"
-      ],
-      "type": "option",
-      "default": 0
-    },
-    {
-      "name": "max_speakers",
-      "flags": [
-        "--max-speakers"
-      ],
-      "type": "option",
-      "default": 0
-    },
-    {
-      "name": "candidate_speaker",
-      "flags": [
-        "--candidate-speaker"
-      ],
-      "type": "option",
-      "default": null
-    },
-    {
       "name": "no_diarize",
       "flags": [
         "--no-diarize"
-      ],
-      "type": "flag",
-      "default": false
-    },
-    {
-      "name": "speaker_identification",
-      "flags": [
-        "--speaker-identification"
       ],
       "type": "flag",
       "default": false
@@ -102,14 +70,6 @@
       ],
       "type": "option",
       "default": 1800
-    },
-    {
-      "name": "chunk_size",
-      "flags": [
-        "--chunk-size"
-      ],
-      "type": "option",
-      "default": 131072
     },
     {
       "name": "overwrite",

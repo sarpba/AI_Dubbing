@@ -9,20 +9,15 @@
 - `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `workdir` alatt található projektmappa, amelynek `separated_audio_speech` almappáját dolgozza fel.
 
 ## Opcionális paraméterek
-- `model` (`--model`, option, alapértelmezés: `stt-async-v3`): Soniox modell azonosító. Igény szerint felülírható bármely támogatott modellre.
-- `min_speakers` (`--min-speakers`, option, alapértelmezés: `0`): Kompatibilitási flag. A Soniox REST API jelenleg nem kezeli ezt, figyelmeztetést írunk ki.
-- `max_speakers` (`--max-speakers`, option, alapértelmezés: `0`): Kompatibilitási flag. A Soniox REST API jelenleg nem kezeli ezt, figyelmeztetést írunk ki.
-- `candidate_speaker` (`--candidate-speaker`, option, ismételhető, alapértelmezés: nincs): Kompatibilitási flag; a Soniox REST API nem használja.
-- `no_diarize` (`--no-diarize`, flag, alapértelmezés: `false`): Kikapcsolja a globális diarizációt (alapból be van kapcsolva).
-- `speaker_identification` (`--speaker-identification`, flag, alapértelmezés: `false`): Kompatibilitási flag; REST módban jelenleg nincs hatása.
-- `api_key` (`--api-key`, option, alapértelmezés: nincs): Soniox API kulcs. Megadáskor a kulcs base64 formában elmentésre kerül a `keyholder.json` fájlba. Alternatívaként használható a `SONIOX_API_KEY` környezeti változó.
-- `api_host` (`--api-host`, option, alapértelmezés: nincs): Egyedi Soniox host (pl. privát endpoint) megadása.
-- `reference_prefix` (`--reference-prefix`, option, alapértelmezés: `soniox`): Az aszinkron job referencia neve ez alapján épül fel (`<prefix>/<fáljnév>`).
-- `poll_interval` (`--poll-interval`, option, alapértelmezés: `5.0`): A státusz lekérdezések közötti várakozási idő másodpercben.
-- `timeout` (`--timeout`, option, alapértelmezés: `1800`): Maximális várakozási idő másodpercben. `0` esetén nincs időkorlát.
-- `chunk_size` (`--chunk-size`, option, alapértelmezés: `131072`): Kompatibilitási opció (REST módban nincs szerepe).
-- `overwrite` (`--overwrite`, flag, alapértelmezés: `false`): Ha aktív, a már létező kimeneti JSON fájlok felülírásra kerülnek, egyébként a szkript átugorja őket.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes logolás bekapcsolása.
+- `model` (`--model`, option, alapértelmezés: `stt-async-v3`): Soniox modell azonosítója.
+- `no_diarize` (`--no-diarize`, flag, alapértelmezés: `false`): Kikapcsolja a globális diarizációt.
+- `api_key` (`--api-key`, option, alapértelmezés: nincs): Soniox API kulcs megadása/mentése (`SONIOX_API_KEY` környezeti változó is használható).
+- `api_host` (`--api-host`, option, alapértelmezés: nincs): Egyedi Soniox host (pl. privát endpoint).
+- `reference_prefix` (`--reference-prefix`, option, alapértelmezés: `soniox`): A Soniox async job `client_reference_id` előtagja.
+- `poll_interval` (`--poll-interval`, option, alapértelmezés: `5.0`): Státuszlekérdezések közti várakozás másodpercben.
+- `timeout` (`--timeout`, option, alapértelmezés: `1800`): Max. várakozási idő (0 = végtelen).
+- `overwrite` (`--overwrite`, flag, alapértelmezés: `false`): Meglévő kimeneti JSON felülírása.
+- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes logolás.
 
 ## Kimenetek
 - Minden bemeneti hangfájl mellé létrejön egy `<fájlnév>.json`, amely tartalmazza:
@@ -33,8 +28,7 @@
 - Egy `<fájlnév>.soniox_raw.txt` fájl, amely a Soniox API teljes JSON válaszát tartalmazza ember-olvasható formában (debug/nyers ellenőrzéshez).
 
 ## Hibakezelés / tippek
-- A szkript a Soniox REST API-ját hívja meg `requests` segítségével, ezért nincs szükség a hivatalos Python SDK telepítésére.
-- API kulcs hiányában a futás leáll. A kulcs megadható flaggel vagy a `SONIOX_API_KEY` környezeti változóval; mindkét esetben ajánlott a `keyholder.json` titkosított tároló használata.
-- Az `--overwrite` hiánya garantálja, hogy ismételt futtatáskor nem sérülnek a korábbi kimenetek (idempotens működés). Ha friss kimenetre van szükség, kapcsold be.
-- Hosszabb fájlok feldolgozásához szükség esetén növeld a `--timeout` értékét, illetve csökkentsd/növeld a `--poll-interval`-t a kívánt terhelés függvényében.
-- Ha a Soniox fiókod webhookokat vagy fordítási módokat igényel, bővítsd a scriptet a dokumentációban található extra mezőkkel (payload bővítése a `build_transcription_payload` függvényben).
+- A Soniox REST API maximum 500 MB-os bemenetet fogad. Ha egy fájl ennél nagyobb, a szkript automatikusan MP3-ra tömöríti (ffmpeg szükséges), majd a tömörített példányt tölti fel.
+- API kulcs hiányában a futás leáll; add meg flaggel vagy `SONIOX_API_KEY` változóval, így elmentődik a `keyholder.json`-ba.
+- Az `--overwrite` hiánya garantálja, hogy ismételt futáskor nem írjuk felül a meglévő JSON-okat.
+- Hosszabb fájlok esetén növeld a `--timeout`-ot, vagy állítsd a `--poll-interval`-t a kívánt terheléshez.

@@ -2,5 +2,6 @@
   "name": "Alapértelmezett munkamenet",
   "steps": [
   ],
-  "description": "A widgeteknél lehetőség van a szegmensek és a fordítás felülvizsgálatára. Vagy loop ciklusok elhelyezésére."
+  "description": "Ez a munkamenet az alapértelmezett munkamenet a projektben.",
+  "version": "1.0.0"
 }

@@ -9,7 +9,10 @@ import base64
 import json
 import logging
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +45,7 @@ DEFAULT_SENTENCE_PADDING_S = 0.1
 DEFAULT_SENTENCE_MAX_SEGMENT_S = 11.5
 PRIMARY_PUNCTUATION: Tuple[str, ...] = (".", "!", "?")
 SECONDARY_PUNCTUATION: Tuple[str, ...] = (",",)
+SONIOX_MAX_FILE_SIZE_BYTES = 524_288_000
 
 
 class ConfigurationError(Exception):
@@ -440,6 +444,59 @@ def _normalise_tokens_direct(tokens: List[dict]) -> List[dict]:
     return normalised
 
 
+def ensure_uploadable_audio(audio_path: Path) -> Tuple[Path, Optional[Path]]:
+    size = audio_path.stat().st_size
+    if size <= SONIOX_MAX_FILE_SIZE_BYTES:
+        return audio_path, None
+    logging.info(
+        "A(z) %s fájl mérete %.2f MB, meghaladja a Soniox limitet (500 MB) – MP3 tömörítés indul.",
+        audio_path.name,
+        size / (1024 * 1024),
+    )
+    temp_dir = Path(tempfile.mkdtemp(prefix="soniox_compress_"))
+    compressed_path = temp_dir / f"{audio_path.stem}_soniox.mp3"
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(audio_path),
+        "-vn",
+        "-acodec",
+        "libmp3lame",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-b:a",
+        "128k",
+        str(compressed_path),
+    ]
+    try:
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError as exc:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise RuntimeError("Nem található az ffmpeg bináris; telepítsd az ffmpeg-et a nagy fájlok tömörítéséhez.") from exc
+    except subprocess.CalledProcessError as exc:
+        logging.error("FFmpeg hibát jelzett (exit=%s) – %s", exc.returncode, exc.stderr.decode(errors="ignore")[:4000])
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise RuntimeError("Nem sikerült tömöríteni a hangfájlt Soniox feltöltéshez.") from exc
+    if not compressed_path.exists():
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise RuntimeError("Ismeretlen hiba: a tömörített fájl nem jött létre.")
+    compressed_size = compressed_path.stat().st_size
+    if compressed_size > SONIOX_MAX_FILE_SIZE_BYTES:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise RuntimeError(
+            f"A tömörített fájl ({compressed_size / (1024 * 1024):.2f} MB) még mindig meghaladja a Soniox limitet."
+        )
+    logging.info(
+        "Tömörítés kész: %s → %.2f MB. A Soniox felé ez a fájl kerül feltöltésre.",
+        compressed_path.name,
+        compressed_size / (1024 * 1024),
+    )
+    return compressed_path, temp_dir
+
+
 def normalise_tokens(tokens: List[dict], transcript_text: Optional[str] = None) -> List[dict]:
     if transcript_text:
         grouped = _group_tokens_using_text(tokens, transcript_text)
@@ -640,7 +697,8 @@ def process_audio_file(
     args: argparse.Namespace,
 ) -> Optional[dict]:
     reference_name = f"{args.reference_prefix}/{audio_path.stem}"
-    file_id = upload_audio(session, endpoints, audio_path)
+    upload_path, temp_dir = ensure_uploadable_audio(audio_path)
+    file_id = upload_audio(session, endpoints, upload_path)
     transcription_id: Optional[str] = None
     try:
         payload = build_transcription_payload(file_id=file_id, args=args, reference_name=reference_name)
@@ -680,6 +738,8 @@ def process_audio_file(
         if transcription_id:
             delete_transcription(session, endpoints, transcription_id)
         delete_file(session, endpoints, file_id)
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def process_directory(
