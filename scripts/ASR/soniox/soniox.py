@@ -313,7 +313,100 @@ DURATION_KEYS: Tuple[Tuple[str, bool], ...] = (
 )
 
 
-def normalise_tokens(tokens: List[dict]) -> List[dict]:
+def _collapse_whitespace(value: str) -> str:
+    if not value:
+        return ""
+    return "".join(value.split())
+
+
+def _build_word_entry_from_tokens(word_text: str, tokens: List[dict]) -> Optional[dict]:
+    if not tokens:
+        return None
+    start = extract_timestamp(tokens[0], START_KEYS)
+    end = extract_timestamp(tokens[-1], END_KEYS)
+    if start is None:
+        return None
+    if end is None:
+        duration = extract_timestamp(tokens[-1], DURATION_KEYS)
+        end = start + duration if duration else start
+    confidences: List[float] = []
+    for token in tokens:
+        confidence = token.get("confidence")
+        try:
+            if confidence is not None:
+                confidences.append(float(confidence))
+        except (TypeError, ValueError):
+            continue
+    score = round(sum(confidences) / len(confidences), 4) if confidences else None
+    speaker = next((token.get("speaker") for token in tokens if token.get("speaker")), None)
+    channel = next((token.get("channel") for token in tokens if token.get("channel")), None)
+    return {
+        "word": _sanitize_text(word_text),
+        "start": round(start, 3),
+        "end": round(end if end >= start else start, 3),
+        "score": score,
+        "speaker": speaker,
+        "channel": channel,
+    }
+
+
+def _group_tokens_using_text(tokens: List[dict], transcript_text: str) -> List[dict]:
+    if not transcript_text:
+        return []
+    words = [word for word in transcript_text.replace("\n", " ").split(" ") if word.strip()]
+    if not words:
+        return []
+    grouped: List[dict] = []
+    token_index = 0
+    total_tokens = len(tokens)
+    for raw_word in words:
+        target = _collapse_whitespace(raw_word)
+        if not target:
+            continue
+        accumulated_tokens: List[dict] = []
+        accumulated_parts: List[str] = []
+        while token_index < total_tokens:
+            token = tokens[token_index]
+            token_index += 1
+            if not isinstance(token, dict):
+                continue
+            token_text = token.get("text")
+            collapsed = _collapse_whitespace(token_text or "")
+            if not collapsed:
+                continue
+            accumulated_tokens.append(token)
+            accumulated_parts.append(collapsed)
+            combined = "".join(accumulated_parts)
+            if target.startswith(combined):
+                if combined == target:
+                    entry = _build_word_entry_from_tokens(raw_word, accumulated_tokens)
+                    if entry:
+                        grouped.append(entry)
+                    break
+                continue
+            # Overshoot – revert last token and try to finish the word without it
+            accumulated_tokens.pop()
+            accumulated_parts.pop()
+            token_index -= 1
+            if "".join(accumulated_parts) == target and accumulated_tokens:
+                entry = _build_word_entry_from_tokens(raw_word, accumulated_tokens)
+                if entry:
+                    grouped.append(entry)
+                break
+            logging.warning(
+                "Soniox tokenek nem illeszthetők a '%s' szóhoz (target=%s, combined=%s).",
+                raw_word,
+                target,
+                combined,
+            )
+            return []
+        else:
+            logging.warning("Elfogytak a Soniox tokenek a '%s' szó feldolgozásakor.", raw_word)
+            return []
+    return grouped
+
+
+def _normalise_tokens_direct(tokens: List[dict]) -> List[dict]:
     normalised: List[dict] = []
     for token in tokens:
         if not isinstance(token, dict):
@@ -345,6 +438,15 @@ def normalise_tokens(tokens: List[dict]) -> List[dict]:
         )
     normalised.sort(key=lambda item: item["start"])
     return normalised
+
+
+def normalise_tokens(tokens: List[dict], transcript_text: Optional[str] = None) -> List[dict]:
+    if transcript_text:
+        grouped = _group_tokens_using_text(tokens, transcript_text)
+        if grouped:
+            return grouped
+        logging.warning("Nem sikerült a Soniox tokeneket a fő 'text' mező alapján csoportosítani – visszatérés token szintre.")
+    return _normalise_tokens_direct(tokens)
 
 
 def _sanitize_text(value: Any) -> str:
@@ -559,7 +661,8 @@ def process_audio_file(
         except OSError as exc:
             logging.warning("Nem sikerült a Soniox raw transcript mentése (%s): %s", raw_dump_path.name, exc)
         tokens = transcript.get("tokens") or []
-        word_segments = normalise_tokens(tokens)
+        transcript_text = transcript.get("text")
+        word_segments = normalise_tokens(tokens, transcript_text=transcript_text)
         if not word_segments:
             logging.warning("Nem található szó szintű token a Soniox válaszban (%s).", audio_path.name)
             return None
