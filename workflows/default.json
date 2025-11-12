@@ -3,25 +3,25 @@
   "steps": [
     {
       "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
     {
       "script": "ASR/soniox/soniox.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {
         "diarize": true,
@@ -30,7 +30,7 @@
     },
     {
       "script": "ASR/resegment/resegment.py",
-      "enabled": false,
+      "enabled": true,
       "halt_on_fail": true,
       "params": {}
     },
@@ -62,6 +62,28 @@
         "norm": "hun",
         "enable_pitch_check": true,
         "save_failures": true
+      }
+    },
+    {
+      "script": "AUDIO-VIDEO/normalize_and_cut_tts_files/normalise_and_cut_json_easy_v1.1.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {}
+    },
+    {
+      "script": "AUDIO-VIDEO/merge_chunks_with_bacground_v1.1/merge_chunks_with_background_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "time_stretching": true
+      }
+    },
+    {
+      "script": "AUDIO-VIDEO/merge_dub_to_video/merge_to_video_easy.py",
+      "enabled": true,
+      "halt_on_fail": true,
+      "params": {
+        "language": "hun"
       }
     }
   ],
