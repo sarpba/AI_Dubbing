@@ -3,7 +3,7 @@
 **Belépési pont:** `soniox.py`
 
 ## Áttekintés
-Az eszköz a Soniox hivatalos REST alapú aszinkron STT API-ját hívja meg a kiválasztott projekt `separated_audio_speech` mappájában található hangfájlokra. Minden fájlhoz külön job készül: a kliens feltölti a hangot a Soniox felhőbe, létrehozza a transzkripciót, ciklikusan lekérdezi a státuszt, majd a kész eredményt normalizált `word_segments` listaként menti az eredeti fájl mellé (azonos fájlnévvel, `.json` kiterjesztésben). A JSON tartalmazza a legfontosabb metaadatokat (Soniox file/transcription ID, státusz, létrehozási idő).
+ Az eszköz a Soniox hivatalos REST alapú aszinkron STT API-ját hívja meg a kiválasztott projekt `separated_audio_speech` mappájában található hangfájlokra. Minden fájlhoz külön job készül: a kliens feltölti a hangot a Soniox felhőbe, létrehozza a transzkripciót, ciklikusan lekérdezi a státuszt, majd a kész eredményt normalizált `word_segments` listaként **és automatikusan generált mondatszegmensek** (`segments`) formájában menti az eredeti fájl mellé (azonos fájlnévvel, `.json` kiterjesztésben). A JSON tartalmazza a legfontosabb metaadatokat (Soniox file/transcription ID, státusz, létrehozási idő). A Soniox API eredeti (nyers) JSON válasza párhuzamosan `<fájlnév>.soniox_raw.txt` állományba is elmentésre kerül.
 
 ## Kötelező paraméterek
 - `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `workdir` alatt található projektmappa, amelynek `separated_audio_speech` almappáját dolgozza fel.
@@ -27,8 +27,10 @@ Az eszköz a Soniox hivatalos REST alapú aszinkron STT API-ját hívja meg a ki
 ## Kimenetek
 - Minden bemeneti hangfájl mellé létrejön egy `<fájlnév>.json`, amely tartalmazza:
   - `word_segments`: szó szintű időbélyegek, opcionális pontossági értékkel, beszélő és csatorna mezőkkel.
+  - `segments`: automatikusan képzett mondatszegmensek (start, end, text, words, opcionális speaker mezővel), így külön `resegment` lépés nélkül is használhatók a további folyamatok.
   - `speaker_labels`: a Soniox által visszaadott beszélő azonosítók és (ha elérhető) nevek.
   - `metadata`: `file_id`, `reference_name`, `status`, `created` mezők, így könnyen visszakereshető a Soniox portálon.
+- Egy `<fájlnév>.soniox_raw.txt` fájl, amely a Soniox API teljes JSON válaszát tartalmazza ember-olvasható formában (debug/nyers ellenőrzéshez).
 
 ## Hibakezelés / tippek
 - A szkript a Soniox REST API-ját hívja meg `requests` segítségével, ezért nincs szükség a hivatalos Python SDK telepítésére.

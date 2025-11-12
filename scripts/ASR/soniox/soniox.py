@@ -37,6 +37,11 @@ DEFAULT_CHUNK_SIZE = 131072  # Nem szükséges REST módban, de CLI kompatibilit
 COMPLETED_STATUSES = {"completed"}
 FAILED_STATUSES = {"error"}
 API_BASE_URL = "https://api.soniox.com"
+DEFAULT_SENTENCE_MAX_PAUSE_S = 0.8
+DEFAULT_SENTENCE_PADDING_S = 0.1
+DEFAULT_SENTENCE_MAX_SEGMENT_S = 11.5
+PRIMARY_PUNCTUATION: Tuple[str, ...] = (".", "!", "?")
+SECONDARY_PUNCTUATION: Tuple[str, ...] = (",",)
 
 
 class ConfigurationError(Exception):
@@ -342,6 +347,148 @@ def normalise_tokens(tokens: List[dict]) -> List[dict]:
     return normalised
 
 
+def _sanitize_text(value: Any) -> str:
+    if not value:
+        return ""
+    text = str(value)
+    cleaned = text.replace('\\"', "").replace('"', "")
+    return cleaned.strip()
+
+
+def adjust_word_timestamps(word_segments: List[dict], padding_s: float) -> List[dict]:
+    if not word_segments:
+        return []
+    adjusted = [word.copy() for word in word_segments]
+    if padding_s <= 0:
+        return adjusted
+    for idx in range(len(adjusted) - 1):
+        gap = adjusted[idx + 1]["start"] - adjusted[idx]["end"]
+        if gap <= padding_s * 2:
+            continue
+        adjustment = min(padding_s, gap / 2.0)
+        adjusted[idx]["end"] += adjustment
+        adjusted[idx + 1]["start"] -= adjustment
+    adjusted[0]["start"] = max(0.0, adjusted[0]["start"] - padding_s)
+    adjusted[-1]["end"] += padding_s
+    for word in adjusted:
+        word["start"] = round(word["start"], 3)
+        word["end"] = round(word["end"], 3)
+    return adjusted
+
+
+def _create_segment_from_words(words: List[dict]) -> Optional[dict]:
+    if not words:
+        return None
+    text = _sanitize_text(" ".join(word["word"] for word in words))
+    segment: dict = {
+        "start": round(words[0]["start"], 3),
+        "end": round(words[-1]["end"], 3),
+        "text": text,
+        "words": words,
+    }
+    speakers = {w.get("speaker") for w in words if w.get("speaker") is not None}
+    if len(speakers) == 1:
+        segment["speaker"] = next(iter(speakers))
+    elif len(speakers) > 1:
+        speaker_counts: Dict[Any, int] = {}
+        for word in words:
+            speaker = word.get("speaker")
+            if speaker is None:
+                continue
+            speaker_counts[speaker] = speaker_counts.get(speaker, 0) + 1
+        if speaker_counts:
+            dominant_speaker = max(speaker_counts.items(), key=lambda item: item[1])[0]
+            segment["speaker"] = dominant_speaker
+            segment["mixed_speakers"] = True
+    return segment
+
+
+def sentence_segments_from_words(
+    words: List[dict],
+    max_pause_s: float,
+    *,
+    split_on_speaker_change: bool = True,
+) -> List[dict]:
+    if not words:
+        return []
+    segments: List[dict] = []
+    current: List[dict] = []
+    for word in words:
+        pause_break = current and (word["start"] - current[-1]["end"]) > max_pause_s
+        speaker_break = (
+            split_on_speaker_change
+            and current
+            and current[-1].get("speaker") is not None
+            and word.get("speaker") is not None
+            and current[-1].get("speaker") != word.get("speaker")
+        )
+        if pause_break or speaker_break:
+            segment = _create_segment_from_words(current)
+            if segment:
+                segments.append(segment)
+            current = []
+        current.append(word)
+    if current:
+        segment = _create_segment_from_words(current)
+        if segment:
+            segments.append(segment)
+    return segments
+
+
+def split_long_segments(segments: List[dict], max_duration_s: float) -> List[dict]:
+    if max_duration_s <= 0:
+        return segments
+    final_segments: List[dict] = []
+
+    def pick_split_index(words: List[dict], punctuation: Tuple[str, ...]) -> Optional[int]:
+        chosen: Optional[int] = None
+        for idx in range(len(words) - 1):
+            token = words[idx]["word"].strip()
+            if not token:
+                continue
+            if token.endswith(punctuation):
+                duration = words[idx]["end"] - words[0]["start"]
+                if duration <= max_duration_s:
+                    chosen = idx
+        return chosen
+
+    queue: List[List[dict]] = [segment["words"] for segment in segments if segment.get("words")]
+    while queue:
+        current_words = queue.pop(0)
+        if not current_words:
+            continue
+        duration = current_words[-1]["end"] - current_words[0]["start"]
+        if duration <= max_duration_s or len(current_words) == 1:
+            segment = _create_segment_from_words(current_words)
+            if segment:
+                final_segments.append(segment)
+            continue
+        split_idx = pick_split_index(current_words, PRIMARY_PUNCTUATION)
+        if split_idx is None:
+            split_idx = pick_split_index(current_words, SECONDARY_PUNCTUATION)
+        if split_idx is None:
+            split_idx = len(current_words) // 2
+        split_idx = max(0, min(split_idx, len(current_words) - 2))
+        first_chunk = current_words[: split_idx + 1]
+        second_chunk = current_words[split_idx + 1 :]
+        if first_chunk:
+            queue.append(first_chunk)
+        if second_chunk:
+            queue.append(second_chunk)
+    return final_segments
+
+
+def build_sentence_segments(word_segments: List[dict]) -> List[dict]:
+    if not word_segments:
+        return []
+    adjusted = adjust_word_timestamps(word_segments, padding_s=DEFAULT_SENTENCE_PADDING_S)
+    initial = sentence_segments_from_words(
+        adjusted,
+        max_pause_s=DEFAULT_SENTENCE_MAX_PAUSE_S,
+    )
+    return split_long_segments(initial, max_duration_s=DEFAULT_SENTENCE_MAX_SEGMENT_S)
+
+
 def timestamp_to_iso(timestamp: Any) -> Optional[str]:
     if not timestamp:
         return None
@@ -359,6 +506,7 @@ def timestamp_to_iso(timestamp: Any) -> Optional[str]:
 def build_output_payload(
     *,
     word_segments: List[dict],
+    segments: List[dict],
     diarize: bool,
     model: str,
     transcription_id: str,
@@ -373,6 +521,7 @@ def build_output_payload(
     }
     return {
         "word_segments": word_segments,
+        "segments": segments,
         "provider": "soniox",
         "model": model,
         "diarization": diarize,
@@ -403,13 +552,21 @@ def process_audio_file(
             timeout_seconds=args.timeout,
         )
         transcript = download_transcript(session, endpoints, transcription_id)
+        raw_dump_path = audio_path.with_suffix(".soniox_raw.txt")
+        try:
+            with raw_dump_path.open("w", encoding="utf-8") as raw_fp:
+                json.dump(transcript, raw_fp, indent=2, ensure_ascii=False)
+        except OSError as exc:
+            logging.warning("Nem sikerült a Soniox raw transcript mentése (%s): %s", raw_dump_path.name, exc)
         tokens = transcript.get("tokens") or []
         word_segments = normalise_tokens(tokens)
         if not word_segments:
             logging.warning("Nem található szó szintű token a Soniox válaszban (%s).", audio_path.name)
             return None
+        sentence_segments = build_sentence_segments(word_segments)
         return build_output_payload(
             word_segments=word_segments,
+            segments=sentence_segments,
             diarize=args.diarize,
             model=args.model,
             transcription_id=transcription_id,

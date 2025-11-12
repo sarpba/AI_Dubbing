@@ -2,7 +2,7 @@
   "enviroment": "sync",
   "script": "ASR/soniox/soniox.py",
   "api": "soniox",
-  "description": "Soniox ASR aszinkron API használata a projekthez tartozó hangfájlok szó szintű (word_segments) JSON kimenetéhez.",
+  "description": "Soniox ASR aszinkron API a projekthez tartozó hangfájlokhoz: word_segments + mondatszegmensek (segments) JSON mentése és a nyers API válaszok .soniox_raw.txt dumpja.",
   "required": [
     {
       "name": "project_name",
