@@ -106,6 +106,40 @@
                 right: 5rem;
             }
         }
+
+        #waveform-time-scale {
+            position: relative;
+            height: 32px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+            font-size: 0.75rem;
+            color: var(--bs-secondary-color);
+        }
+
+        [data-bs-theme="dark"] #waveform-time-scale {
+            border-bottom-color: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .waveform-second-tick {
+            position: absolute;
+            width: 1px;
+            top: 14px;
+            bottom: 0;
+            background-color: currentColor;
+            opacity: 0.45;
+        }
+
+        .waveform-second-tick.major {
+            top: 8px;
+            opacity: 0.8;
+        }
+
+        .waveform-second-label {
+            position: absolute;
+            top: 0;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -189,6 +223,7 @@
             <button id="playPauseBtn" class="btn btn-primary mb-3">{{ translate('header.play_button') }}</button>
             <div id="waveform-scroll-wrapper">
                 <div id="waveform-content-area">
+                    <div id="waveform-time-scale"></div>
                     <div id="waveform"></div>
                     <div id="segments-timeline"></div>
                 </div>
@@ -715,6 +750,20 @@
                     String(milliseconds).padStart(3, '0')
                 ].join('-');
             }
+
+            function formatSecondsForLabel(totalSeconds) {
+                if (typeof totalSeconds !== 'number' || !isFinite(totalSeconds)) {
+                    return '00:00';
+                }
+                const rounded = Math.max(0, Math.floor(totalSeconds));
+                const hours = Math.floor(rounded / 3600);
+                const minutes = Math.floor((rounded % 3600) / 60);
+                const seconds = rounded % 60;
+                if (hours > 0) {
+                    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                }
+                return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
             // ---- FÜGGVÉNYEK VÉGE ----
 
             // Függvények definíciói
@@ -736,6 +785,7 @@
             }
             
             const segmentsTimelineContainer = document.getElementById('segments-timeline');
+            const waveformTimeScale = document.getElementById('waveform-time-scale');
             const waveformContentArea = document.getElementById('waveform-content-area');
             const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
 
@@ -745,6 +795,10 @@
                     const fullAudioPixelWidth = wavesurfer.getWrapper().scrollWidth;
                     waveformContentArea.style.width = `${fullAudioPixelWidth}px`;
                     segmentsTimelineContainer.style.width = `${fullAudioPixelWidth}px`;
+                    if (waveformTimeScale) {
+                        waveformTimeScale.style.width = `${fullAudioPixelWidth}px`;
+                    }
+                    renderWaveformTimeScale(wavesurfer.options?.minPxPerSec || 0);
                 } catch (e) {
                     console.error("Error in updateWidths:", e);
                 }
@@ -831,6 +885,38 @@
                 const segment = segmentsData[segmentIndex];
                 if (!segment) return;
                 focusPlaybackAt(segment.start || 0);
+            }
+
+            function renderWaveformTimeScale(currentPxPerSec) {
+                if (!waveformTimeScale || !wavesurfer || !currentPxPerSec) {
+                    if (waveformTimeScale) {
+                        waveformTimeScale.innerHTML = '';
+                    }
+                    return;
+                }
+                const duration = wavesurfer.getDuration() || 0;
+                waveformTimeScale.innerHTML = '';
+                if (duration <= 0) {
+                    return;
+                }
+                const totalSeconds = Math.ceil(duration);
+                const fragment = document.createDocumentFragment();
+                for (let second = 0; second <= totalSeconds; second++) {
+                    const positionPx = second * currentPxPerSec;
+                    const tick = document.createElement('div');
+                    tick.className = 'waveform-second-tick' + (second % 5 === 0 ? ' major' : '');
+                    tick.style.left = `${positionPx}px`;
+                    fragment.appendChild(tick);
+
+                    if (second % 5 === 0) {
+                        const label = document.createElement('div');
+                        label.className = 'waveform-second-label';
+                        label.style.left = `${positionPx}px`;
+                        label.textContent = formatSecondsForLabel(second);
+                        fragment.appendChild(label);
+                    }
+                }
+                waveformTimeScale.appendChild(fragment);
             }
 
             function startProgressiveWaveformLoading() {
