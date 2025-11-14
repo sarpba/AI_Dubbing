@@ -9,6 +9,7 @@ from flask import (
     after_this_request,
     make_response
 )
+from flask_compress import Compress
 import os
 import json
 import subprocess
@@ -35,6 +36,23 @@ import math
 from collections import OrderedDict
 
 app = Flask(__name__)
+
+# Enable gzip compression for large HTML/JSON responses sent to the frontend.
+app.config.setdefault(
+    "COMPRESS_MIMETYPES",
+    [
+        "text/html",
+        "text/css",
+        "text/xml",
+        "text/plain",
+        "application/json",
+        "application/javascript",
+        "text/javascript",
+    ],
+)
+app.config.setdefault("COMPRESS_LEVEL", 6)
+app.config.setdefault("COMPRESS_MIN_SIZE", 1024)
+Compress(app)
 
 logging.basicConfig(level=logging.INFO)
 

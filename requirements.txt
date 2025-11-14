@@ -9,6 +9,7 @@ flask>=2.0.0
 werkzeug>=2.0.0
 python-dotenv
 flask-cors
+Flask-Compress
 webrtcvad
 openai
 srt
