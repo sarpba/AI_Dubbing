@@ -764,6 +764,31 @@
                 }
                 return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
             }
+
+            function formatTimecodeForTooltip(timeInSeconds) {
+                if (typeof timeInSeconds !== 'number' || !isFinite(timeInSeconds)) {
+                    return '00:00:00.00';
+                }
+                const totalMilliseconds = Math.max(0, Math.round(timeInSeconds * 1000));
+                const hours = Math.floor(totalMilliseconds / 3600000);
+                const minutes = Math.floor((totalMilliseconds % 3600000) / 60000);
+                const seconds = Math.floor((totalMilliseconds % 60000) / 1000);
+                const hundredths = Math.floor((totalMilliseconds % 1000) / 10);
+                const base = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`;
+                if (hours <= 0) {
+                    return base;
+                }
+                return `${String(hours).padStart(2, '0')}:${base}`;
+            }
+
+            function formatSegmentTooltip(segment) {
+                if (!segment) {
+                    return '00:00:00.00 → 00:00:00.00';
+                }
+                const start = formatTimecodeForTooltip(segment.start);
+                const end = formatTimecodeForTooltip(segment.end);
+                return `${start} → ${end}`;
+            }
             // ---- FÜGGVÉNYEK VÉGE ----
 
             // Függvények definíciói
@@ -1164,7 +1189,7 @@
                         originalTextarea.placeholder = t('segments.original_placeholder');
                         originalTextarea.style.resize = 'none';
                         originalTextarea.style.overflowY = 'hidden';
-                        originalTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
+                        originalTextarea.title = formatSegmentTooltip(segment);
 
                         const translatedTextarea = document.createElement('textarea');
                         translatedTextarea.className = 'timeline-segment form-control form-control-sm translated-text';
@@ -1172,7 +1197,7 @@
                         translatedTextarea.placeholder = segment.translated_text ? t('segments.translated_placeholder') : t('segments.translation_missing');
                         translatedTextarea.style.resize = 'none';
                         translatedTextarea.style.overflowY = 'hidden';
-                        translatedTextarea.title = `[${segment.start.toFixed(2)}s - ${segment.end.toFixed(2)}s]`;
+                        translatedTextarea.title = formatSegmentTooltip(segment);
 
                         segmentContainer.appendChild(originalTextarea);
                         segmentContainer.appendChild(translatedTextarea);
