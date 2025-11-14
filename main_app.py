@@ -335,7 +335,7 @@ PROJECT_AUTOFILL_OVERRIDES = {
     'project_dir': 'project_path',
     'project_path': 'project_path',
 }
-SECRET_PARAM_NAMES = {'auth_key', 'hf_token'}
+SECRET_PARAM_NAMES = {'auth_key', 'api_key', 'hf_token'}
 ENCODED_SECRET_PREFIX = 'base64:'
 SECRET_VALUE_PLACEHOLDER = '***'
 ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue', 'cycleWidget'}
