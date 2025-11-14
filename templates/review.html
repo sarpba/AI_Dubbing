@@ -381,6 +381,7 @@
             }
 
             const audioUrl = "{{audio_url|safe if audio_url else ''}}";
+            const audioFileName = {{ audio_file_name|tojson if audio_file_name else '""' }};
             const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
             const currentProjectName = "{{project_name|safe}}";
             let segmentsDataString = '{{segments_data|tojson if segments_data else "[]"}}';
@@ -642,6 +643,18 @@
             let regionIdToOriginalIndexMap = {}; 
             let activelyLoopingRegionId = null;
 
+            const waveformLoaderElement = document.getElementById('audioWaveformLoading');
+            const waveformChunkSizeSeconds = 60;
+            let waveformSamplesPerSecond = 40;
+            let waveformPeaksBuffer = null;
+            let waveformTotalDuration = 0;
+            let waveformStreamingInitialized = false;
+            let waveformStreamingCancelled = false;
+            let waveformFallbackTriggered = false;
+            let waveformChunkRequestInFlight = false;
+            let waveformTotalChunks = null;
+            let updateWaveformPeaksDebounced = null;
+
             const contextMenu = document.getElementById('segment-context-menu');
             let currentContextMenuSegmentIndex = -1;
 
@@ -724,6 +737,7 @@
             
             const segmentsTimelineContainer = document.getElementById('segments-timeline');
             const waveformContentArea = document.getElementById('waveform-content-area');
+            const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
 
             function updateWidths() {
                 if (!wavesurfer || !wavesurfer.getWrapper() || !waveformContentArea || !segmentsTimelineContainer) return;
@@ -758,6 +772,220 @@
                     clearTimeout(timeout);
                     timeout = setTimeout(later, wait);
                 };
+            }
+
+            updateWaveformPeaksDebounced = debounce(() => {
+                if (!wavesurfer || !waveformPeaksBuffer || !waveformTotalDuration) return;
+                wavesurfer.setOptions({
+                    peaks: [waveformPeaksBuffer],
+                    duration: waveformTotalDuration
+                });
+            }, 180);
+
+            function focusPlaybackAt(timeInSeconds) {
+                if (!wavesurfer) return;
+                const duration = wavesurfer.getDuration() || 0;
+                const clampedTime = Math.max(0, Math.min(timeInSeconds, duration));
+                wavesurfer.setTime(clampedTime);
+                wavesurfer.play();
+            }
+
+            function getWaveformClickTime(event) {
+                if (!wavesurfer || !scrollWrapper) return null;
+                const wrapper = wavesurfer.getWrapper();
+                if (!wrapper) return null;
+                const rect = scrollWrapper.getBoundingClientRect();
+                const relativeX = (event.clientX - rect.left) + scrollWrapper.scrollLeft;
+                const fullWidth = wrapper.scrollWidth || rect.width;
+                const duration = wavesurfer.getDuration();
+                if (!fullWidth || !duration) return null;
+                const normalized = Math.min(Math.max(relativeX / fullWidth, 0), 1);
+                return normalized * duration;
+            }
+
+            function handleWaveformAreaClick(event) {
+                if (!wavesurfer) return;
+                if (typeof event.button === 'number' && event.button !== 0) return;
+                if (wavesurfer.isPlaying()) {
+                    wavesurfer.pause();
+                    return;
+                }
+                const clickTime = getWaveformClickTime(event);
+                if (typeof clickTime === 'number') {
+                    focusPlaybackAt(clickTime);
+                }
+            }
+
+            function handleSegmentTimelineClick(event) {
+                if (!segmentsTimelineContainer || !wavesurfer) return;
+                if (typeof event.button === 'number' && event.button !== 0) return;
+                if (event.target.closest('.segment-audio-trigger')) return;
+                const segmentContainer = event.target.closest('.timeline-segment-container');
+                if (!segmentContainer || !segmentContainer.dataset.segmentIndex) return;
+                if (wavesurfer.isPlaying()) {
+                    wavesurfer.pause();
+                    return;
+                }
+                const segmentIndex = parseInt(segmentContainer.dataset.segmentIndex, 10);
+                if (Number.isNaN(segmentIndex) || segmentIndex < 0 || segmentIndex >= segmentsData.length) return;
+                const segment = segmentsData[segmentIndex];
+                if (!segment) return;
+                focusPlaybackAt(segment.start || 0);
+            }
+
+            function startProgressiveWaveformLoading() {
+                if (!audioUrl) {
+                    return;
+                }
+                if (!audioFileName) {
+                    fallbackToDirectWaveformLoad();
+                    return;
+                }
+                if (waveformStreamingCancelled || waveformChunkRequestInFlight || waveformStreamingInitialized) {
+                    return;
+                }
+                toggleWaveformLoader(true, t('audio_modal.loading'));
+                requestWaveformChunk(0);
+            }
+
+            function requestWaveformChunk(chunkIndex) {
+                if (waveformStreamingCancelled) {
+                    return;
+                }
+                waveformChunkRequestInFlight = true;
+                const params = new URLSearchParams({
+                    audio_file: audioFileName,
+                    chunk_index: chunkIndex,
+                    chunk_size: waveformChunkSizeSeconds,
+                    samples_per_second: waveformSamplesPerSecond
+                });
+                fetch(`/api/waveform-chunk/${currentProjectName}?${params.toString()}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        waveformChunkRequestInFlight = false;
+                        if (!data.success) {
+                            throw new Error(data.error || 'waveform_chunk_error');
+                        }
+                        waveformTotalChunks = data.totalChunks || waveformTotalChunks;
+                        toggleWaveformLoader(true, buildWaveformLoaderText(chunkIndex, waveformTotalChunks));
+                        processWaveformChunkResponse(data);
+                        if (!data.isLastChunk && !waveformStreamingCancelled) {
+                            requestWaveformChunk(chunkIndex + 1);
+                        } else {
+                            toggleWaveformLoader(false);
+                        }
+                    })
+                    .catch(error => {
+                        waveformChunkRequestInFlight = false;
+                        console.error('Waveform chunk fetch failed:', error);
+                        fallbackToDirectWaveformLoad();
+                    });
+            }
+
+            function buildWaveformLoaderText(chunkIndex, totalChunks) {
+                if (!waveformLoaderElement) {
+                    return '';
+                }
+                if (!totalChunks) {
+                    return t('audio_modal.loading');
+                }
+                return `${t('audio_modal.loading')} (${chunkIndex + 1}/${totalChunks})`;
+            }
+
+            function processWaveformChunkResponse(data) {
+                const peaks = Array.isArray(data.peaks) ? data.peaks : [];
+                if (!peaks.length) {
+                    if (!waveformStreamingInitialized) {
+                        fallbackToDirectWaveformLoad();
+                    }
+                    return;
+                }
+
+                if (!waveformPeaksBuffer) {
+                    waveformSamplesPerSecond = data.samplesPerSecond || waveformSamplesPerSecond;
+                    waveformTotalDuration = data.totalDuration || ((data.chunkStart || 0) + (data.chunkDuration || 0));
+                    const estimateSeconds = Math.max(
+                        waveformTotalDuration,
+                        (data.chunkStart || 0) + (data.chunkDuration || 0)
+                    );
+                    const initialLength = Math.max(
+                        1,
+                        Math.ceil(estimateSeconds * waveformSamplesPerSecond) + waveformSamplesPerSecond
+                    );
+                    waveformPeaksBuffer = new Float32Array(initialLength);
+                }
+
+                if (data.totalDuration && data.totalDuration > waveformTotalDuration) {
+                    waveformTotalDuration = data.totalDuration;
+                }
+
+                const chunkStartIndex = Math.max(0, Math.round((data.chunkStart || 0) * waveformSamplesPerSecond));
+                ensureWaveformBufferCapacity(chunkStartIndex + peaks.length + waveformSamplesPerSecond);
+
+                for (let i = 0; i < peaks.length; i++) {
+                    const bufferIndex = chunkStartIndex + i;
+                    if (bufferIndex < waveformPeaksBuffer.length) {
+                        waveformPeaksBuffer[bufferIndex] = peaks[i];
+                    }
+                }
+
+                if (!waveformStreamingInitialized) {
+                    waveformStreamingInitialized = true;
+                    try {
+                        const durationForLoad = waveformTotalDuration || ((data.chunkStart || 0) + (data.chunkDuration || 0)) || 1;
+                        wavesurfer.load(audioUrl, [waveformPeaksBuffer], durationForLoad);
+                    } catch (error) {
+                        console.error('Progressive waveform init failed:', error);
+                        fallbackToDirectWaveformLoad();
+                        return;
+                    }
+                } else if (updateWaveformPeaksDebounced) {
+                    updateWaveformPeaksDebounced();
+                }
+            }
+
+            function ensureWaveformBufferCapacity(requiredLength) {
+                if (!waveformPeaksBuffer || waveformPeaksBuffer.length >= requiredLength) {
+                    return;
+                }
+                const expanded = new Float32Array(requiredLength);
+                expanded.set(waveformPeaksBuffer);
+                waveformPeaksBuffer = expanded;
+            }
+
+            function toggleWaveformLoader(show, labelText) {
+                if (!waveformLoaderElement) {
+                    return;
+                }
+                if (show) {
+                    waveformLoaderElement.classList.remove('d-none');
+                    if (labelText) {
+                        waveformLoaderElement.textContent = labelText;
+                    }
+                } else {
+                    waveformLoaderElement.classList.add('d-none');
+                }
+            }
+
+            function fallbackToDirectWaveformLoad() {
+                if (waveformFallbackTriggered) {
+                    return;
+                }
+                waveformFallbackTriggered = true;
+                waveformStreamingCancelled = true;
+                if (!wavesurfer || !audioUrl) {
+                    toggleWaveformLoader(false);
+                    return;
+                }
+                toggleWaveformLoader(true, t('audio_modal.loading'));
+                wavesurfer.load(audioUrl)
+                    .catch(error => console.error('Waveform fallback load error:', error))
+                    .finally(() => toggleWaveformLoader(false));
             }
             
             // Optimalizált collision detection - O(n log n) helyett O(n²)
@@ -1151,7 +1379,6 @@
             try {
                 wavesurfer = WaveSurfer.create({
                     container: '#waveform',
-                    url: audioUrl,
                     waveColor: 'rgb(200, 200, 200)',
                     progressColor: 'rgb(100, 100, 100)',
                     height: 128,
@@ -1179,7 +1406,12 @@
 
                     regionsPlugin.on('region-clicked', (region, e) => {
                         e.stopPropagation();
-                        region.play();
+                        if (!wavesurfer) return;
+                        if (wavesurfer.isPlaying()) {
+                            wavesurfer.pause();
+                            return;
+                        }
+                        focusPlaybackAt(region.start || 0);
                     });
 
                     setWaveformZoom(); 
@@ -1213,14 +1445,18 @@
             } catch (e) {
                 console.error('WaveSurfer core init error:', e);
             }
+
+            const waveformElement = document.getElementById('waveform');
+            waveformElement?.addEventListener('click', handleWaveformAreaClick);
             
             document.getElementById('playPauseBtn')?.addEventListener('click', () => wavesurfer.playPause());
             wavesurfer.on('play', () => document.getElementById('playPauseBtn').textContent = t('player.pause'));
             wavesurfer.on('pause', () => document.getElementById('playPauseBtn').textContent = t('header.play_button'));
             wavesurfer.on('finish', () => document.getElementById('playPauseBtn').textContent = t('header.play_button'));
 
+            startProgressiveWaveformLoading();
+
             // Optimalizált scroll kezelés
-            const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
             if (scrollWrapper) {
                 // Wheel scroll optimalizálás
                 scrollWrapper.addEventListener('wheel', (event) => {
@@ -1240,18 +1476,21 @@
                 scrollWrapper.addEventListener('scroll', debouncedScrollHandler);
             }
             
-            // Event delegation a context menühöz
-            segmentsTimelineContainer.addEventListener('contextmenu', function(event) {
-                const segmentContainer = event.target.closest('.timeline-segment-container');
-                if (segmentContainer && segmentContainer.dataset.segmentIndex) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    currentContextMenuSegmentIndex = parseInt(segmentContainer.dataset.segmentIndex);
-                    contextMenu.style.left = `${event.pageX}px`;
-                    contextMenu.style.top = `${event.pageY}px`;
-                    contextMenu.style.display = 'block';
-                }
-            });
+            if (segmentsTimelineContainer) {
+                segmentsTimelineContainer.addEventListener('click', handleSegmentTimelineClick);
+                // Event delegation a context menühöz
+                segmentsTimelineContainer.addEventListener('contextmenu', function(event) {
+                    const segmentContainer = event.target.closest('.timeline-segment-container');
+                    if (segmentContainer && segmentContainer.dataset.segmentIndex) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        currentContextMenuSegmentIndex = parseInt(segmentContainer.dataset.segmentIndex);
+                        contextMenu.style.left = `${event.pageX}px`;
+                        contextMenu.style.top = `${event.pageY}px`;
+                        contextMenu.style.display = 'block';
+                    }
+                });
+            }
 
             function fullRefreshUI() {
                 regionsPlugin.clearRegions();

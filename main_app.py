@@ -34,6 +34,7 @@ from pydub import AudioSegment
 import wave
 import math
 from collections import OrderedDict
+from mutagen import File as MutagenFile
 
 app = Flask(__name__)
 
@@ -72,6 +73,13 @@ AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.flac', '.m4a', '.aac'}
 VIDEO_EXTENSIONS = {
     '.mp4', '.mkv', '.avi', '.mov', '.webm', '.wmv', '.flv', '.mts', '.m2ts', '.mpg', '.mpeg'
 }
+
+DEFAULT_WAVEFORM_CHUNK_SECONDS = 60
+MIN_WAVEFORM_CHUNK_SECONDS = 5
+MAX_WAVEFORM_CHUNK_SECONDS = 300
+DEFAULT_WAVEFORM_SAMPLES_PER_SECOND = 40
+MIN_WAVEFORM_SAMPLES_PER_SECOND = 5
+MAX_WAVEFORM_SAMPLES_PER_SECOND = 150
 
 DEFAULT_UI_LANGUAGE = 'hun'
 UI_LANGUAGE_COOKIE = 'ui_language'
@@ -191,6 +199,91 @@ def prepare_segments_for_response(project_dir: str, segments: Any) -> List[Dict[
     sanitize_segment_strings(prepared_segments)
     annotate_segments_with_translated_splits(project_dir, prepared_segments)
     return prepared_segments
+
+
+def resolve_audio_file_path(project_name: str, audio_file_name: str) -> Optional[Path]:
+    if not project_name or not audio_file_name:
+        return None
+    safe_project = secure_filename(project_name)
+    audio_basename = os.path.basename(audio_file_name)
+    if not audio_basename:
+        return None
+    project_root = Path('workdir') / safe_project
+    speech_subdir = (config.get('PROJECT_SUBDIRS') or {}).get('separated_audio_speech')
+    if not speech_subdir:
+        return None
+    candidate = project_root / speech_subdir / audio_basename
+    if candidate.is_file():
+        return candidate
+    return None
+
+
+def get_audio_duration_seconds(audio_path: Path) -> Optional[float]:
+    try:
+        audio_file = MutagenFile(audio_path)
+        if audio_file and audio_file.info and getattr(audio_file.info, 'length', None):
+            return float(audio_file.info.length)
+    except Exception as exc:
+        app.logger.warning("Mutagen could not parse %s: %s", audio_path, exc)
+    try:
+        segment = AudioSegment.from_file(audio_path)
+        return len(segment) / 1000.0
+    except Exception as exc:
+        app.logger.error("Failed to probe audio duration for %s: %s", audio_path, exc)
+    return None
+
+
+def downsample_audio_chunk(
+    audio_path: Path,
+    chunk_start: float,
+    chunk_duration: float,
+    samples_per_second: int,
+) -> Tuple[List[float], float]:
+    if chunk_duration <= 0:
+        return [], 0.0
+
+    segment = AudioSegment.from_file(
+        audio_path,
+        start_second=max(0.0, chunk_start),
+        duration=max(0.0, chunk_duration)
+    )
+    actual_duration = len(segment) / 1000.0
+    if actual_duration <= 0:
+        return [], actual_duration
+
+    total_frames = int(segment.frame_count())
+    if total_frames <= 0:
+        return [], actual_duration
+
+    channels = segment.channels or 1
+    target_points = max(1, int(math.ceil(actual_duration * samples_per_second)))
+    samples = segment.get_array_of_samples()
+    sample_width_bits = max(1, segment.sample_width * 8)
+    max_amplitude = float(1 << (sample_width_bits - 1))
+    peaks: List[float] = []
+
+    for point_index in range(target_points):
+        start_frame = math.floor(point_index * total_frames / target_points)
+        end_frame = math.floor((point_index + 1) * total_frames / target_points)
+        if end_frame <= start_frame:
+            end_frame = min(start_frame + 1, total_frames)
+
+        peak_value = 0.0
+        for frame_idx in range(start_frame, end_frame):
+            sample_offset = frame_idx * channels
+            for channel_index in range(channels):
+                raw_value = float(samples[sample_offset + channel_index])
+                if abs(raw_value) > abs(peak_value):
+                    peak_value = raw_value
+
+        if peak_value == 0.0:
+            peaks.append(0.0)
+            continue
+
+        normalized = peak_value / max_amplitude if max_amplitude else 0.0
+        peaks.append(max(-1.0, min(1.0, normalized)))
+
+    return peaks, actual_duration
 
 
 def find_matching_audio_file(base_name: str, directory: str) -> Optional[str]:
@@ -3253,6 +3346,79 @@ def review_project(project_name):
         json_file_name=json_file_name,
         app_config=config  # Átadjuk a konfigurációt app_config néven
     )
+
+
+@app.route('/api/waveform-chunk/<project_name>')
+def fetch_waveform_chunk(project_name):
+    audio_file_name = (request.args.get('audio_file') or '').strip()
+    if not audio_file_name:
+        return jsonify({'success': False, 'error': 'missing_audio_file'}), 400
+
+    try:
+        chunk_index = int(request.args.get('chunk_index', 0))
+    except (TypeError, ValueError):
+        chunk_index = 0
+    chunk_index = max(0, chunk_index)
+
+    chunk_size = request.args.get('chunk_size', type=float)
+    if chunk_size is None or chunk_size <= 0:
+        chunk_size = DEFAULT_WAVEFORM_CHUNK_SECONDS
+    chunk_size = max(MIN_WAVEFORM_CHUNK_SECONDS, min(MAX_WAVEFORM_CHUNK_SECONDS, chunk_size))
+
+    samples_per_second = request.args.get('samples_per_second', type=int)
+    if samples_per_second is None or samples_per_second <= 0:
+        samples_per_second = DEFAULT_WAVEFORM_SAMPLES_PER_SECOND
+    samples_per_second = max(
+        MIN_WAVEFORM_SAMPLES_PER_SECOND,
+        min(MAX_WAVEFORM_SAMPLES_PER_SECOND, samples_per_second)
+    )
+
+    audio_path = resolve_audio_file_path(project_name, audio_file_name)
+    if not audio_path:
+        return jsonify({'success': False, 'error': 'audio_not_found'}), 404
+
+    total_duration = get_audio_duration_seconds(audio_path)
+    if total_duration is None:
+        return jsonify({'success': False, 'error': 'duration_unavailable'}), 500
+
+    chunk_start = chunk_index * chunk_size
+    if chunk_start >= total_duration:
+        return jsonify({
+            'success': True,
+            'peaks': [],
+            'chunkIndex': chunk_index,
+            'chunkStart': chunk_start,
+            'chunkDuration': 0.0,
+            'totalDuration': total_duration,
+            'samplesPerSecond': samples_per_second,
+            'totalChunks': math.ceil(total_duration / chunk_size),
+            'isLastChunk': True
+        })
+
+    chunk_duration = min(chunk_size, total_duration - chunk_start)
+    try:
+        peaks, actual_duration = downsample_audio_chunk(
+            audio_path,
+            chunk_start,
+            chunk_duration,
+            samples_per_second
+        )
+    except Exception as exc:
+        app.logger.exception("Waveform chunk generation failed for %s: %s", audio_path, exc)
+        return jsonify({'success': False, 'error': 'chunk_generation_failed'}), 500
+
+    is_last_chunk = (chunk_start + actual_duration) >= (total_duration - 0.01)
+    return jsonify({
+        'success': True,
+        'peaks': peaks,
+        'chunkIndex': chunk_index,
+        'chunkStart': chunk_start,
+        'chunkDuration': actual_duration,
+        'totalDuration': total_duration,
+        'samplesPerSecond': samples_per_second,
+        'totalChunks': math.ceil(total_duration / chunk_size),
+        'isLastChunk': is_last_chunk
+    })
 
 @app.route('/api/restore-project', methods=['POST'])
 def restore_project_backup():
