@@ -316,15 +316,18 @@ def process_file(
     if non_speech_silence or auto_non_speech_silence:
         if auto_non_speech_silence and not non_speech_silence:
             print("Automatikus tiszta beszéd detektálva, non_speech csendesítése.")
+        if non_speech_silence and not auto_non_speech_silence:
+            print("non_speech_silence flag aktív, háttérsáv némítása.")
         combined_background = np.zeros_like(combined_background)
-
-    mix_np = mix_waveform.cpu().numpy()
-    final_background = blend_background(
-        mix=mix_np,
-        vocals=combined_vocals,
-        predicted_background=combined_background,
-        blend_ratio=background_blend,
-    )
+        final_background = np.zeros_like(combined_background)
+    else:
+        mix_np = mix_waveform.cpu().numpy()
+        final_background = blend_background(
+            mix=mix_np,
+            vocals=combined_vocals,
+            predicted_background=combined_background,
+            blend_ratio=background_blend,
+        )
 
     vocals_path = speech_output_dir / f"{base_name}_speech.wav"
     background_path = background_output_dir / f"{base_name}_non_speech.wav"
