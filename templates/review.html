@@ -107,6 +107,34 @@
             }
         }
 
+        #waveform-content-area {
+            position: relative;
+        }
+
+        .waveform-encoding-overlay {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.65);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            color: #fff;
+        }
+
+        [data-bs-theme="dark"] .waveform-encoding-overlay {
+            background-color: rgba(0, 0, 0, 0.75);
+        }
+
+        .waveform-encoding-overlay .encoding-dialog {
+            background-color: rgba(0, 0, 0, 0.75);
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            min-width: 240px;
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.4);
+        }
+
         #waveform-time-scale {
             position: relative;
             height: 32px;
@@ -215,7 +243,8 @@
         </div>
     </div>
 
-        {%if audio_url and segments_data%}
+        {% set show_waveform_block = segments_data and (audio_url or needs_audio_encoding) %}
+        {%if show_waveform_block%}
             <div class="mb-3">
                 <p class="mb-1">{{ translate('header.audio_file_label') }} <strong>{{audio_file_name}}</strong></p>
                 <p class="mb-1">{{ translate('header.json_file_label') }} <strong>{{json_file_name}}</strong> ({{ translate('header.segment_count', count=segments_data|length) }})</p>
@@ -223,12 +252,21 @@
             <button id="playPauseBtn" class="btn btn-primary mb-3">{{ translate('header.play_button') }}</button>
             <div id="waveform-scroll-wrapper">
                 <div id="waveform-content-area">
+                    <div id="waveformEncodingOverlay" class="waveform-encoding-overlay d-none">
+                        <div class="encoding-dialog">
+                            <div class="spinner-border spinner-border-sm mb-2" role="status" aria-hidden="true"></div>
+                            <div id="waveformEncodingText">Hangfájl előkészítése...</div>
+                            <div class="progress mt-3" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+                                <div id="waveformEncodingBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 5%;">0%</div>
+                            </div>
+                        </div>
+                    </div>
                     <div id="waveform-time-scale"></div>
                     <div id="waveform"></div>
                     <div id="segments-timeline"></div>
                 </div>
             </div>
-        {%elif audio_url and not segments_data%}
+        {%elif (audio_url or needs_audio_encoding) and not segments_data%}
             <div class="alert alert-warning" role="alert">
                 {{ translate('alerts.audio_without_segments', audio=audio_file_name, json=json_file_name if json_file_name else translate('alerts.associated_json')) }}
             </div>
@@ -415,8 +453,9 @@
                 });
             }
 
-            const audioUrl = "{{audio_url|safe if audio_url else ''}}";
-            const audioFileName = {{ audio_file_name|tojson if audio_file_name else '""' }};
+            let audioUrl = "{{audio_url|safe if audio_url else ''}}";
+            const originalAudioFileName = {{ audio_file_name|tojson if audio_file_name else '""' }};
+            const needsAudioEncoding = {{ 'true' if needs_audio_encoding else 'false' }};
             const translatedSplitsDir = "{{ app_config.PROJECT_SUBDIRS.translated_splits | e }}";
             const currentProjectName = "{{project_name|safe}}";
             let segmentsDataString = '{{segments_data|tojson if segments_data else "[]"}}';
@@ -659,13 +698,16 @@
             let currentJsonFileNameString = '{{json_file_name|tojson if json_file_name else "null"}}';
             let currentJsonFileName = (currentJsonFileNameString && currentJsonFileNameString !== 'null') ? JSON.parse(currentJsonFileNameString) : null;
 
-            if (!audioUrl) {
+            if (!audioUrl && !needsAudioEncoding) {
                 console.error('[DEBUG 03] Audio URL hiányzik.');
-                const playButton = document.getElementById('playPauseBtn');
-                if(playButton) playButton.disabled = true;
+                if (playPauseBtn) playPauseBtn.disabled = true;
                 return;
             }
-            console.log('[DEBUG 03] Audio URL:', audioUrl);
+            if (audioUrl) {
+                console.log('[DEBUG 03] Audio URL:', audioUrl);
+            } else {
+                console.log('[DEBUG 03] MP3 előállítása folyamatban, várakozás...');
+            }
 
             if (segmentsData.length === 0 && audioUrl) {
                 console.info('[DEBUG 04] Nincsenek szegmensek.');
@@ -677,18 +719,7 @@
             let regionsPlugin;
             let regionIdToOriginalIndexMap = {}; 
             let activelyLoopingRegionId = null;
-
-            const waveformLoaderElement = document.getElementById('audioWaveformLoading');
-            const waveformChunkSizeSeconds = 60;
-            let waveformSamplesPerSecond = 40;
-            let waveformPeaksBuffer = null;
-            let waveformTotalDuration = 0;
-            let waveformStreamingInitialized = false;
-            let waveformStreamingCancelled = false;
-            let waveformFallbackTriggered = false;
-            let waveformChunkRequestInFlight = false;
-            let waveformTotalChunks = null;
-            let updateWaveformPeaksDebounced = null;
+            let waveSurferEventsBound = false;
 
             const contextMenu = document.getElementById('segment-context-menu');
             let currentContextMenuSegmentIndex = -1;
@@ -813,6 +844,10 @@
             const waveformTimeScale = document.getElementById('waveform-time-scale');
             const waveformContentArea = document.getElementById('waveform-content-area');
             const scrollWrapper = document.getElementById('waveform-scroll-wrapper');
+            const playPauseBtn = document.getElementById('playPauseBtn');
+            const waveformEncodingOverlay = document.getElementById('waveformEncodingOverlay');
+            const waveformEncodingText = document.getElementById('waveformEncodingText');
+            const waveformEncodingBar = document.getElementById('waveformEncodingBar');
 
             function updateWidths() {
                 if (!wavesurfer || !wavesurfer.getWrapper() || !waveformContentArea || !segmentsTimelineContainer) return;
@@ -826,6 +861,29 @@
                     renderWaveformTimeScale(wavesurfer.options?.minPxPerSec || 0);
                 } catch (e) {
                     console.error("Error in updateWidths:", e);
+                }
+            }
+
+            function updateEncodingProgressDisplay(progressValue) {
+                if (!waveformEncodingBar) return;
+                const safeProgress = Math.max(0, Math.min(100, progressValue || 0));
+                waveformEncodingBar.style.width = `${safeProgress}%`;
+                waveformEncodingBar.textContent = `${Math.round(safeProgress)}%`;
+                waveformEncodingBar.setAttribute('aria-valuenow', safeProgress.toFixed(2));
+            }
+
+            function showEncodingOverlay(progressValue = 0, message) {
+                if (!waveformEncodingOverlay) return;
+                waveformEncodingOverlay.classList.remove('d-none');
+                if (waveformEncodingText && typeof message === 'string') {
+                    waveformEncodingText.textContent = message;
+                }
+                updateEncodingProgressDisplay(progressValue);
+            }
+
+            function hideEncodingOverlay() {
+                if (waveformEncodingOverlay) {
+                    waveformEncodingOverlay.classList.add('d-none');
                 }
             }
             
@@ -852,14 +910,6 @@
                     timeout = setTimeout(later, wait);
                 };
             }
-
-            updateWaveformPeaksDebounced = debounce(() => {
-                if (!wavesurfer || !waveformPeaksBuffer || !waveformTotalDuration) return;
-                wavesurfer.setOptions({
-                    peaks: [waveformPeaksBuffer],
-                    duration: waveformTotalDuration
-                });
-            }, 180);
 
             function focusPlaybackAt(timeInSeconds) {
                 if (!wavesurfer) return;
@@ -912,6 +962,7 @@
                 focusPlaybackAt(segment.start || 0);
             }
 
+
             function renderWaveformTimeScale(currentPxPerSec) {
                 if (!waveformTimeScale || !wavesurfer || !currentPxPerSec) {
                     if (waveformTimeScale) {
@@ -944,160 +995,45 @@
                 waveformTimeScale.appendChild(fragment);
             }
 
-            function startProgressiveWaveformLoading() {
-                if (!audioUrl) {
-                    return;
-                }
-                if (!audioFileName) {
-                    fallbackToDirectWaveformLoad();
-                    return;
-                }
-                if (waveformStreamingCancelled || waveformChunkRequestInFlight || waveformStreamingInitialized) {
-                    return;
-                }
-                toggleWaveformLoader(true, t('audio_modal.loading'));
-                requestWaveformChunk(0);
+            function pollAudioEncodingStatus(delayMs = 1000) {
+                if (!originalAudioFileName) return;
+                const waitTime = Math.max(200, delayMs);
+                setTimeout(() => {
+                    const params = new URLSearchParams({ audio_file: originalAudioFileName });
+                    fetch(`/api/review-audio-status/${currentProjectName}?${params.toString()}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (!data.success && data.status !== 'encoding') {
+                                const errorMsg = data.error || t('errors.unknown');
+                                showEncodingOverlay(0, `${t('errors.generic', { error: errorMsg })}`);
+                                return;
+                            }
+                            if (data.status === 'available' && data.audio_url) {
+                                audioUrl = data.audio_url;
+                                hideEncodingOverlay();
+                                if (playPauseBtn) {
+                                    playPauseBtn.disabled = false;
+                                }
+                                initializeWaveSurfer();
+                                return;
+                            }
+                            if (data.status === 'encoding') {
+                                const progressValue = data.progress || 0;
+                                const label = `${t('audio_modal.loading')} (MP3)`;
+                                showEncodingOverlay(progressValue, `${label} - ${Math.round(progressValue)}%`);
+                                pollAudioEncodingStatus(Math.min(waitTime + 200, 2000));
+                            } else if (data.status === 'failed') {
+                                const message = data.error || t('errors.unknown');
+                                showEncodingOverlay(0, `${t('errors.generic', { error: message })}`);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Review audio encoding status error:', err);
+                            pollAudioEncodingStatus(Math.min(waitTime + 400, 3000));
+                        });
+                }, waitTime);
             }
 
-            function requestWaveformChunk(chunkIndex) {
-                if (waveformStreamingCancelled) {
-                    return;
-                }
-                waveformChunkRequestInFlight = true;
-                const params = new URLSearchParams({
-                    audio_file: audioFileName,
-                    chunk_index: chunkIndex,
-                    chunk_size: waveformChunkSizeSeconds,
-                    samples_per_second: waveformSamplesPerSecond
-                });
-                fetch(`/api/waveform-chunk/${currentProjectName}?${params.toString()}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        waveformChunkRequestInFlight = false;
-                        if (!data.success) {
-                            throw new Error(data.error || 'waveform_chunk_error');
-                        }
-                        waveformTotalChunks = data.totalChunks || waveformTotalChunks;
-                        toggleWaveformLoader(true, buildWaveformLoaderText(chunkIndex, waveformTotalChunks));
-                        processWaveformChunkResponse(data);
-                        if (!data.isLastChunk && !waveformStreamingCancelled) {
-                            requestWaveformChunk(chunkIndex + 1);
-                        } else {
-                            toggleWaveformLoader(false);
-                        }
-                    })
-                    .catch(error => {
-                        waveformChunkRequestInFlight = false;
-                        console.error('Waveform chunk fetch failed:', error);
-                        fallbackToDirectWaveformLoad();
-                    });
-            }
-
-            function buildWaveformLoaderText(chunkIndex, totalChunks) {
-                if (!waveformLoaderElement) {
-                    return '';
-                }
-                if (!totalChunks) {
-                    return t('audio_modal.loading');
-                }
-                return `${t('audio_modal.loading')} (${chunkIndex + 1}/${totalChunks})`;
-            }
-
-            function processWaveformChunkResponse(data) {
-                const peaks = Array.isArray(data.peaks) ? data.peaks : [];
-                if (!peaks.length) {
-                    if (!waveformStreamingInitialized) {
-                        fallbackToDirectWaveformLoad();
-                    }
-                    return;
-                }
-
-                if (!waveformPeaksBuffer) {
-                    waveformSamplesPerSecond = data.samplesPerSecond || waveformSamplesPerSecond;
-                    waveformTotalDuration = data.totalDuration || ((data.chunkStart || 0) + (data.chunkDuration || 0));
-                    const estimateSeconds = Math.max(
-                        waveformTotalDuration,
-                        (data.chunkStart || 0) + (data.chunkDuration || 0)
-                    );
-                    const initialLength = Math.max(
-                        1,
-                        Math.ceil(estimateSeconds * waveformSamplesPerSecond) + waveformSamplesPerSecond
-                    );
-                    waveformPeaksBuffer = new Float32Array(initialLength);
-                }
-
-                if (data.totalDuration && data.totalDuration > waveformTotalDuration) {
-                    waveformTotalDuration = data.totalDuration;
-                }
-
-                const chunkStartIndex = Math.max(0, Math.round((data.chunkStart || 0) * waveformSamplesPerSecond));
-                ensureWaveformBufferCapacity(chunkStartIndex + peaks.length + waveformSamplesPerSecond);
-
-                for (let i = 0; i < peaks.length; i++) {
-                    const bufferIndex = chunkStartIndex + i;
-                    if (bufferIndex < waveformPeaksBuffer.length) {
-                        waveformPeaksBuffer[bufferIndex] = peaks[i];
-                    }
-                }
-
-                if (!waveformStreamingInitialized) {
-                    waveformStreamingInitialized = true;
-                    try {
-                        const durationForLoad = waveformTotalDuration || ((data.chunkStart || 0) + (data.chunkDuration || 0)) || 1;
-                        wavesurfer.load(audioUrl, [waveformPeaksBuffer], durationForLoad);
-                    } catch (error) {
-                        console.error('Progressive waveform init failed:', error);
-                        fallbackToDirectWaveformLoad();
-                        return;
-                    }
-                } else if (updateWaveformPeaksDebounced) {
-                    updateWaveformPeaksDebounced();
-                }
-            }
-
-            function ensureWaveformBufferCapacity(requiredLength) {
-                if (!waveformPeaksBuffer || waveformPeaksBuffer.length >= requiredLength) {
-                    return;
-                }
-                const expanded = new Float32Array(requiredLength);
-                expanded.set(waveformPeaksBuffer);
-                waveformPeaksBuffer = expanded;
-            }
-
-            function toggleWaveformLoader(show, labelText) {
-                if (!waveformLoaderElement) {
-                    return;
-                }
-                if (show) {
-                    waveformLoaderElement.classList.remove('d-none');
-                    if (labelText) {
-                        waveformLoaderElement.textContent = labelText;
-                    }
-                } else {
-                    waveformLoaderElement.classList.add('d-none');
-                }
-            }
-
-            function fallbackToDirectWaveformLoad() {
-                if (waveformFallbackTriggered) {
-                    return;
-                }
-                waveformFallbackTriggered = true;
-                waveformStreamingCancelled = true;
-                if (!wavesurfer || !audioUrl) {
-                    toggleWaveformLoader(false);
-                    return;
-                }
-                toggleWaveformLoader(true, t('audio_modal.loading'));
-                wavesurfer.load(audioUrl)
-                    .catch(error => console.error('Waveform fallback load error:', error))
-                    .finally(() => toggleWaveformLoader(false));
-            }
             
             // Optimalizált collision detection - O(n log n) helyett O(n²)
             function calculateSegmentPositions(segments, currentPxPerSec) {
@@ -1156,7 +1092,8 @@
             
             // Viewport alapú virtualizáció
             function getVisibleSegmentIndices(scrollLeft, viewportWidth, currentPxPerSec) {
-                const buffer = viewportWidth * 0.5; // 50% buffer mindkét oldalon
+                const bufferFactor = 0.2; // 20% buffer mindkét oldalon
+                const buffer = viewportWidth * bufferFactor;
                 const startTime = Math.max(0, (scrollLeft - buffer) / currentPxPerSec);
                 const endTime = (scrollLeft + viewportWidth + buffer) / currentPxPerSec;
                 
@@ -1487,85 +1424,132 @@
             }
 
 
-            try {
-                wavesurfer = WaveSurfer.create({
-                    container: '#waveform',
-                    waveColor: 'rgb(200, 200, 200)',
-                    progressColor: 'rgb(100, 100, 100)',
-                    height: 128,
-                    minPxPerSec: 10 
-                });
-
-                wavesurfer.on('ready', function () {
-                    regionsPlugin = wavesurfer.registerPlugin(WaveSurfer.Regions.create());
-
-                    regionsPlugin.on('region-updated', (region) => {
-                        const originalIndex = regionIdToOriginalIndexMap[region.id];
-                        if (typeof originalIndex === 'undefined') {
-                            console.warn('Region updated but no mapping found for region ID:', region.id);
-                            return;
-                        }
-                        if (originalIndex >= segmentsData.length) {
-                            console.warn('Region index out of bounds:', originalIndex, 'segments length:', segmentsData.length);
-                            return;
-                        }
-                        const segment = segmentsData[originalIndex];
-                        const newStart = parseFloat(region.start.toFixed(3));
-                        const newEnd = parseFloat(region.end.toFixed(3));
-                        updateSegmentOnServer(originalIndex, newStart, newEnd, segment.text, segment.translated_text || '');
+            function initializeWaveSurfer() {
+                if (wavesurfer || !audioUrl) {
+                    return;
+                }
+                const waveformContainer = document.getElementById('waveform');
+                if (!waveformContainer) {
+                    console.error('WaveSurfer init error: #waveform container not found.');
+                    return;
+                }
+                try {
+                    wavesurfer = WaveSurfer.create({
+                        container: waveformContainer,
+                        url: audioUrl,
+                        waveColor: 'rgb(200, 200, 200)',
+                        progressColor: 'rgb(100, 100, 100)',
+                        height: 128,
+                        minPxPerSec: 5,
+                        responsive: true,
+                        autoCenter: true
                     });
 
-                    regionsPlugin.on('region-clicked', (region, e) => {
-                        e.stopPropagation();
-                        if (!wavesurfer) return;
-                        if (wavesurfer.isPlaying()) {
-                            wavesurfer.pause();
-                            return;
-                        }
-                        focusPlaybackAt(region.start || 0);
-                    });
-
-                    setWaveformZoom(); 
-                    updateWidths();    
-                    
-                    if (segmentsData.length > 0) {
-                        segmentsData.forEach((segment, index) => {
-                            try {
-                                const region = regionsPlugin.addRegion({
-                                    start: segment.start,
-                                    end: segment.end,
-                                    color: 'rgba(0, 123, 255, 0.1)',
-                                    resize: true
-                                });
-                                regionIdToOriginalIndexMap[region.id] = index;
-                            } catch (e) {
-                                console.error(`Error adding region ${index}:`, e);
+                    if (playPauseBtn && !playPauseBtn.dataset.wavesurferBound) {
+                        playPauseBtn.addEventListener('click', () => {
+                            if (wavesurfer) {
+                                wavesurfer.playPause();
                             }
                         });
+                        playPauseBtn.dataset.wavesurferBound = 'true';
                     }
-                    createTimelineSegments(wavesurfer.options.minPxPerSec); 
-                });
 
-                wavesurfer.on('zoom', (newMinPxPerSec) => {
-                    updateWidths();
-                    createTimelineSegments(newMinPxPerSec);
-                });
+                    wavesurfer.on('ready', function () {
+                        regionsPlugin = wavesurfer.registerPlugin(WaveSurfer.Regions.create());
 
-                wavesurfer.on('error', (err) => console.error("Wavesurfer error:", err));
+                        regionsPlugin.on('region-updated', (region) => {
+                            const originalIndex = regionIdToOriginalIndexMap[region.id];
+                            if (typeof originalIndex === 'undefined') {
+                                console.warn('Region updated but no mapping found for region ID:', region.id);
+                                return;
+                            }
+                            if (originalIndex >= segmentsData.length) {
+                                console.warn('Region index out of bounds:', originalIndex, 'segments length:', segmentsData.length);
+                                return;
+                            }
+                            const segment = segmentsData[originalIndex];
+                            const newStart = parseFloat(region.start.toFixed(3));
+                            const newEnd = parseFloat(region.end.toFixed(3));
+                            updateSegmentOnServer(originalIndex, newStart, newEnd, segment.text, segment.translated_text || '');
+                        });
 
-            } catch (e) {
-                console.error('WaveSurfer core init error:', e);
+                        regionsPlugin.on('region-clicked', (region, e) => {
+                            e.stopPropagation();
+                            if (!wavesurfer) return;
+                            if (wavesurfer.isPlaying()) {
+                                wavesurfer.pause();
+                                return;
+                            }
+                            focusPlaybackAt(region.start || 0);
+                        });
+
+                        setWaveformZoom(); 
+                        updateWidths();    
+                        
+                        if (segmentsData.length > 0) {
+                            segmentsData.forEach((segment, index) => {
+                                try {
+                                    const region = regionsPlugin.addRegion({
+                                        start: segment.start,
+                                        end: segment.end,
+                                        color: 'rgba(0, 123, 255, 0.1)',
+                                        resize: true
+                                    });
+                                    regionIdToOriginalIndexMap[region.id] = index;
+                                } catch (e) {
+                                    console.error(`Error adding region ${index}:`, e);
+                                }
+                            });
+                        }
+                        createTimelineSegments(wavesurfer.options.minPxPerSec); 
+                    });
+
+                    wavesurfer.on('zoom', (newMinPxPerSec) => {
+                        updateWidths();
+                        createTimelineSegments(newMinPxPerSec);
+                    });
+
+                    wavesurfer.on('error', (err) => console.error("Wavesurfer error:", err));
+                    if (!waveSurferEventsBound) {
+                        waveSurferEventsBound = true;
+                        wavesurfer.on('play', () => {
+                            if (playPauseBtn) playPauseBtn.textContent = t('player.pause');
+                        });
+                        wavesurfer.on('pause', () => {
+                            if (playPauseBtn) playPauseBtn.textContent = t('header.play_button');
+                        });
+                        wavesurfer.on('finish', () => {
+                            if (playPauseBtn) playPauseBtn.textContent = t('header.play_button');
+                        });
+                    }
+
+                } catch (e) {
+                    console.error('WaveSurfer core init error:', e);
+                }
             }
 
             const waveformElement = document.getElementById('waveform');
             waveformElement?.addEventListener('click', handleWaveformAreaClick);
-            
-            document.getElementById('playPauseBtn')?.addEventListener('click', () => wavesurfer.playPause());
-            wavesurfer.on('play', () => document.getElementById('playPauseBtn').textContent = t('player.pause'));
-            wavesurfer.on('pause', () => document.getElementById('playPauseBtn').textContent = t('header.play_button'));
-            wavesurfer.on('finish', () => document.getElementById('playPauseBtn').textContent = t('header.play_button'));
-
-            startProgressiveWaveformLoading();
+            function scheduleWaveSurferInit() {
+                const start = () => initializeWaveSurfer();
+                if (typeof window.requestIdleCallback === 'function') {
+                    window.requestIdleCallback(() => {
+                        setTimeout(start, 0);
+                    }, { timeout: 200 });
+                } else {
+                    setTimeout(start, 80);
+                }
+            }
+            if (needsAudioEncoding) {
+                if (playPauseBtn) {
+                    playPauseBtn.disabled = true;
+                }
+                const initialLabel = `${t('audio_modal.loading')} (MP3)`;
+                showEncodingOverlay(0, initialLabel);
+                pollAudioEncodingStatus(200);
+            } else {
+                scheduleWaveSurferInit();
+            }
 
             // Optimalizált scroll kezelés
             if (scrollWrapper) {

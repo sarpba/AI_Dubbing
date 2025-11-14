@@ -64,6 +64,27 @@ def extract_audio(video_path: str, audio_path: str) -> bool:
     return True
 
 
+def create_preview_mp3(source_wav: Path, target_mp3: Path) -> bool:
+    """Create 128 kbps mono MP3 preview from a WAV file."""
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(source_wav),
+        "-ac",
+        "1",
+        "-b:a",
+        "128k",
+        str(target_mp3),
+    ]
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 0:
+        print(f"Hiba történt az MP3 előnézet készítésekor: {target_mp3}")
+        print(result.stderr.decode())
+        return False
+    return target_mp3.exists() and target_mp3.stat().st_size > 0
+
+
 def save_audio_torchaudio(audio_data: np.ndarray, path: str, sample_rate: int = 44100) -> None:
     """Save audio as 16-bit PCM WAV using torchaudio with basic normalization."""
     if audio_data.ndim == 1:
@@ -426,6 +447,7 @@ def main() -> None:
         input_dir = project_dir / config["PROJECT_SUBDIRS"]["extracted_audio"]
         speech_output_dir = project_dir / config["PROJECT_SUBDIRS"]["separated_audio_speech"]
         background_output_dir = project_dir / config["PROJECT_SUBDIRS"]["separated_audio_background"]
+        temp_output_dir = project_dir / config["PROJECT_SUBDIRS"]["temp"]
 
     except KeyError as e:
         print(f"Hiba: A config.json feldolgozása közben. Hiányzó kulcs: {e}")
@@ -437,6 +459,7 @@ def main() -> None:
 
     speech_output_dir.mkdir(parents=True, exist_ok=True)
     background_output_dir.mkdir(parents=True, exist_ok=True)
+    temp_output_dir.mkdir(parents=True, exist_ok=True)
 
     models = load_models(model_list, device)
 
@@ -533,7 +556,19 @@ def main() -> None:
         if was_converted and temp_audio_path.exists() and temp_audio_path != audio_path:
             temp_audio_path.unlink()
 
-        if not success_this_file:
+        if success_this_file:
+            preview_source = speech_output_dir / f"{base_name}_speech.wav"
+            preview_target = temp_output_dir / f"{base_name}_review_preview.mp3"
+            if preview_source.exists():
+                if create_preview_mp3(preview_source, preview_target):
+                    print(f"Review előnézet MP3 mentve: {preview_target}")
+                else:
+                    print(f"Nem sikerült az MP3 előnézet létrehozása: {preview_target}")
+                    overall_success = False
+            else:
+                print(f"Hiányzó beszéd WAV előnézet készítéshez: {preview_source}")
+                overall_success = False
+        else:
             print(f"A szétválasztás sikertelen volt a következő fájlnál: {filename_to_process}")
             overall_success = False
 
