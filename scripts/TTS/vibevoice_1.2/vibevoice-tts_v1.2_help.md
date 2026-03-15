@@ -13,7 +13,7 @@
 - `model_path` (`--model_path`, option, alapértelmezés: `microsoft/VibeVoice-1.5b`): Hugging Face modellazonosító vagy lokális mappa az alap VibeVoice modellhez.
 - `model_dir` (`--model_dir`, option, alapértelmezés: nincs): Lokális könyvtár megadása; elsőbbséget élvez a `--model_path` értékével szemben.
 - `checkpoint_path` (`--checkpoint_path`, option, alapértelmezés: nincs): LoRA / adapter útvonal, amelyet a modellre töltünk.
-- `device` (`--device`, option, alapértelmezés: automatikus): Cél eszköz (`cuda`, `mps`, `cpu`). Több GPU esetén a szkript automatikusan képes párhuzamosítani.
+- `device` (`--device`, option, alapértelmezés: automatikus): Cél eszköz (`cuda`, `cuda:0`, `cuda:1`, `mps`, `cpu`). Ha `cuda` az érték, több GPU esetén a szkript automatikusan párhuzamosít; ha `cuda:N`, akkor csak a megadott GPU-n fut. A modellbetöltés GPU-nként választ attention backendet: Ampere+ kártyán `flash_attention_2`, régebbi CUDA GPU-n `sdpa`.
 - `cfg_scale` (`--cfg_scale`, option, alapértelmezés: `1.3`): Classifier-Free Guidance skála; nagyobb érték erősebb stílus-követést eredményez.
 - `disable_prefill` (`--disable_prefill`, flag, alapértelmezés: `false`): Kikapcsolja a voice cloning jellegű prefill lépést (`is_prefill=False`).
 - `ddpm_steps` (`--ddpm_steps`, option, alapértelmezés: `10`): A diffúziós inference lépések száma; emelése jobb minőséget, hosszabb futást ad.

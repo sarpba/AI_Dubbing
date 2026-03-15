@@ -20,7 +20,7 @@ import soundfile as sf
 import torch
 import torch.multiprocessing as mp
 import tqdm
-from transformers.utils import logging as transformers_logging
+from transformers.utils import is_flash_attn_2_available, logging as transformers_logging
 
 # Ensure project root is importable so we can reuse shared tooling.
 for candidate in Path(__file__).resolve().parents:
@@ -78,6 +78,13 @@ NORMALIZER_TO_WHISPER_LANG = {"hun": "hu", "eng": "en"}
 WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
 
 
+@dataclass(frozen=True)
+class ModelRuntimeConfig:
+    load_dtype: torch.dtype
+    attn_implementation: str
+    note: str
+
+
 def extract_cuda_index(device: str) -> int:
     if not device:
         return 0
@@ -88,6 +95,85 @@ def extract_cuda_index(device: str) -> int:
         except ValueError:
             logger.warning("Érvénytelen CUDA eszköz megadás: %s -> 0-ra váltunk.", device)
     return 0
+
+
+def get_cuda_device_properties(device: str):
+    if not torch.cuda.is_available():
+        return None
+    device_index = extract_cuda_index(device)
+    if device_index < 0 or device_index >= torch.cuda.device_count():
+        return None
+    return torch.cuda.get_device_properties(device_index)
+
+
+def resolve_model_runtime_config(device: str) -> ModelRuntimeConfig:
+    device_lower = (device or "").lower()
+    if device_lower == "mps":
+        return ModelRuntimeConfig(
+            load_dtype=torch.float32,
+            attn_implementation="sdpa",
+            note="MPS backend -> float32 + sdpa",
+        )
+    if device_lower.startswith("cuda"):
+        properties = get_cuda_device_properties(device)
+        if properties is None:
+            return ModelRuntimeConfig(
+                load_dtype=torch.float16,
+                attn_implementation="sdpa",
+                note="CUDA eszközadat nem érhető el -> float16 + sdpa fallback",
+            )
+
+        compute_capability = f"{properties.major}.{properties.minor}"
+        supports_bfloat16 = properties.major >= 8
+        flash_attn_available = is_flash_attn_2_available()
+        supports_flash_attention = properties.major >= 8 and flash_attn_available
+        load_dtype = torch.bfloat16 if supports_bfloat16 else torch.float16
+
+        if supports_flash_attention:
+            return ModelRuntimeConfig(
+                load_dtype=load_dtype,
+                attn_implementation="flash_attention_2",
+                note=f"{properties.name} (cc {compute_capability}) -> FlashAttention2 engedélyezve",
+            )
+
+        reasons: List[str] = []
+        if properties.major < 8:
+            reasons.append(f"cc {compute_capability} < 8.0")
+        if not flash_attn_available:
+            reasons.append("flash_attn_2 nem elérhető a környezetben")
+        reason_text = ", ".join(reasons) if reasons else "ismeretlen ok"
+        return ModelRuntimeConfig(
+            load_dtype=load_dtype,
+            attn_implementation="sdpa",
+            note=f"{properties.name} (cc {compute_capability}) -> SDPA fallback ({reason_text})",
+        )
+
+    return ModelRuntimeConfig(
+        load_dtype=torch.float32,
+        attn_implementation="sdpa",
+        note="CPU backend -> float32 + sdpa",
+    )
+
+
+def get_auto_cuda_worker_indices(max_workers: Optional[int]) -> List[int]:
+    if not torch.cuda.is_available():
+        return []
+
+    available_gpus = torch.cuda.device_count()
+    requested_workers = available_gpus if max_workers is None else max_workers
+    requested_workers = max(1, requested_workers)
+
+    selected_indices = list(range(min(available_gpus, requested_workers)))
+    for gpu_index in selected_indices:
+        runtime_config = resolve_model_runtime_config(f"cuda:{gpu_index}")
+        logger.info(
+            "GPU-%s kiválasztva: dtype=%s | attn_impl=%s | %s",
+            gpu_index,
+            runtime_config.load_dtype,
+            runtime_config.attn_implementation,
+            runtime_config.note,
+        )
+    return selected_indices
 
 
 def set_random_seeds(seed: int, device: str) -> None:
@@ -646,7 +732,7 @@ def parse_arguments() -> argparse.Namespace:
         "--device",
         type=str,
         default=default_device,
-        help="Eszköz a futtatáshoz: cuda | mps | cpu.",
+        help="Eszköz a futtatáshoz: cuda | cuda:N | mps | cpu.",
     )
     parser.add_argument(
         "--cfg_scale",
@@ -851,23 +937,18 @@ def load_vibevoice_components(
     logger.info("Processor betöltése: %s", model_path)
     processor = VibeVoiceProcessor.from_pretrained(model_path)
 
+    runtime_config = resolve_model_runtime_config(device)
+    load_dtype = runtime_config.load_dtype
+    attn_impl_primary = runtime_config.attn_implementation
     device_lower = device.lower()
-    if device_lower == "mps":
-        load_dtype = torch.float32
-        attn_impl_primary = "sdpa"
-    elif device_lower.startswith("cuda"):
-        load_dtype = torch.bfloat16
-        attn_impl_primary = "flash_attention_2"
-    else:
-        load_dtype = torch.float32
-        attn_impl_primary = "sdpa"
 
     logger.info(
-        "Modell betöltése: %s | device=%s | dtype=%s | attn_impl=%s",
+        "Modell betöltése: %s | device=%s | dtype=%s | attn_impl=%s | %s",
         model_path,
         device,
         load_dtype,
         attn_impl_primary,
+        runtime_config.note,
     )
 
     try:
@@ -1420,24 +1501,30 @@ def run_segments_on_device(
 def gpu_worker(
     worker_idx: int,
     args: argparse.Namespace,
+    target_gpu_indices: List[int],
     all_chunks: List[List[Dict[str, object]]],
     input_wav_path_str: str,
     eq_config,
     stats,
     failed_segments_info,
 ) -> None:
+    if worker_idx >= len(target_gpu_indices):
+        logger.error("GPU worker slot (%s) nem érhető el. A worker leáll.", worker_idx)
+        return
+
+    target_gpu_idx = target_gpu_indices[worker_idx]
     available_gpus = torch.cuda.device_count()
-    if worker_idx >= available_gpus:
+    if target_gpu_idx >= available_gpus:
         logger.error(
-            "GPU worker index (%s) nagyobb, mint az elérhető GPU-k száma (%s). A worker leáll.",
-            worker_idx,
+            "GPU index (%s) nagyobb, mint az elérhető GPU-k száma (%s). A worker leáll.",
+            target_gpu_idx,
             available_gpus,
         )
         return
 
-    torch.cuda.set_device(worker_idx)
-    device = f"cuda:{worker_idx}"
-    worker_label = f"GPU-{worker_idx}"
+    torch.cuda.set_device(target_gpu_idx)
+    device = f"cuda:{target_gpu_idx}"
+    worker_label = f"GPU-{target_gpu_idx}"
     run_segments_on_device(
         device=device,
         worker_label=worker_label,
@@ -1533,13 +1620,14 @@ def process_project(args: argparse.Namespace) -> None:
         logger.warning("Nincs feldolgozandó szegmens a projektben.")
         return
 
-    if resolved_device.startswith("cuda") and torch.cuda.is_available():
-        num_gpus = torch.cuda.device_count()
-        max_workers = args.max_workers if args.max_workers is not None else num_gpus
-        num_workers = max(1, min(num_gpus, max_workers))
+    if resolved_device == "cuda" and torch.cuda.is_available():
+        target_gpu_indices = get_auto_cuda_worker_indices(args.max_workers)
+        if not target_gpu_indices:
+            raise RuntimeError("CUDA eszköz nem található az automatikus több-GPU feldolgozáshoz.")
 
+        num_workers = len(target_gpu_indices)
         if num_workers > 1:
-            logger.info("Több-GPU feldolgozás %s workerrel.", num_workers)
+            logger.info("Több-GPU feldolgozás %s workerrel: %s", num_workers, target_gpu_indices)
             chunks: List[List[Dict[str, object]]] = [[] for _ in range(num_workers)]
             for idx, segment in enumerate(segments):
                 chunks[idx % num_workers].append(segment)
@@ -1552,6 +1640,7 @@ def process_project(args: argparse.Namespace) -> None:
                     nprocs=num_workers,
                     args=(
                         args,
+                        target_gpu_indices,
                         chunks,
                         input_wav_path_str,
                         eq_config,
@@ -1563,15 +1652,7 @@ def process_project(args: argparse.Namespace) -> None:
                 stats_summary = dict(stats_proxy)
                 failed_segments = list(failed_proxy)
         else:
-            target_idx = extract_cuda_index(resolved_device)
-            available_gpus = torch.cuda.device_count()
-            if target_idx >= available_gpus:
-                logger.warning(
-                    "A kért CUDA index (%s) nem elérhető (%s GPU található). 0-ra váltunk.",
-                    target_idx,
-                    available_gpus,
-                )
-                target_idx = 0
+            target_idx = target_gpu_indices[0]
             torch.cuda.set_device(target_idx)
             target_device = f"cuda:{target_idx}"
             run_segments_on_device(
@@ -1586,6 +1667,39 @@ def process_project(args: argparse.Namespace) -> None:
                 progress_position=0,
                 prefetched_audio=(audio_data, sample_rate),
             )
+    elif resolved_device.startswith("cuda") and torch.cuda.is_available():
+        target_idx = extract_cuda_index(resolved_device)
+        available_gpus = torch.cuda.device_count()
+        if target_idx >= available_gpus:
+            logger.warning(
+                "A kért CUDA index (%s) nem elérhető (%s GPU található). 0-ra váltunk.",
+                target_idx,
+                available_gpus,
+            )
+            target_idx = 0
+
+        runtime_config = resolve_model_runtime_config(f"cuda:{target_idx}")
+        logger.info(
+            "Egyszeres CUDA feldolgozás: GPU-%s | dtype=%s | attn_impl=%s | %s",
+            target_idx,
+            runtime_config.load_dtype,
+            runtime_config.attn_implementation,
+            runtime_config.note,
+        )
+        torch.cuda.set_device(target_idx)
+        target_device = f"cuda:{target_idx}"
+        run_segments_on_device(
+            device=target_device,
+            worker_label=f"GPU-{target_idx}",
+            args=args,
+            segments=segments,
+            input_wav_path_str=input_wav_path_str,
+            eq_config=eq_config,
+            stats=stats_summary,
+            failed_segments_info=failed_segments,
+            progress_position=0,
+            prefetched_audio=(audio_data, sample_rate),
+        )
     else:
         worker_label = resolved_device.upper()
         run_segments_on_device(
