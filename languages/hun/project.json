@@ -116,7 +116,8 @@
         "title": "Widgetek részletes leírása",
         "items": [
           "<strong>Review + Continue</strong>: Megállítja a futást egy ellenőrzési pontnál, ahol áttekintheted a korábbi lépéseket, módosíthatod a paramétereket, majd a megfelelő gombbal folytathatod vagy újrafuttathatod a workflow-t.",
-          "<strong>Ciklus</strong>: Ismétlődő futtatást tesz lehetővé. A \"Visszalépés lépéseinek száma\" értékkel adhatod meg, hány korábbi futtatható lépést építsen vissza a ciklusba."
+          "<strong>Ciklus</strong>: Ismétlődő futtatást tesz lehetővé. A \"Visszalépés lépéseinek száma\" értékkel adhatod meg, hány korábbi futtatható lépést építsen vissza a ciklusba.",
+          "<strong>Translated Split Loop</strong>: Ellenőrzi a <code>translated</code> JSON és a <code>translated_splits</code> mappa összhangját. Ha a kész hangfájlok száma a megengedett küszöb alatt marad, újraindítja a Review + Continue utáni blokkot."
         ]
       },
       "workflow": {
@@ -225,6 +226,13 @@
         "cycle_not_enough_steps": "Nincs elegendő aktív lépés a widget előtt a megadott ciklushoz.",
         "cycle_repeat_invalid": "A ciklus ismétlésszámának legalább 1-nek kell lennie.",
         "cycle_step_back_invalid": "A ciklus visszalépési értékének legalább 1-nek kell lennie.",
+        "segment_loop_review_missing": "A translated split loop widget előtt nincs engedélyezett Review + Continue widget.",
+        "segment_loop_order_invalid": "A translated split loop csak akkor használható, ha közvetlenül a Review + Continue utáni scriptszakaszt zárja le.",
+        "segment_loop_restart_missing": "A Review + Continue widget után nincs újraindítható script a loop futtatásához.",
+        "segment_loop_allowed_invalid": "A megengedett hiányzó szegmensek száma csak 0 vagy nagyobb egész szám lehet.",
+        "segment_loop_check_failed": "Nem sikerült ellenőrizni a translated split állapotot: {error}",
+        "segment_loop_retry": "Translated split loop: {completed}/{total} kész ({missing} hiányzik, megengedett: {allowed}). Újrafuttatás a Review + Continue utáni blokktól. JSON: {json}",
+        "segment_loop_continue": "Translated split loop: {completed}/{total} kész ({missing} hiányzik, megengedett: {allowed}). A workflow folytatódik. JSON: {json}",
         "widget_disabled": "Ez a widget le van tiltva.",
         "cycle_start": "Ciklus indítása {count} ismétléssel.",
         "cycle_start_failed": "Nem sikerült elindítani a ciklust: {error}",
@@ -285,7 +293,8 @@
         "keys_save_failed_generic": "Nem sikerült menteni az API kulcsokat.",
         "keys_save_failed": "API kulcs mentése sikertelen: {error}",
         "status_check_failed": "Nem sikerült lekérdezni az állapotot.",
-        "log_fetch_failed": "Nem sikerült beolvasni a logot."
+        "log_fetch_failed": "Nem sikerült beolvasni a logot.",
+        "segment_loop_status_failed": "Nem sikerült lekérdezni a translated split állapotot."
       },
       "keys": {
         "missing_alert": "Hiányzó API kulcsok: {keys}",
@@ -331,6 +340,19 @@
             }
           },
           "help": "A ciklus widget a megadott számú, aktív szkript lépést ismétli a widget előtt, a megadott alkalommal."
+        },
+        "segment_loop": {
+          "name": "Translated Split Loop",
+          "description": "Ellenőrzi, hogy elkészült-e elegendő fordított split fájl, és szükség esetén újrafuttatja a review utáni blokkot.",
+          "continue_label": "Loop ellenőrzése",
+          "review_label": "Felülvizsgálat",
+          "parameters": {
+            "allowed_missing": {
+              "label": "Megengedett hiányzó szegmensek",
+              "helper": "Ennyi hiányzó split fájl még engedélyezett a workflow továbblépéséhez. Alapértelmezett érték: 0."
+            }
+          },
+          "help": "A widget a config.json szerinti translated JSON első fájljának szegmenseit hasonlítja össze a translated_splits mappa elkészült hangfájljaival. Ha a hiányzó fájlok száma nagyobb a megadott küszöbnél, újraindítja a Review + Continue utáni scriptszakaszt."
         }
       },
       "context_menu": {

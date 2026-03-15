@@ -195,6 +195,92 @@ def prepare_segments_for_response(project_dir: str, segments: Any) -> List[Dict[
     return prepared_segments
 
 
+def collect_translated_split_progress(project_name: str, config_snapshot: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    current_config = config_snapshot or get_config_copy()
+    directories = current_config.get('DIRECTORIES') or {}
+    project_subdirs = current_config.get('PROJECT_SUBDIRS') or {}
+
+    workdir_rel = directories.get('workdir')
+    translated_rel = project_subdirs.get('translated')
+    translated_splits_rel = project_subdirs.get('translated_splits')
+    if not workdir_rel or not translated_rel or not translated_splits_rel:
+        raise WorkflowValidationError(
+            "Hiányzó config kulcs: DIRECTORIES.workdir, PROJECT_SUBDIRS.translated vagy PROJECT_SUBDIRS.translated_splits."
+        )
+
+    safe_project = secure_filename(project_name)
+    project_dir = Path(workdir_rel) / safe_project
+    if not project_dir.is_dir():
+        raise FileNotFoundError(f"A projekt könyvtár nem található: {project_dir}")
+
+    translated_dir = project_dir / translated_rel
+    if not translated_dir.is_dir():
+        raise FileNotFoundError(f"A translated könyvtár nem található: {translated_dir}")
+
+    translated_json_files = sorted(
+        path for path in translated_dir.iterdir()
+        if path.is_file() and path.suffix.lower() == '.json'
+    )
+    if not translated_json_files:
+        raise FileNotFoundError(f"Nem található JSON fájl a translated könyvtárban: {translated_dir}")
+
+    selected_json_path = translated_json_files[0]
+    try:
+        with selected_json_path.open('r', encoding='utf-8') as file:
+            payload = json.load(file)
+    except OSError as exc:
+        raise FileNotFoundError(f"Nem sikerült beolvasni a translated JSON fájlt: {selected_json_path}") from exc
+    except json.JSONDecodeError as exc:
+        raise WorkflowValidationError(f"Hibás JSON formátum: {selected_json_path.name}") from exc
+
+    segments = payload.get('segments')
+    if not isinstance(segments, list):
+        raise WorkflowValidationError(
+            f'A kiválasztott translated JSON fájl nem tartalmaz érvényes "segments" listát: {selected_json_path.name}'
+        )
+
+    expected_segment_stems: List[str] = []
+    translated_ready_segments = 0
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        start = segment.get('start')
+        end = segment.get('end')
+        original_text = str(segment.get('text') or '').strip()
+        translated_text = str(segment.get('translated_text') or '').strip()
+        if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+            continue
+        if not original_text:
+            continue
+        expected_segment_stems.append(f"{format_time_for_filename(start)}_{format_time_for_filename(end)}")
+        if translated_text:
+            translated_ready_segments += 1
+
+    translated_splits_dir = project_dir / translated_splits_rel
+    actual_audio_stems: Set[str] = set()
+    if translated_splits_dir.is_dir():
+        for path in translated_splits_dir.iterdir():
+            if path.is_file() and path.suffix.lower() in AUDIO_EXTENSIONS:
+                actual_audio_stems.add(path.stem)
+
+    completed_segments = sum(1 for stem in expected_segment_stems if stem in actual_audio_stems)
+    expected_segments = len(expected_segment_stems)
+
+    return {
+        'project_name': safe_project,
+        'json_file_name': selected_json_path.name,
+        'translated_dir': translated_rel,
+        'translated_splits_dir': translated_splits_rel,
+        'total_segments': len(segments),
+        'expected_segments': expected_segments,
+        'translated_ready_segments': translated_ready_segments,
+        'completed_segments': completed_segments,
+        'missing_segments': max(expected_segments - completed_segments, 0),
+        'actual_audio_files': len(actual_audio_stems),
+        'translated_splits_exists': translated_splits_dir.is_dir()
+    }
+
+
 def resolve_project_paths(project_name: str) -> Path:
     safe_project = secure_filename(project_name)
     return Path('workdir') / safe_project
@@ -463,7 +549,7 @@ PROJECT_AUTOFILL_OVERRIDES = {
 SECRET_PARAM_NAMES = {'auth_key', 'api_key', 'hf_token'}
 ENCODED_SECRET_PREFIX = 'base64:'
 SECRET_VALUE_PLACEHOLDER = '***'
-ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue', 'cycleWidget'}
+ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue', 'cycleWidget', 'translatedSplitLoopWidget'}
 
 
 class WorkflowValidationError(Exception):
@@ -1425,6 +1511,34 @@ def normalize_cycle_widget_params(raw_params: Dict[str, Any]) -> Dict[str, int]:
     }
 
 
+def normalize_translated_split_loop_widget_params(raw_params: Dict[str, Any]) -> Dict[str, int]:
+    if raw_params is None:
+        params = {}
+    elif isinstance(raw_params, dict):
+        params = raw_params
+    else:
+        raise WorkflowValidationError("A translated split loop widget paraméterei hibás formátumúak.")
+
+    value = params.get('allowed_missing_segments')
+    candidate = '' if value is None else str(value).strip()
+    if candidate == '':
+        candidate = '0'
+    try:
+        numeric = int(candidate)
+    except (TypeError, ValueError):
+        raise WorkflowValidationError(
+            "A translated split loop widget allowed_missing_segments paramétere csak nemnegatív egész szám lehet."
+        ) from None
+    if numeric < 0:
+        raise WorkflowValidationError(
+            "A translated split loop widget allowed_missing_segments paramétere csak nemnegatív egész szám lehet."
+        )
+
+    return {
+        'allowed_missing_segments': numeric
+    }
+
+
 def load_conda_info(force_refresh: bool = False) -> Optional[dict]:
     global CONDA_INFO_CACHE
     with CONDA_INFO_LOCK:
@@ -1718,6 +1832,8 @@ def normalize_workflow_steps(payload: Any) -> Tuple[List[Dict[str, Any]], Set[st
             }
             if widget_id == 'cycleWidget':
                 normalized_widget_step['params'] = normalize_cycle_widget_params(widget_params)
+            elif widget_id == 'translatedSplitLoopWidget':
+                normalized_widget_step['params'] = normalize_translated_split_loop_widget_params(widget_params)
             elif widget_params:
                 normalized_widget_step['params'] = copy.deepcopy(widget_params)
             normalized_steps.append(normalized_widget_step)
@@ -4637,6 +4753,27 @@ def get_workflow_options_api(project_name):
         'latest_job': latest_job,
         'project': sanitized_project
     })
+
+
+@app.route('/api/translated-split-progress/<project_name>', methods=['GET'])
+def translated_split_progress_api(project_name):
+    sanitized_project = secure_filename(project_name)
+    try:
+        progress = collect_translated_split_progress(sanitized_project, config_snapshot=get_config_copy())
+    except FileNotFoundError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 404
+    except WorkflowValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - váratlan hibák naplózása
+        logging.error(
+            "Nem sikerült lekérdezni a translated split előrehaladást (%s): %s",
+            sanitized_project,
+            exc,
+            exc_info=True
+        )
+        return jsonify({'success': False, 'error': 'Nem sikerült lekérdezni a translated split előrehaladást.'}), 500
+
+    return jsonify({'success': True, 'progress': progress})
 
 
 @app.route('/api/project-workflow-state/<project_name>', methods=['GET', 'POST'])

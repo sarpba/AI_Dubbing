@@ -5,6 +5,7 @@ import json
 import logging
 import math
 import os
+import queue
 import random
 import re
 import shutil
@@ -538,7 +539,12 @@ def compute_tolerance(word_count: int, tolerance_factor: float, min_tolerance: i
     return max(calculated, min_tolerance)
 
 
-def increment_stat(stats, key: str, increment: int = 1) -> None:
+def increment_stat(stats, key: str, increment: int = 1, lock=None) -> None:
+    if lock is not None:
+        with lock:
+            current = int(stats.get(key, 0))
+            stats[key] = current + increment
+        return
     current = int(stats.get(key, 0))
     stats[key] = current + increment
 
@@ -1435,15 +1441,17 @@ def run_segments_on_device(
     device: str,
     worker_label: str,
     args: argparse.Namespace,
-    segments: List[Dict[str, object]],
+    segments: Optional[List[Dict[str, object]]],
     input_wav_path_str: str,
     eq_config: Optional[Dict[str, object]],
     stats,
     failed_segments_info,
     progress_position: int = 0,
     prefetched_audio: Optional[Tuple[np.ndarray, int]] = None,
+    shared_segments_queue=None,
+    stats_lock=None,
 ) -> None:
-    if not segments:
+    if shared_segments_queue is None and not segments:
         return
 
     set_random_seeds(args.seed, device)
@@ -1461,13 +1469,7 @@ def run_segments_on_device(
     else:
         full_audio_data, sample_rate = sf.read(input_wav_path_str)
 
-    progress_iter = tqdm.tqdm(
-        segments,
-        desc=f"Processing on {worker_label}",
-        position=progress_position,
-        leave=False,
-    )
-    for segment in progress_iter:
+    def process_single_segment(segment: Dict[str, object]) -> None:
         start_time = segment.get("start", 0.0)
         end_time = segment.get("end", 0.0)
         filename = f"{time_to_filename_str(start_time)}_{time_to_filename_str(end_time)}.wav"
@@ -1486,9 +1488,9 @@ def run_segments_on_device(
             worker_label=worker_label,
         )
         if ok:
-            increment_stat(stats, "successful")
+            increment_stat(stats, "successful", lock=stats_lock)
         else:
-            increment_stat(stats, "failed")
+            increment_stat(stats, "failed", lock=stats_lock)
             failed_segments_info.append(
                 {
                     "filename": filename,
@@ -1497,15 +1499,44 @@ def run_segments_on_device(
                 }
             )
 
+    if shared_segments_queue is not None:
+        progress_bar = tqdm.tqdm(
+            desc=f"Processing on {worker_label}",
+            position=progress_position,
+            leave=False,
+            unit="segment",
+        )
+        try:
+            while True:
+                try:
+                    segment = shared_segments_queue.get_nowait()
+                except queue.Empty:
+                    break
+                process_single_segment(segment)
+                progress_bar.update(1)
+        finally:
+            progress_bar.close()
+        return
+
+    progress_iter = tqdm.tqdm(
+        segments,
+        desc=f"Processing on {worker_label}",
+        position=progress_position,
+        leave=False,
+    )
+    for segment in progress_iter:
+        process_single_segment(segment)
+
 
 def gpu_worker(
     worker_idx: int,
     args: argparse.Namespace,
     target_gpu_indices: List[int],
-    all_chunks: List[List[Dict[str, object]]],
+    shared_segments_queue,
     input_wav_path_str: str,
     eq_config,
     stats,
+    stats_lock,
     failed_segments_info,
 ) -> None:
     if worker_idx >= len(target_gpu_indices):
@@ -1529,12 +1560,14 @@ def gpu_worker(
         device=device,
         worker_label=worker_label,
         args=args,
-        segments=all_chunks[worker_idx],
+        segments=None,
         input_wav_path_str=input_wav_path_str,
         eq_config=eq_config,
         stats=stats,
         failed_segments_info=failed_segments_info,
         progress_position=worker_idx,
+        shared_segments_queue=shared_segments_queue,
+        stats_lock=stats_lock,
     )
 
 
@@ -1627,24 +1660,26 @@ def process_project(args: argparse.Namespace) -> None:
 
         num_workers = len(target_gpu_indices)
         if num_workers > 1:
-            logger.info("Több-GPU feldolgozás %s workerrel: %s", num_workers, target_gpu_indices)
-            chunks: List[List[Dict[str, object]]] = [[] for _ in range(num_workers)]
-            for idx, segment in enumerate(segments):
-                chunks[idx % num_workers].append(segment)
+            logger.info("Több-GPU feldolgozás %s workerrel közös queue-val: %s", num_workers, target_gpu_indices)
 
             with mp.Manager() as manager:
                 stats_proxy = manager.dict({"successful": 0, "failed": 0, "total": total_segments})
+                stats_lock = manager.Lock()
                 failed_proxy = manager.list()
+                shared_segments_queue = manager.Queue()
+                for segment in segments:
+                    shared_segments_queue.put(segment)
                 mp.spawn(
                     gpu_worker,
                     nprocs=num_workers,
                     args=(
                         args,
                         target_gpu_indices,
-                        chunks,
+                        shared_segments_queue,
                         input_wav_path_str,
                         eq_config,
                         stats_proxy,
+                        stats_lock,
                         failed_proxy,
                     ),
                     join=True,

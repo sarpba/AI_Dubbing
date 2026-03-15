@@ -116,7 +116,8 @@
         "title": "Widget details",
         "items": [
           "<strong>Review + Continue</strong>: Pauses execution at a checkpoint where you can review previous steps, adjust parameters, then use the matching button to continue or rerun the workflow.",
-          "<strong>Cycle</strong>: Enables repeated execution. The \"Number of steps to rewind\" field defines how many previous runnable steps to include in the cycle."
+          "<strong>Cycle</strong>: Enables repeated execution. The \"Number of steps to rewind\" field defines how many previous runnable steps to include in the cycle.",
+          "<strong>Translated Split Loop</strong>: Checks whether the selected translated JSON has enough finished files inside <code>translated_splits</code>. If not, it reruns the block after Review + Continue."
         ]
       },
       "workflow": {
@@ -225,6 +226,13 @@
         "cycle_not_enough_steps": "Not enough active steps before the widget for the requested cycle.",
         "cycle_repeat_invalid": "Cycle repeat count must be at least 1.",
         "cycle_step_back_invalid": "Cycle rewind value must be at least 1.",
+        "segment_loop_review_missing": "There is no enabled Review + Continue widget before the translated split loop widget.",
+        "segment_loop_order_invalid": "The translated split loop can only be used when it closes the script block directly after Review + Continue.",
+        "segment_loop_restart_missing": "There is no runnable script after Review + Continue for the loop restart.",
+        "segment_loop_allowed_invalid": "Allowed missing segments must be an integer greater than or equal to 0.",
+        "segment_loop_check_failed": "Failed to check translated split progress: {error}",
+        "segment_loop_retry": "Translated split loop: {completed}/{total} ready ({missing} missing, allowed: {allowed}). Rerunning the block after Review + Continue. JSON: {json}",
+        "segment_loop_continue": "Translated split loop: {completed}/{total} ready ({missing} missing, allowed: {allowed}). Continuing the workflow. JSON: {json}",
         "widget_disabled": "This widget is disabled.",
         "cycle_start": "Starting cycle with {count} repetitions.",
         "cycle_start_failed": "Failed to start cycle: {error}",
@@ -285,7 +293,8 @@
         "keys_save_failed_generic": "Failed to save API keys.",
         "keys_save_failed": "Failed to save API key: {error}",
         "status_check_failed": "Failed to fetch status.",
-        "log_fetch_failed": "Failed to read log."
+        "log_fetch_failed": "Failed to read log.",
+        "segment_loop_status_failed": "Failed to fetch translated split progress."
       },
       "keys": {
         "missing_alert": "Missing API keys: {keys}",
@@ -331,6 +340,19 @@
             }
           },
           "help": "The cycle widget repeats the specified number of active script steps before the widget for the given count."
+        },
+        "segment_loop": {
+          "name": "Translated Split Loop",
+          "description": "Checks whether enough translated split files are ready and reruns the post-review block when needed.",
+          "continue_label": "Check loop",
+          "review_label": "Review",
+          "parameters": {
+            "allowed_missing": {
+              "label": "Allowed missing segments",
+              "helper": "This many missing split files may still be tolerated before the workflow continues. Default: 0."
+            }
+          },
+          "help": "The widget compares the segments from the first JSON file inside the config.json translated directory with the finished audio files inside translated_splits. If the number of missing files is above the threshold, it reruns the script block after Review + Continue."
         }
       },
       "context_menu": {

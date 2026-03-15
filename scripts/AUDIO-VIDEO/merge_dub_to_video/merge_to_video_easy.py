@@ -5,7 +5,6 @@ import os
 import sys
 import glob
 import tempfile
-import shutil
 from pathlib import Path
 
 # Hozzáadja a 'tools' könyvtárat a Python útvonalhoz
@@ -41,7 +40,8 @@ def get_target_sample_rate(video_file):
         return '48000'
 
 def process_audio_to_raw_aac(audio_wav_file, target_sample_rate):
-    processed_audio_path = "processed_audio_temp.aac"
+    fd, processed_audio_path = tempfile.mkstemp(prefix="processed_audio_", suffix=".aac")
+    os.close(fd)
     try:
         cmd = ['ffmpeg', '-y', '-i', audio_wav_file, '-c:a', 'aac', '-b:a', '128k', '-ar', str(target_sample_rate), '-ac', '2', processed_audio_path]
         print("\n--- FFMPEG LOG START (Creating raw .aac) ---")
@@ -49,6 +49,8 @@ def process_audio_to_raw_aac(audio_wav_file, target_sample_rate):
         print("--- FFMPEG LOG END (Creating raw .aac) ---\n")
         return processed_audio_path
     except subprocess.CalledProcessError:
+        if os.path.exists(processed_audio_path):
+            os.remove(processed_audio_path)
         print("Hiba az audió AAC formátumra alakítása során.")
         sys.exit(1)
 
@@ -63,7 +65,7 @@ def get_project_root() -> Path:
             return candidate
     raise FileNotFoundError("Nem található config.json a szkript szülő könyvtáraiban.")
 
-# --- DEMUX-REMUX LOGIKA (Felirat metaadatokkal bővítve) ---
+# --- MUX LOGIKA (Az eredeti sávok megtartásával) ---
 
 def get_stream_info(video_file):
     """Lekéri a videó összes sávjának részletes adatait JSON formátumban."""
@@ -71,83 +73,30 @@ def get_stream_info(video_file):
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
     return json.loads(result.stdout)['streams']
 
-def demux_streams(video_file, streams, temp_dir):
-    """Kimenti az összes sávot külön fájlokba."""
-    demuxed_files = []
-    print("\n--- STARTING DEMUXING (Sávok szétválasztása) ---")
-    for stream in streams:
-        stream_index = stream['index']
-        codec_type = stream['codec_type']
-        
-        ext = stream.get('codec_name', 'bin')
-        if codec_type == 'video': ext = 'mkv'
-        if codec_type == 'subtitle' and ext == 'subrip': ext = 'srt'
-        if codec_type == 'subtitle' and ext == 'ass': ext = 'ass'
+def merge_video_with_new_audio(video_file, streams, new_audio_file, language, output_file, include_original_audio=True):
+    """Az eredeti videó minden sávját megtartja, és új audiosávot fűz hozzá."""
+    print("\n--- STARTING MUXING (Új audiosáv hozzáadása) ---")
 
-        output_path = os.path.join(temp_dir, f"stream_{stream_index}.{ext}")
-        
-        cmd = ['ffmpeg', '-y', '-i', video_file, '-map', f'0:{stream_index}', '-c', 'copy', output_path]
-        
-        print(f"Extracting {codec_type} stream #{stream_index} -> {output_path}")
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        demuxed_files.append({'path': output_path, 'stream_info': stream})
-        
-    print("--- DEMUXING FINISHED ---\n")
-    return demuxed_files
+    cmd = ['ffmpeg', '-y', '-i', video_file, '-i', new_audio_file]
+    cmd.extend(['-map_metadata', '0', '-map_chapters', '0'])
 
-def remux_video(demuxed_files, new_audio_file, language, output_file, include_original_audio=True):
-    """Újraépíti a videót a különválasztott sávokból és az új hangból."""
-    print("\n--- STARTING REMUXING (Sávok újraegyesítése) ---")
-    
-    cmd = ['ffmpeg', '-y']
-    
-    selected_demuxed_files = []
-    for demuxed in demuxed_files:
-        stream_type = demuxed['stream_info']['codec_type']
-        if stream_type == 'audio' and not include_original_audio:
-            continue
-        selected_demuxed_files.append(demuxed)
-
-    if not include_original_audio:
+    if include_original_audio:
+        cmd.extend(['-map', '0'])
+    else:
         print("Az eredeti hangsávok kihagyásra kerülnek; csak az új dub kerül a kimenetbe.")
+        cmd.extend(['-map', '0', '-map', '-0:a'])
 
-    # Bemeneti fájlok hozzáadása
-    input_files = [f['path'] for f in selected_demuxed_files] + [new_audio_file]
-    for file_path in input_files:
-        cmd.extend(['-i', file_path])
-        
-    # Sávok feltérképezése (mapping)
-    num_original_streams = len(selected_demuxed_files)
-    for i in range(num_original_streams):
-        cmd.extend(['-map', f'{i}:0'])
-    cmd.extend(['-map', f'{num_original_streams}:0'])
-    
-    # Kodekek beállítása másolásra
-    cmd.extend(['-c', 'copy'])
-    
-    # Metaadatok visszaállítása és beállítása
-    original_audio_count = 0
-    original_subtitle_count = 0
-    for i, demuxed in enumerate(selected_demuxed_files):
-        stream = demuxed['stream_info']
-        stream_type = stream['codec_type']
-        
-        if stream_type == 'audio':
-            lang_tag = stream.get('tags', {}).get('language', 'und')
-            cmd.extend([f'-metadata:s:a:{original_audio_count}', f'language={lang_tag}'])
-            original_audio_count += 1
-            
-        elif stream_type == 'subtitle':
-            # --- JAVÍTÁS: Felirat nyelvi kódjának beállítása ---
-            lang_tag = stream.get('tags', {}).get('language', 'und')
-            cmd.extend([f'-metadata:s:s:{original_subtitle_count}', f'language={lang_tag}'])
-            original_subtitle_count += 1
-            
-    # Új audiosáv metaadatainak és viselkedésének beállítása
+    cmd.extend(['-map', '1:a:0', '-c', 'copy'])
+
+    original_audio_count = sum(1 for stream in streams if stream['codec_type'] == 'audio') if include_original_audio else 0
+
+    if include_original_audio:
+        for audio_index in range(original_audio_count):
+            cmd.extend([f'-disposition:a:{audio_index}', '0'])
+
     cmd.extend([f'-metadata:s:a:{original_audio_count}', f'language={language}'])
     cmd.extend([f'-metadata:s:a:{original_audio_count}', f'title={language.upper()} dub'])
     cmd.extend([f'-disposition:a:{original_audio_count}', 'default+dub'])
-    
     cmd.append(output_file)
 
     print(f"FFmpeg parancs futtatása:\n{' '.join(cmd)}")
@@ -157,10 +106,10 @@ def remux_video(demuxed_files, new_audio_file, language, output_file, include_or
         print("Hiba a végső videó összefűzése során.")
         sys.exit(1)
     finally:
-        print("--- REMUXING FINISHED ---\n")
+        print("--- MUXING FINISHED ---\n")
 
 def main():
-    parser = argparse.ArgumentParser(description="Videót atomjaira szed, majd új hangsávval rakja össze a maximális stabilitás érdekében.")
+    parser = argparse.ArgumentParser(description="Az eredeti videó sávjait megtartja, és új hangsávot fűz a kimeneti fájlhoz.")
     parser.add_argument('project_name', help='A feldlogozandó projekt könyvtár neve a \"workdir\"-en belül.')
     parser.add_argument('-lang', '--language', required=True, help='A hozzáadandó audiosáv nyelvi címkéje (pl. hun, eng).')
     parser.add_argument('--only-new-audio', action='store_true', help='Csak az új hangsáv kerüljön a kimenő videóba, az eredeti audiók kihagyásával.')
@@ -209,12 +158,9 @@ def main():
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    temp_dir = tempfile.mkdtemp(prefix="demux_")
-    
+    streams = get_stream_info(input_video)
+    processed_aac_path = None
     try:
-        streams = get_stream_info(input_video)
-        demuxed_files = demux_streams(input_video, streams, temp_dir)
-        
         target_sample_rate = get_target_sample_rate(input_video)
         processed_aac_path = process_audio_to_raw_aac(input_wav_audio, target_sample_rate)
         
@@ -223,17 +169,14 @@ def main():
         output_file = str(output_dir / f"{video_name}_with_{args.language}_dub{video_ext}")
         
         include_original_audio = not args.only_new_audio
-        remux_video(demuxed_files, processed_aac_path, args.language, output_file, include_original_audio=include_original_audio)
-
-        if os.path.exists(processed_aac_path):
-            os.remove(processed_aac_path)
-            print(f"Ideiglenes audiófájl törölve: {processed_aac_path}")
+        merge_video_with_new_audio(input_video, streams, processed_aac_path, args.language, output_file, include_original_audio=include_original_audio)
             
         print(f"\nSikeres végrehajtás! A kimeneti fájl itt található: {output_file}")
 
     finally:
-        print(f"Takarítás: ideiglenes könyvtár törlése ({temp_dir})")
-        shutil.rmtree(temp_dir)
+        if processed_aac_path and os.path.exists(processed_aac_path):
+            os.remove(processed_aac_path)
+            print(f"Ideiglenes audiófájl törölve: {processed_aac_path}")
 
 if __name__ == "__main__":
     main()

@@ -116,7 +116,8 @@
         "title": "Detalles de los widgets",
         "items": [
           "<strong>Review + Continue</strong>: Detiene la ejecución en un punto de control donde puedes revisar los pasos previos, ajustar parámetros y luego usar el botón correspondiente para continuar o repetir el workflow.",
-          "<strong>Ciclo</strong>: Permite ejecuciones repetidas. El valor \"Número de pasos a retroceder\" indica cuántos pasos ejecutables anteriores se incluyen en el ciclo."
+          "<strong>Ciclo</strong>: Permite ejecuciones repetidas. El valor \"Número de pasos a retroceder\" indica cuántos pasos ejecutables anteriores se incluyen en el ciclo.",
+          "<strong>Translated Split Loop</strong>: Comprueba si el JSON traducido seleccionado ya tiene suficientes archivos terminados dentro de <code>translated_splits</code>. Si no, vuelve a ejecutar el bloque posterior a Review + Continue."
         ]
       },
       "workflow": {
@@ -225,6 +226,13 @@
         "cycle_not_enough_steps": "No hay suficientes pasos activos antes del widget para el ciclo solicitado.",
         "cycle_repeat_invalid": "El número de repeticiones del ciclo debe ser al menos 1.",
         "cycle_step_back_invalid": "El valor de retroceso del ciclo debe ser al menos 1.",
+        "segment_loop_review_missing": "No hay un widget Review + Continue habilitado antes del widget translated split loop.",
+        "segment_loop_order_invalid": "El translated split loop solo puede usarse cuando cierra el bloque de scripts situado justo después de Review + Continue.",
+        "segment_loop_restart_missing": "No hay ningún script ejecutable después de Review + Continue para reiniciar el loop.",
+        "segment_loop_allowed_invalid": "Los segmentos faltantes permitidos deben ser un entero mayor o igual que 0.",
+        "segment_loop_check_failed": "No se pudo comprobar el progreso de translated_splits: {error}",
+        "segment_loop_retry": "Translated split loop: {completed}/{total} listos ({missing} faltan, permitido: {allowed}). Reejecutando el bloque posterior a Review + Continue. JSON: {json}",
+        "segment_loop_continue": "Translated split loop: {completed}/{total} listos ({missing} faltan, permitido: {allowed}). El workflow continúa. JSON: {json}",
         "widget_disabled": "Este widget está deshabilitado.",
         "cycle_start": "Iniciando ciclo con {count} repeticiones.",
         "cycle_start_failed": "No se pudo iniciar el ciclo: {error}",
@@ -285,7 +293,8 @@
         "keys_save_failed_generic": "No se pudieron guardar las claves API.",
         "keys_save_failed": "No se pudo guardar la clave API: {error}",
         "status_check_failed": "No se pudo obtener el estado.",
-        "log_fetch_failed": "No se pudo leer el registro."
+        "log_fetch_failed": "No se pudo leer el registro.",
+        "segment_loop_status_failed": "No se pudo obtener el progreso de translated_splits."
       },
       "keys": {
         "missing_alert": "Faltan claves API: {keys}",
@@ -331,6 +340,19 @@
             }
           },
           "help": "El widget de ciclo repite la cantidad indicada de pasos activos anteriores al widget durante el número de repeticiones indicado."
+        },
+        "segment_loop": {
+          "name": "Translated Split Loop",
+          "description": "Comprueba si hay suficientes archivos translated split y, si hace falta, reejecuta el bloque posterior a la revisión.",
+          "continue_label": "Comprobar loop",
+          "review_label": "Revisar",
+          "parameters": {
+            "allowed_missing": {
+              "label": "Segmentos faltantes permitidos",
+              "helper": "Esta cantidad de archivos split faltantes todavía se tolera antes de continuar el workflow. Valor predeterminado: 0."
+            }
+          },
+          "help": "El widget compara los segmentos del primer archivo JSON dentro del directorio translated definido en config.json con los archivos de audio terminados dentro de translated_splits. Si la cantidad de faltantes supera el umbral configurado, vuelve a ejecutar el bloque de scripts después de Review + Continue."
         }
       },
       "context_menu": {

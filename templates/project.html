@@ -521,6 +521,30 @@
                     }
                 ],
                 help: t('workflow.widgets.cycle.help')
+            },
+            {
+                id: 'translatedSplitLoopWidget',
+                name: t('workflow.widgets.segment_loop.name', {}, 'Translated Split Loop'),
+                description: t(
+                    'workflow.widgets.segment_loop.description',
+                    {},
+                    'Checks translated split progress and reruns the post-review block until enough files are ready.'
+                ),
+                continueLabel: t('workflow.widgets.segment_loop.continue_label', {}, 'Check loop'),
+                reviewLabel: t('workflow.widgets.segment_loop.review_label', {}, 'Review'),
+                parameters: [
+                    {
+                        name: 'allowed_missing_segments',
+                        label: t('workflow.widgets.segment_loop.parameters.allowed_missing.label'),
+                        type: 'number',
+                        min: 0,
+                        step: 1,
+                        default: 0,
+                        required: true,
+                        helper: t('workflow.widgets.segment_loop.parameters.allowed_missing.helper')
+                    }
+                ],
+                help: t('workflow.widgets.segment_loop.help')
             }
         ];
 
@@ -825,6 +849,63 @@
                 template_id: currentTemplateId,
                 workflow_state: collectWorkflowState()
             };
+        }
+
+        function findPreviousEnabledWidgetIndex(startIndex, widgetId) {
+            for (let i = startIndex - 1; i >= 0; i--) {
+                const step = workflowSteps[i];
+                if (!step || step.type !== 'widget' || step.enabled === false) {
+                    continue;
+                }
+                if (step.widget === widgetId) {
+                    return i;
+                }
+            }
+            return null;
+        }
+
+        function resolveTranslatedSplitLoopRestart(widgetIndex) {
+            const reviewIndex = findPreviousEnabledWidgetIndex(widgetIndex, 'reviewContinue');
+            if (reviewIndex === null) {
+                return {
+                    error: t('workflow.messages.segment_loop_review_missing')
+                };
+            }
+            let restartIndex = null;
+            for (let i = reviewIndex + 1; i < widgetIndex; i++) {
+                const step = workflowSteps[i];
+                if (!step || step.enabled === false) {
+                    continue;
+                }
+                if (step.type === 'widget') {
+                    return {
+                        error: t('workflow.messages.segment_loop_order_invalid')
+                    };
+                }
+                if (restartIndex === null) {
+                    restartIndex = i;
+                }
+            }
+            if (restartIndex === null) {
+                return {
+                    error: t('workflow.messages.segment_loop_restart_missing')
+                };
+            }
+            return {
+                reviewIndex,
+                restartIndex
+            };
+        }
+
+        async function fetchTranslatedSplitProgress() {
+            const response = await fetch(`/api/translated-split-progress/${encodeURIComponent(PROJECT_NAME)}`, {
+                cache: 'no-store'
+            });
+            const result = await response.json();
+            if (!response.ok || !result.success || !result.progress) {
+                throw new Error(result && result.error ? result.error : t('workflow.errors.segment_loop_status_failed'));
+            }
+            return result.progress;
         }
 
         function cloneSteps(steps) {
@@ -3222,24 +3303,7 @@
             updateInfoBox('secondary', t('workflow.messages.widget_added', { name: widget.name }));
         }
 
-        async function handleWidgetContinue(widgetIndex) {
-            if (currentWorkflowJobId) {
-                updateInfoBox('warning', t('workflow.messages.already_running'));
-                return;
-            }
-            const widgetStep = workflowSteps[widgetIndex];
-            if (!widgetStep || widgetStep.type !== 'widget') {
-                return;
-            }
-            if (widgetStep.enabled === false) {
-                updateInfoBox('info', t('workflow.messages.widget_disabled'));
-                return;
-            }
-            const widget = findWidgetById(widgetStep.widget);
-            if (widget && widget.id === 'cycleWidget') {
-                await startCycleSequence(widgetIndex, { auto: false });
-                return;
-            }
+        async function continueWorkflowAfterWidget(widgetIndex) {
             const validation = validateWorkflowSegment(widgetIndex + 1);
             if (!validation.hasRunnableStep) {
                 updateInfoBox('info', t('workflow.messages.no_more_steps'));
@@ -3280,6 +3344,86 @@
                 console.error('Widget folytatási hiba:', error);
                 alert(t('workflow.errors.continue_failed', { error: error.message }));
             }
+        }
+
+        async function handleTranslatedSplitLoopWidget(widgetIndex, { auto = false } = {}) {
+            const widgetStep = workflowSteps[widgetIndex];
+            if (!widgetStep || widgetStep.type !== 'widget') {
+                return;
+            }
+            const allowedMissingRaw = widgetStep.params ? widgetStep.params.allowed_missing_segments : 0;
+            const allowedMissing = Number.parseInt(String(allowedMissingRaw ?? '0'), 10);
+            if (!Number.isInteger(allowedMissing) || allowedMissing < 0) {
+                updateInfoBox('warning', t('workflow.messages.segment_loop_allowed_invalid'));
+                return;
+            }
+
+            let progress = null;
+            try {
+                progress = await fetchTranslatedSplitProgress();
+            } catch (error) {
+                console.error('Translated split állapot lekérdezési hiba:', error);
+                updateInfoBox('danger', t('workflow.messages.segment_loop_check_failed', { error: error.message }));
+                return;
+            }
+
+            const expectedSegments = Number.parseInt(String(progress.expected_segments ?? 0), 10) || 0;
+            const completedSegments = Number.parseInt(String(progress.completed_segments ?? 0), 10) || 0;
+            const missingSegments = Number.parseInt(
+                String(progress.missing_segments ?? Math.max(expectedSegments - completedSegments, 0)),
+                10
+            ) || 0;
+
+            if (missingSegments > allowedMissing) {
+                const restartInfo = resolveTranslatedSplitLoopRestart(widgetIndex);
+                if (restartInfo.error) {
+                    updateInfoBox('warning', restartInfo.error);
+                    return;
+                }
+                updateInfoBox('secondary', t('workflow.messages.segment_loop_retry', {
+                    completed: completedSegments,
+                    total: expectedSegments,
+                    missing: missingSegments,
+                    allowed: allowedMissing,
+                    json: progress.json_file_name || ''
+                }));
+                await startSegmentRun(restartInfo.restartIndex);
+                return;
+            }
+
+            updateInfoBox('success', t('workflow.messages.segment_loop_continue', {
+                completed: completedSegments,
+                total: expectedSegments,
+                missing: missingSegments,
+                allowed: allowedMissing,
+                json: progress.json_file_name || ''
+            }));
+            await continueWorkflowAfterWidget(widgetIndex);
+        }
+
+        async function handleWidgetContinue(widgetIndex) {
+            if (currentWorkflowJobId) {
+                updateInfoBox('warning', t('workflow.messages.already_running'));
+                return;
+            }
+            const widgetStep = workflowSteps[widgetIndex];
+            if (!widgetStep || widgetStep.type !== 'widget') {
+                return;
+            }
+            if (widgetStep.enabled === false) {
+                updateInfoBox('info', t('workflow.messages.widget_disabled'));
+                return;
+            }
+            const widget = findWidgetById(widgetStep.widget);
+            if (widget && widget.id === 'cycleWidget') {
+                await startCycleSequence(widgetIndex, { auto: false });
+                return;
+            }
+            if (widget && widget.id === 'translatedSplitLoopWidget') {
+                await handleTranslatedSplitLoopWidget(widgetIndex, { auto: false });
+                return;
+            }
+            await continueWorkflowAfterWidget(widgetIndex);
         }
 
         function moveWorkflowStep(index, delta) {
@@ -4111,6 +4255,10 @@
             if (widget.id === 'cycleWidget') {
                 startCycleSequence(widgetIndex, { auto: true }).catch(error => {
                     console.error('Automatikus ciklus hiba:', error);
+                });
+            } else if (widget.id === 'translatedSplitLoopWidget') {
+                handleTranslatedSplitLoopWidget(widgetIndex, { auto: true }).catch(error => {
+                    console.error('Automatikus translated split loop hiba:', error);
                 });
             } else {
                 updateInfoBox('info', t('workflow.messages.widget_continue_hint', { name: widget.name }));
