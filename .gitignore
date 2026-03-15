@@ -4,6 +4,7 @@ workdir/*/
 .gradio/
 .old/
 narrator/*
+.checkpoints
 
 # Kizárt konfigurációs és adatfájlok
 keyholder.json

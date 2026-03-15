@@ -29,7 +29,7 @@ for candidate in Path(__file__).resolve().parents:
 
 from tools.debug_utils import add_debug_argument, configure_debug_mode
 
-DEFAULT_MAX_PAUSE_S = 0.8
+DEFAULT_MAX_PAUSE_S = 0.3
 DEFAULT_PADDING_S = 0.1
 DEFAULT_MAX_SEGMENT_S = 11.5
 PRIMARY_PUNCTUATION = (".", "!", "?")

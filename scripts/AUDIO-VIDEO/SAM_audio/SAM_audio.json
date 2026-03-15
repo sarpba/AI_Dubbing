@@ -1,0 +1,130 @@
+{
+  "enviroment": "sam-audio",
+  "script": "AUDIO-VIDEO/SAM_audio/SAM_audio.py",
+  "description": "SAM-Audio ONNX wrapper a beszéd és háttér szétválasztására az extracted_audio bemenetből.",
+  "required": [
+    {
+      "name": "project_name",
+      "flags": [
+        "-p",
+        "--project-name"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "prompt",
+      "flags": [
+        "--prompt"
+      ],
+      "type": "option",
+      "default": "speech"
+    },
+    {
+      "name": "device",
+      "flags": [
+        "--device"
+      ],
+      "type": "option",
+      "default": "cuda"
+    },
+    {
+      "name": "onnx_script",
+      "flags": [
+        "--onnx-script"
+      ],
+      "type": "option",
+      "default": "onnx_inference.py"
+    },
+    {
+      "name": "onnx_model_dir",
+      "flags": [
+        "--onnx-model-dir"
+      ],
+      "type": "option",
+      "default": "onnx_models"
+    },
+    {
+      "name": "onnx_steps",
+      "flags": [
+        "--onnx-steps"
+      ],
+      "type": "option",
+      "default": 16
+    },
+    {
+      "name": "sample_rate",
+      "flags": [
+        "--sample-rate"
+      ],
+      "type": "option",
+      "default": 48000
+    },
+    {
+      "name": "mono",
+      "flags": [
+        "--mono"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "force_convert",
+      "flags": [
+        "--force-convert"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "keep_temp",
+      "flags": [
+        "--keep-temp"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "predict_spans",
+      "flags": [
+        "--predict-spans"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "reranking_candidates",
+      "flags": [
+        "--reranking-candidates"
+      ],
+      "type": "option",
+      "default": 1
+    },
+    {
+      "name": "span_threshold",
+      "flags": [
+        "--span-threshold"
+      ],
+      "type": "option",
+      "default": 0.3
+    },
+    {
+      "name": "chunk_seconds",
+      "flags": [
+        "--chunk-seconds"
+      ],
+      "type": "option",
+      "default": 60
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

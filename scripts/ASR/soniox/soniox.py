@@ -9,6 +9,7 @@ import base64
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -360,10 +361,88 @@ def _group_tokens_using_text(tokens: List[dict], transcript_text: str) -> List[d
     words = [word for word in transcript_text.replace("\n", " ").split(" ") if word.strip()]
     if not words:
         return []
+    return _group_tokens_using_words(tokens, words)
+
+
+SPK_TAG_RE = re.compile(r"<spk:(\d+)>")
+
+
+def _extract_words_and_speakers(transcript_text: str) -> Tuple[List[str], List[Optional[str]]]:
+    words: List[str] = []
+    speakers: List[Optional[str]] = []
+    current_speaker: Optional[str] = None
+    for raw_word in transcript_text.replace("\n", " ").split(" "):
+        if not raw_word.strip():
+            continue
+        matches = list(SPK_TAG_RE.finditer(raw_word))
+        if matches:
+            current_speaker = matches[-1].group(1)
+            raw_word = SPK_TAG_RE.sub("", raw_word)
+        cleaned = raw_word.strip()
+        if cleaned:
+            words.append(cleaned)
+            speakers.append(current_speaker)
+    return words, speakers
+
+
+def _strip_spk_tag_tokens(tokens: List[dict]) -> List[dict]:
+    if not tokens:
+        return []
+    filtered: List[dict] = []
+    candidate_tokens: List[dict] = []
+    candidate_text = ""
+    in_candidate = False
+
+    def flush_candidate(keep: bool) -> None:
+        nonlocal candidate_tokens, candidate_text, in_candidate
+        if keep:
+            filtered.extend(candidate_tokens)
+        candidate_tokens = []
+        candidate_text = ""
+        in_candidate = False
+
+    for token in tokens:
+        if not isinstance(token, dict):
+            continue
+        collapsed = _collapse_whitespace(token.get("text") or "")
+        if not in_candidate:
+            if collapsed == "<" or collapsed.startswith("<spk"):
+                in_candidate = True
+                candidate_tokens.append(token)
+                candidate_text += collapsed
+                if ">" in collapsed:
+                    tag = candidate_text.split(">", 1)[0] + ">"
+                    is_spk_tag = bool(SPK_TAG_RE.fullmatch(tag))
+                    flush_candidate(keep=not is_spk_tag)
+                continue
+            filtered.append(token)
+            continue
+
+        candidate_tokens.append(token)
+        candidate_text += collapsed
+        if ">" in collapsed:
+            tag = candidate_text.split(">", 1)[0] + ">"
+            is_spk_tag = bool(SPK_TAG_RE.fullmatch(tag))
+            flush_candidate(keep=not is_spk_tag)
+
+    if candidate_tokens:
+        flush_candidate(keep=True)
+    return filtered
+
+
+def _group_tokens_using_words(
+    tokens: List[dict],
+    words: List[str],
+    *,
+    word_speakers: Optional[List[Optional[str]]] = None,
+) -> List[dict]:
+    if not words:
+        return []
     grouped: List[dict] = []
     token_index = 0
     total_tokens = len(tokens)
-    for raw_word in words:
+    use_speakers = bool(word_speakers) and any(s is not None for s in word_speakers)
+    for word_index, raw_word in enumerate(words):
         target = _collapse_whitespace(raw_word)
         if not target:
             continue
@@ -383,6 +462,12 @@ def _group_tokens_using_text(tokens: List[dict], transcript_text: str) -> List[d
             combined = "".join(accumulated_parts)
             if target.startswith(combined):
                 if combined == target:
+                    if use_speakers and word_speakers is not None:
+                        speaker_label = word_speakers[word_index]
+                        if speaker_label is not None:
+                            for tok in accumulated_tokens:
+                                if isinstance(tok, dict):
+                                    tok["speaker"] = speaker_label
                     entry = _build_word_entry_from_tokens(raw_word, accumulated_tokens)
                     if entry:
                         grouped.append(entry)
@@ -393,6 +478,12 @@ def _group_tokens_using_text(tokens: List[dict], transcript_text: str) -> List[d
             accumulated_parts.pop()
             token_index -= 1
             if "".join(accumulated_parts) == target and accumulated_tokens:
+                if use_speakers and word_speakers is not None:
+                    speaker_label = word_speakers[word_index]
+                    if speaker_label is not None:
+                        for tok in accumulated_tokens:
+                            if isinstance(tok, dict):
+                                tok["speaker"] = speaker_label
                 entry = _build_word_entry_from_tokens(raw_word, accumulated_tokens)
                 if entry:
                     grouped.append(entry)
@@ -498,8 +589,13 @@ def ensure_uploadable_audio(audio_path: Path) -> Tuple[Path, Optional[Path]]:
 
 
 def normalise_tokens(tokens: List[dict], transcript_text: Optional[str] = None) -> List[dict]:
+    tokens = _strip_spk_tag_tokens(tokens)
     if transcript_text:
-        grouped = _group_tokens_using_text(tokens, transcript_text)
+        if "<spk:" in transcript_text:
+            words, speakers = _extract_words_and_speakers(transcript_text)
+            grouped = _group_tokens_using_words(tokens, words, word_speakers=speakers)
+        else:
+            grouped = _group_tokens_using_text(tokens, transcript_text)
         if grouped:
             return grouped
         logging.warning("Nem sikerült a Soniox tokeneket a fő 'text' mező alapján csoportosítani – visszatérés token szintre.")

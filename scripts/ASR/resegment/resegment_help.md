@@ -40,7 +40,7 @@ python scripts/ASR/resegment/resegment.py \
 
 ### Opcionális paraméterek
 
-- `--max-pause`: Mondatszegmensek közti maximális szünet másodpercben (alapértelmezett: 0.8)
+- `--max-pause`: Mondatszegmensek közti maximális szünet másodpercben (alapértelmezett: 0.3)
 - `--timestamp-padding`: Szó időbélyegek bővítése másodpercben (alapértelmezett: 0.1)
 - `--max-segment-duration`: Mondatszegmensek maximális hossza másodpercben (alapértelmezett: 11.5)
 - `--enforce-single-speaker`: Speaker diarizáció alapján szegmentálás (alapértelmezett: ki)
