@@ -1,15 +1,4 @@
-from flask import (
-    Flask,
-    render_template,
-    request,
-    jsonify,
-    send_from_directory,
-    url_for,
-    send_file,
-    after_this_request,
-    make_response
-)
-from flask_compress import Compress
+from flask import render_template, request, jsonify, send_from_directory, url_for, send_file, after_this_request, make_response
 import os
 import json
 import subprocess
@@ -34,6 +23,7 @@ from pydub import AudioSegment
 import wave
 import math
 from collections import OrderedDict
+from app_factory import create_flask_app, register_app_routes
 from services.script_meta import validate_script_meta
 from services.project_files import (
     build_audio_metadata as build_audio_metadata_service,
@@ -72,29 +62,7 @@ from services.workflow_state import (
     sanitize_workflow_id as sanitize_workflow_id_service,
     load_workflow_file as load_workflow_file_service,
 )
-from routes.files_api import register_files_api_routes
-from routes.pages import register_page_routes
-from routes.review_api import register_review_api_routes
-from routes.workflow_api import register_workflow_api_routes
-
-app = Flask(__name__)
-
-# Enable gzip compression for large HTML/JSON responses sent to the frontend.
-app.config.setdefault(
-    "COMPRESS_MIMETYPES",
-    [
-        "text/html",
-        "text/css",
-        "text/xml",
-        "text/plain",
-        "application/json",
-        "application/javascript",
-        "text/javascript",
-    ],
-)
-app.config.setdefault("COMPRESS_LEVEL", 6)
-app.config.setdefault("COMPRESS_MIN_SIZE", 1024)
-Compress(app)
+app = create_flask_app(__name__)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -2060,164 +2028,111 @@ def run_workflow_job(job_id, project_name, workflow_payload):
     )
 
 
-register_page_routes(
+register_app_routes(
     app,
     {
-        'workdir_path': 'workdir',
-        'build_project_entries': build_project_entries,
-        'render_with_language': render_with_language,
-        'config': config,
+        'pages': {
+            'workdir_path': 'workdir',
+            'build_project_entries': build_project_entries,
+            'render_with_language': render_with_language,
+            'config': config,
+            'secure_filename': secure_filename,
+            'compute_failed_generation_highlights': compute_failed_generation_highlights,
+            'get_audio_metadata_directories': get_audio_metadata_directories,
+            'get_failed_generation_directories': get_failed_generation_directories,
+            'should_enable_failed_move': should_enable_failed_move,
+            'build_audio_metadata': build_audio_metadata,
+            'build_failed_generation_json_metadata': build_failed_generation_json_metadata,
+            'get_tts_root_directory': get_tts_root_directory,
+            'audio_extensions': AUDIO_EXTENSIONS,
+            'video_extensions': VIDEO_EXTENSIONS,
+            'audio_mime_map': AUDIO_MIME_MAP,
+            'video_mime_map': VIDEO_MIME_MAP,
+            'secret_param_names': sorted(SECRET_PARAM_NAMES),
+            'prepare_segments_for_response': prepare_segments_for_response,
+            'get_review_encoded_audio_path': get_review_encoded_audio_path,
+        },
+        'review': {
+            'config': config,
+            'secure_filename': secure_filename,
+            'resolve_source_audio_path': resolve_source_audio_path,
+            'get_review_encoded_audio_path': get_review_encoded_audio_path,
+            'review_audio_encoding_lock': review_audio_encoding_lock,
+            'review_audio_encoding_jobs': review_audio_encoding_jobs,
+            '_run_review_audio_encoding_job': _run_review_audio_encoding_job,
+            'prepare_segments_for_response': prepare_segments_for_response,
+            'delete_translated_split_file': delete_translated_split_file,
+            'get_config_copy': get_config_copy,
+            'sanitize_segment_strings': sanitize_segment_strings,
+            'find_matching_audio_file': find_matching_audio_file,
+            'get_project_workflow_state_path': get_project_workflow_state_path,
+            'normalize_workflow_steps': normalize_workflow_steps,
+            'WorkflowValidationError': WorkflowValidationError,
+            'workflow_lock': workflow_lock,
+            'workflow_jobs': workflow_jobs,
+            'determine_workflow_key_status': determine_workflow_key_status,
+            'mask_workflow_secret_params': mask_workflow_secret_params,
+            'register_workflow_job': register_workflow_job,
+            'run_workflow_job': run_workflow_job,
+            'set_workflow_thread': set_workflow_thread,
+        },
+        'workflow': {
+            'secure_filename': secure_filename,
+            'get_config_copy': get_config_copy,
+            'normalize_workflow_steps': normalize_workflow_steps,
+            'WorkflowValidationError': WorkflowValidationError,
+            'determine_workflow_key_status': determine_workflow_key_status,
+            'list_workflow_templates': list_workflow_templates,
+            'load_workflow_template': load_workflow_template,
+            'coerce_bool': coerce_bool,
+            'save_workflow_template_file': save_workflow_template_file,
+            'get_scripts_catalog': get_scripts_catalog,
+            'load_project_workflow_state': load_project_workflow_state,
+            'get_project_workflow_state_path': get_project_workflow_state_path,
+            'save_project_workflow_state': save_project_workflow_state,
+            'mask_workflow_secret_params': mask_workflow_secret_params,
+            'get_project_jobs': get_project_jobs,
+            'get_project_root_path': get_project_root_path,
+            'workflow_lock': workflow_lock,
+            'workflow_jobs': workflow_jobs,
+            'register_workflow_job': register_workflow_job,
+            'run_workflow_job': run_workflow_job,
+            'set_workflow_thread': set_workflow_thread,
+            'get_workflow_job': get_workflow_job,
+            'request_workflow_cancel': request_workflow_cancel,
+            'update_workflow_job': update_workflow_job,
+            'resolve_workspace_path': resolve_workspace_path,
+            'read_log_tail': read_log_tail,
+            'load_keyholder_data': load_keyholder_data,
+            'encode_keyholder_value': encode_keyholder_value,
+            'save_keyholder_data': save_keyholder_data,
+        },
+        'files': {
+            'secure_filename': secure_filename,
+            'get_config_copy': get_config_copy,
+            'is_subpath': is_subpath,
+            'get_project_jobs': get_project_jobs,
+            'compute_failed_generation_highlights': compute_failed_generation_highlights,
+            'get_audio_metadata_directories': get_audio_metadata_directories,
+            'get_failed_generation_directories': get_failed_generation_directories,
+            'collect_directory_entries': collect_directory_entries,
+            'get_tts_root_directory': get_tts_root_directory,
+            'sanitize_storage_relative_path': sanitize_storage_relative_path,
+            'safe_extract_tar': safe_extract_tar,
+            'safe_extract_zip': safe_extract_zip,
+            'audio_extensions': AUDIO_EXTENSIONS,
+        },
+        'load_theme_colors': load_theme_colors,
+        'save_theme_colors': save_theme_colors,
+        'theme_color_keys': THEME_COLOR_KEYS,
         'secure_filename': secure_filename,
-        'compute_failed_generation_highlights': compute_failed_generation_highlights,
-        'get_audio_metadata_directories': get_audio_metadata_directories,
-        'get_failed_generation_directories': get_failed_generation_directories,
-        'should_enable_failed_move': should_enable_failed_move,
-        'build_audio_metadata': build_audio_metadata,
-        'build_failed_generation_json_metadata': build_failed_generation_json_metadata,
-        'get_tts_root_directory': get_tts_root_directory,
-        'audio_extensions': AUDIO_EXTENSIONS,
-        'video_extensions': VIDEO_EXTENSIONS,
-        'audio_mime_map': AUDIO_MIME_MAP,
-        'video_mime_map': VIDEO_MIME_MAP,
-        'secret_param_names': sorted(SECRET_PARAM_NAMES),
-        'prepare_segments_for_response': prepare_segments_for_response,
-        'get_review_encoded_audio_path': get_review_encoded_audio_path,
-    },
-)
-
-register_review_api_routes(
-    app,
-    {
-        'config': config,
-        'secure_filename': secure_filename,
-        'resolve_source_audio_path': resolve_source_audio_path,
-        'get_review_encoded_audio_path': get_review_encoded_audio_path,
-        'review_audio_encoding_lock': review_audio_encoding_lock,
-        'review_audio_encoding_jobs': review_audio_encoding_jobs,
-        '_run_review_audio_encoding_job': _run_review_audio_encoding_job,
-        'prepare_segments_for_response': prepare_segments_for_response,
-        'delete_translated_split_file': delete_translated_split_file,
+        'collect_translated_split_progress': collect_translated_split_progress,
         'get_config_copy': get_config_copy,
-        'sanitize_segment_strings': sanitize_segment_strings,
-        'find_matching_audio_file': find_matching_audio_file,
-        'get_project_workflow_state_path': get_project_workflow_state_path,
-        'normalize_workflow_steps': normalize_workflow_steps,
-        'WorkflowValidationError': WorkflowValidationError,
-        'workflow_lock': workflow_lock,
-        'workflow_jobs': workflow_jobs,
-        'determine_workflow_key_status': determine_workflow_key_status,
-        'mask_workflow_secret_params': mask_workflow_secret_params,
-        'register_workflow_job': register_workflow_job,
-        'run_workflow_job': run_workflow_job,
-        'set_workflow_thread': set_workflow_thread,
+        'workflow_validation_error': WorkflowValidationError,
+        'initialize_scripts_catalog': initialize_scripts_catalog,
+        'logger': logging.getLogger(__name__),
     },
 )
-
-register_workflow_api_routes(
-    app,
-    {
-        'secure_filename': secure_filename,
-        'get_config_copy': get_config_copy,
-        'normalize_workflow_steps': normalize_workflow_steps,
-        'WorkflowValidationError': WorkflowValidationError,
-        'determine_workflow_key_status': determine_workflow_key_status,
-        'list_workflow_templates': list_workflow_templates,
-        'load_workflow_template': load_workflow_template,
-        'coerce_bool': coerce_bool,
-        'save_workflow_template_file': save_workflow_template_file,
-        'get_scripts_catalog': get_scripts_catalog,
-        'load_project_workflow_state': load_project_workflow_state,
-        'get_project_workflow_state_path': get_project_workflow_state_path,
-        'save_project_workflow_state': save_project_workflow_state,
-        'mask_workflow_secret_params': mask_workflow_secret_params,
-        'get_project_jobs': get_project_jobs,
-        'get_project_root_path': get_project_root_path,
-        'workflow_lock': workflow_lock,
-        'workflow_jobs': workflow_jobs,
-        'register_workflow_job': register_workflow_job,
-        'run_workflow_job': run_workflow_job,
-        'set_workflow_thread': set_workflow_thread,
-        'get_workflow_job': get_workflow_job,
-        'request_workflow_cancel': request_workflow_cancel,
-        'update_workflow_job': update_workflow_job,
-        'resolve_workspace_path': resolve_workspace_path,
-        'read_log_tail': read_log_tail,
-        'load_keyholder_data': load_keyholder_data,
-        'encode_keyholder_value': encode_keyholder_value,
-        'save_keyholder_data': save_keyholder_data,
-    },
-)
-
-register_files_api_routes(
-    app,
-    {
-        'secure_filename': secure_filename,
-        'get_config_copy': get_config_copy,
-        'is_subpath': is_subpath,
-        'get_project_jobs': get_project_jobs,
-        'compute_failed_generation_highlights': compute_failed_generation_highlights,
-        'get_audio_metadata_directories': get_audio_metadata_directories,
-        'get_failed_generation_directories': get_failed_generation_directories,
-        'collect_directory_entries': collect_directory_entries,
-        'get_tts_root_directory': get_tts_root_directory,
-        'sanitize_storage_relative_path': sanitize_storage_relative_path,
-        'safe_extract_tar': safe_extract_tar,
-        'safe_extract_zip': safe_extract_zip,
-        'audio_extensions': AUDIO_EXTENSIONS,
-    },
-)
-
-
-@app.route('/api/theme-colors', methods=['GET', 'POST'])
-def theme_colors_api():
-    if request.method == 'GET':
-        return jsonify({'success': True, 'colors': load_theme_colors()})
-
-    if not request.is_json:
-        return jsonify({'success': False, 'error': 'Hiányzó JSON payload.'}), 400
-
-    payload = request.get_json(silent=True) or {}
-    light_values = payload.get('light')
-    dark_values = payload.get('dark')
-
-    if not isinstance(light_values, dict) or not isinstance(dark_values, dict):
-        return jsonify({'success': False, 'error': 'Érvénytelen témabeállítások.'}), 400
-
-    normalized_input: Dict[str, Dict[str, Any]] = {
-        'light': {key: value for key, value in light_values.items() if key in THEME_COLOR_KEYS},
-        'dark': {key: value for key, value in dark_values.items() if key in THEME_COLOR_KEYS},
-    }
-
-    try:
-        saved = save_theme_colors(normalized_input)
-    except OSError:
-        return jsonify({'success': False, 'error': 'Nem sikerült elmenteni a témaszíneket.'}), 500
-
-    return jsonify({'success': True, 'colors': saved})
-
-
-@app.route('/api/translated-split-progress/<project_name>', methods=['GET'])
-def translated_split_progress_api(project_name):
-    sanitized_project = secure_filename(project_name)
-    try:
-        progress = collect_translated_split_progress(sanitized_project, config_snapshot=get_config_copy())
-    except FileNotFoundError as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 404
-    except WorkflowValidationError as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 400
-    except Exception as exc:  # pragma: no cover - váratlan hibák naplózása
-        logging.error(
-            "Nem sikerült lekérdezni a translated split előrehaladást (%s): %s",
-            sanitized_project,
-            exc,
-            exc_info=True
-        )
-        return jsonify({'success': False, 'error': 'Nem sikerült lekérdezni a translated split előrehaladást.'}), 500
-
-    return jsonify({'success': True, 'progress': progress})
-
-
-initialize_scripts_catalog()
 
 
 if __name__ == '__main__':
