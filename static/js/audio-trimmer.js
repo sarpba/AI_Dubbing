@@ -461,11 +461,16 @@
             console.warn('WaveSurfer Regions plugin nem érhető el, a trimmelés nem használható.');
             setTrimError('A hullámforma kijelöléshez szükséges bővítmény nem érhető el.');
         } else {
-            state.waveSurferRegions = state.waveSurfer.registerPlugin(regionsFactory.create({
-                dragSelection: {
-                    slop: 5
-                }
-            }));
+            state.waveSurferRegions = state.waveSurfer.registerPlugin(regionsFactory.create());
+            if (
+                state.waveSurferRegions
+                && typeof state.waveSurferRegions.enableDragSelection === 'function'
+            ) {
+                state.waveSurferRegions.enableDragSelection(
+                    { color: 'rgba(13, 110, 253, 0.2)' },
+                    5
+                );
+            }
 
             if (state.waveSurferRegions && typeof state.waveSurferRegions.on === 'function') {
                 state.waveSurferRegions.on('region-created', function (region) {
