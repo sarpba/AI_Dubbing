@@ -35,6 +35,43 @@ import wave
 import math
 from collections import OrderedDict
 from services.script_meta import validate_script_meta
+from services.project_files import (
+    build_audio_metadata as build_audio_metadata_service,
+    build_failed_generation_json_metadata as build_failed_generation_json_metadata_service,
+    collect_directory_entries as collect_directory_entries_service,
+    compute_failed_generation_highlights as compute_failed_generation_highlights_service,
+    get_audio_metadata_directories as get_audio_metadata_directories_service,
+    get_failed_generation_directories as get_failed_generation_directories_service,
+    get_tts_root_directory as get_tts_root_directory_service,
+    sanitize_storage_relative_path as sanitize_storage_relative_path_service,
+    should_enable_failed_move as should_enable_failed_move_service,
+)
+from services.workflow_jobs import (
+    build_log_links as build_log_links_service,
+    cleanup_workflow_resources as cleanup_workflow_resources_service,
+    get_project_jobs as get_project_jobs_service,
+    get_workflow_event as get_workflow_event_service,
+    get_workflow_job as get_workflow_job_service,
+    get_workflow_thread as get_workflow_thread_service,
+    read_log_tail as read_log_tail_service,
+    register_workflow_job as register_workflow_job_service,
+    request_workflow_cancel as request_workflow_cancel_service,
+    run_workflow_job as run_workflow_job_service,
+    set_workflow_thread as set_workflow_thread_service,
+    update_workflow_job as update_workflow_job_service,
+)
+from services.workflow_state import (
+    ensure_workflows_dir as ensure_workflows_dir_service,
+    get_project_root_path as get_project_root_path_service,
+    get_project_workflow_state_path as get_project_workflow_state_path_service,
+    list_workflow_templates as list_workflow_templates_service,
+    load_project_workflow_state as load_project_workflow_state_service,
+    load_workflow_template as load_workflow_template_service,
+    save_project_workflow_state as save_project_workflow_state_service,
+    save_workflow_template_file as save_workflow_template_file_service,
+    sanitize_workflow_id as sanitize_workflow_id_service,
+    load_workflow_file as load_workflow_file_service,
+)
 from routes.files_api import register_files_api_routes
 from routes.pages import register_page_routes
 from routes.review_api import register_review_api_routes
@@ -710,31 +747,11 @@ def is_subpath(child_path, parent_path):
 
 
 def sanitize_storage_relative_path(path_value: str, *, allow_empty: bool = False) -> str:
-    normalized = (path_value or '').strip().strip('/\\')
-    if not normalized:
-        if allow_empty:
-            return ''
-        raise ValueError('Adj meg érvényes almappa nevet.')
-    segments = [segment for segment in re.split(r'[\\/]+', normalized) if segment]
-    if not segments:
-        if allow_empty:
-            return ''
-        raise ValueError('Adj meg érvényes almappa nevet.')
-    sanitized_segments = []
-    for segment in segments:
-        safe_segment = secure_filename(segment)
-        if not safe_segment:
-            raise ValueError('Az útvonal érvénytelen karaktereket tartalmaz.')
-        sanitized_segments.append(safe_segment)
-    return '/'.join(sanitized_segments)
+    return sanitize_storage_relative_path_service(path_value, secure_filename, allow_empty=allow_empty)
 
 
 def get_tts_root_directory(config_snapshot: Dict[str, Any]) -> Optional[str]:
-    directories = config_snapshot.get('DIRECTORIES', {}) if isinstance(config_snapshot, dict) else {}
-    tts_dir_value = directories.get('TTS')
-    if not tts_dir_value:
-        return None
-    return resolve_workspace_path(tts_dir_value)
+    return get_tts_root_directory_service(config_snapshot, resolve_workspace_path)
 
 
 def safe_extract_tar(archive: tarfile.TarFile, destination: str) -> None:
@@ -779,117 +796,24 @@ def collect_directory_entries(
     highlight_map: Optional[Dict[str, str]] = None,
     failed_generation_directories: Optional[Set[str]] = None
 ) -> List[Dict[str, Any]]:
-    entries: List[Dict[str, Any]] = []
-    highlight_map = highlight_map or {}
-    metadata_directories = metadata_directories or set()
-    failed_generation_directories = failed_generation_directories or set()
-    try:
-        for name in sorted(os.listdir(target_path)):
-            if name.startswith('.'):
-                continue
-            full_path = os.path.join(target_path, name)
-            rel_path = os.path.relpath(full_path, root_path).replace('\\', '/')
-            if os.path.isdir(full_path):
-                entry = {
-                    'name': name,
-                    'type': 'directory',
-                    'path': rel_path
-                }
-                highlight_class = highlight_map.get(rel_path)
-                if highlight_class:
-                    entry['highlight_class'] = highlight_class
-                entries.append(entry)
-            else:
-                file_entry = {
-                    'name': name,
-                    'type': 'file',
-                    'path': rel_path
-                }
-                if should_enable_failed_move(rel_path, highlight_map):
-                    file_entry['enable_failed_move'] = True
-                metadata = build_audio_metadata(full_path, rel_path, metadata_directories)
-                if metadata:
-                    file_entry.update(metadata)
-                failed_metadata = build_failed_generation_json_metadata(
-                    full_path,
-                    rel_path,
-                    failed_generation_directories
-                )
-                if failed_metadata:
-                    file_entry.update(failed_metadata)
-                entries.append(file_entry)
-    except Exception as exc:
-        logging.warning("Nem sikerült beolvasni a(z) %s könyvtárat: %s", target_path, exc)
-    return entries
+    return collect_directory_entries_service(
+        root_path,
+        target_path,
+        metadata_directories=metadata_directories,
+        highlight_map=highlight_map,
+        failed_generation_directories=failed_generation_directories,
+    )
 
 
 def compute_failed_generation_highlights(
     project_dir: str,
     config_snapshot: Dict[str, Any]
 ) -> Dict[str, str]:
-    """
-    Térképet készít a failed_generations almappáihoz, amelyeket ki kell emelni.
-    Azokat a könyvtárakat jelöljük, amelyekhez létezik azonos bázisnevű fájl
-    a translated_splits mappában.
-    """
-    highlight_map: Dict[str, str] = {}
-    failed_root = os.path.join(project_dir, 'failed_generations')
-    translated_rel = config_snapshot.get('PROJECT_SUBDIRS', {}).get('translated_splits')
-    if not translated_rel:
-        return highlight_map
-
-    translated_root = os.path.join(project_dir, translated_rel)
-    if not os.path.isdir(failed_root) or not os.path.isdir(translated_root):
-        return highlight_map
-
-    translated_basenames: Set[str] = set()
-    try:
-        for name in os.listdir(translated_root):
-            translated_path = os.path.join(translated_root, name)
-            if os.path.isdir(translated_path):
-                continue
-            stem, _ = os.path.splitext(name)
-            if stem:
-                translated_basenames.add(stem)
-    except Exception as exc:
-        logging.warning(
-            "Nem sikerült beolvasni a translated_splits mappát (%s): %s",
-            translated_root,
-            exc
-        )
-        return highlight_map
-
-    try:
-        for name in os.listdir(failed_root):
-            failed_path = os.path.join(failed_root, name)
-            if not os.path.isdir(failed_path):
-                continue
-            if name not in translated_basenames:
-                continue
-            rel_path = os.path.relpath(failed_path, project_dir).replace('\\', '/')
-            highlight_map[rel_path] = 'fg-has-translated'
-    except Exception as exc:
-        logging.warning(
-            "Nem sikerült beolvasni a failed_generations mappát (%s): %s",
-            failed_root,
-            exc
-        )
-
-    return highlight_map
+    return compute_failed_generation_highlights_service(project_dir, config_snapshot)
 
 
 def should_enable_failed_move(rel_path: str, highlight_map: Dict[str, str]) -> bool:
-    if not rel_path:
-        return False
-    if not rel_path.startswith('failed_generations/'):
-        return False
-    parent_path = rel_path.rsplit('/', 1)[0] if '/' in rel_path else ''
-    if not parent_path:
-        return False
-    if highlight_map.get(parent_path) == 'fg-has-translated':
-        return False
-    _, ext = os.path.splitext(rel_path)
-    return ext.lower() == '.wav'
+    return should_enable_failed_move_service(rel_path, highlight_map)
 
 
 FILENAME_RANGE_PATTERN = re.compile(
@@ -898,14 +822,7 @@ FILENAME_RANGE_PATTERN = re.compile(
 
 
 def get_audio_metadata_directories(config_snapshot: Dict[str, Any]) -> Set[str]:
-    project_subdirs = config_snapshot.get('PROJECT_SUBDIRS', {}) if isinstance(config_snapshot, dict) else {}
-    candidates = {
-        'translated_splits',
-        'failed_generations',
-        project_subdirs.get('translated_splits') or '',
-        project_subdirs.get('failed_generations') or '',
-    }
-    return {value for value in candidates if isinstance(value, str) and value.strip()}
+    return get_audio_metadata_directories_service(config_snapshot)
 
 
 def should_collect_audio_metadata(rel_path: str, metadata_directories: Set[str]) -> bool:
@@ -979,31 +896,11 @@ def build_audio_metadata(
     rel_path: str,
     metadata_directories: Set[str]
 ) -> Dict[str, Any]:
-    _, ext = os.path.splitext(full_path)
-    if ext.lower() != '.wav':
-        return {}
-    if not should_collect_audio_metadata(rel_path, metadata_directories):
-        return {}
-    filename = os.path.basename(rel_path)
-    computed_seconds = compute_duration_from_filename(filename)
-    actual_seconds = read_wav_duration_seconds(full_path)
-    display_left = format_seconds_hundredths(computed_seconds) or '--'
-    display_right = format_seconds_hundredths(actual_seconds) or '--'
-    display_value = f"{display_left} / {display_right}"
-    return {
-        'duration_from_name': computed_seconds,
-        'duration_actual': actual_seconds,
-        'duration_display': display_value
-    }
+    return build_audio_metadata_service(full_path, rel_path, metadata_directories)
 
 
 def get_failed_generation_directories(config_snapshot: Dict[str, Any]) -> Set[str]:
-    project_subdirs = config_snapshot.get('PROJECT_SUBDIRS', {}) if isinstance(config_snapshot, dict) else {}
-    candidates = {
-        'failed_generations',
-        project_subdirs.get('failed_generations') or '',
-    }
-    return {value for value in candidates if isinstance(value, str) and value.strip()}
+    return get_failed_generation_directories_service(config_snapshot)
 
 
 def should_collect_failed_generation_text(rel_path: str, failed_directories: Set[str]) -> bool:
@@ -1022,47 +919,7 @@ def build_failed_generation_json_metadata(
     rel_path: str,
     failed_directories: Set[str]
 ) -> Dict[str, Any]:
-    _, ext = os.path.splitext(full_path)
-    if ext.lower() != '.json':
-        return {}
-    if os.path.basename(rel_path) != 'info.json':
-        return {}
-    if not should_collect_failed_generation_text(rel_path, failed_directories):
-        return {}
-    try:
-        with open(full_path, 'r', encoding='utf-8') as fp:
-            data = json.load(fp)
-    except (OSError, json.JSONDecodeError) as exc:
-        logging.debug("Nem sikerült beolvasni az info.json fájlt (%s): %s", full_path, exc)
-        return {}
-    def extract_text(source: Dict[str, Any], primary: str, secondary: str) -> Optional[str]:
-        primary_value = source.get(primary)
-        if isinstance(primary_value, str) and primary_value.strip():
-            return primary_value
-        secondary_value = source.get(secondary)
-        if isinstance(secondary_value, str) and secondary_value.strip():
-            return secondary_value
-        return None
-
-    value = extract_text(data, 'original_text', 'gen_text')
-    if value is None:
-        failures = data.get('failures')
-        if isinstance(failures, list):
-            for failure in failures:
-                if isinstance(failure, dict):
-                    candidate = extract_text(failure, 'original_text', 'gen_text')
-                    if isinstance(candidate, str):
-                        value = candidate
-                        break
-    if not isinstance(value, str):
-        return {}
-    display_value = ' '.join(value.split())
-    if not display_value:
-        return {}
-    return {
-        'failed_original_text': value,
-        'failed_original_text_display': display_value
-    }
+    return build_failed_generation_json_metadata_service(full_path, rel_path, failed_directories)
 
 
 def infer_autofill_kind(param_name: str) -> Optional[str]:
@@ -1293,88 +1150,23 @@ def get_script_definition(script_id: str) -> Optional[Dict[str, Any]]:
 
 
 def ensure_workflows_dir() -> Path:
-    try:
-        WORKFLOWS_DIR.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        logging.error("Nem sikerült létrehozni a workflows könyvtárat: %s", exc)
-    return WORKFLOWS_DIR
+    return ensure_workflows_dir_service(WORKFLOWS_DIR)
 
 
 def sanitize_workflow_id(name: str) -> str:
-    candidate = secure_filename(name or '')
-    candidate = candidate.replace(' ', '_').strip('_')
-    if not candidate:
-        candidate = datetime.utcnow().strftime("workflow_%Y%m%d_%H%M%S")
-    return candidate.lower()
+    return sanitize_workflow_id_service(name, secure_filename)
 
 
 def _load_workflow_file(path: Path) -> Optional[Dict[str, Any]]:
-    try:
-        with path.open('r', encoding='utf-8') as fp:
-            payload = json.load(fp)
-    except (json.JSONDecodeError, OSError) as exc:
-        logging.error("Nem sikerült betölteni a workflow fájlt (%s): %s", path, exc)
-        return None
-
-    if isinstance(payload, list):
-        steps = payload
-        name = path.stem
-        description = None
-    elif isinstance(payload, dict):
-        steps = payload.get('steps')
-        name = payload.get('name') or path.stem
-        description = payload.get('description')
-    else:
-        logging.warning("Ismeretlen workflow formátum: %s", path)
-        return None
-
-    if not isinstance(steps, list):
-        logging.warning("Workflow fájl nem tartalmaz érvényes 'steps' listát: %s", path)
-        return None
-
-    masked_steps = mask_workflow_secret_params(steps)
-
-    return {
-        'name': name,
-        'description': description,
-        'steps': masked_steps
-    }
+    return load_workflow_file_service(path, mask_workflow_secret_params)
 
 
 def list_workflow_templates() -> List[Dict[str, Any]]:
-    directory = ensure_workflows_dir()
-    templates: List[Dict[str, Any]] = []
-    for file_path in sorted(directory.glob('*.json')):
-        template_data = _load_workflow_file(file_path)
-        if not template_data:
-            continue
-        templates.append({
-            'id': file_path.stem,
-            'name': template_data['name'],
-            'filename': file_path.name,
-            'description': template_data.get('description')
-        })
-    return templates
+    return list_workflow_templates_service(WORKFLOWS_DIR, mask_workflow_secret_params)
 
 
 def load_workflow_template(template_id: str) -> Optional[Dict[str, Any]]:
-    if not template_id:
-        return None
-    directory = ensure_workflows_dir()
-    candidate = directory / template_id
-    if candidate.suffix.lower() != '.json':
-        candidate = candidate.with_suffix('.json')
-    if not candidate.is_file():
-        logging.warning("A kért workflow sablon nem található: %s", candidate)
-        return None
-    template_data = _load_workflow_file(candidate)
-    if not template_data:
-        return None
-    template_data.update({
-        'id': candidate.stem,
-        'filename': candidate.name
-    })
-    return template_data
+    return load_workflow_template_service(WORKFLOWS_DIR, template_id, mask_workflow_secret_params)
 
 
 def save_workflow_template_file(
@@ -1384,82 +1176,42 @@ def save_workflow_template_file(
     overwrite: bool = False,
     description: Optional[str] = None
 ) -> Dict[str, Any]:
-    directory = ensure_workflows_dir()
-    if template_id:
-        file_id = sanitize_workflow_id(Path(template_id).stem)
-    else:
-        file_id = sanitize_workflow_id(name)
-
-    if not file_id:
-        raise WorkflowValidationError("Érvénytelen workflow azonosító.")
-
-    target_path = directory / f"{file_id}.json"
-    if target_path.exists() and not overwrite:
-        raise WorkflowValidationError("Már létezik ugyanilyen nevű workflow. Engedélyezd a felülírást.")
-
-    masked_steps = mask_workflow_secret_params(steps)
-
-    payload: Dict[str, Any] = {
-        'name': name or file_id,
-        'steps': masked_steps
-    }
-    if description:
-        payload['description'] = description
-
-    try:
-        with target_path.open('w', encoding='utf-8') as fp:
-            json.dump(payload, fp, ensure_ascii=False, indent=2)
-    except OSError as exc:
-        logging.error("Nem sikerült elmenteni a workflow sablont: %s", exc)
-        raise WorkflowValidationError(f"Workflow mentése sikertelen: {exc}")
-
-    return {
-        'id': file_id,
-        'name': payload['name'],
-        'filename': target_path.name
-    }
+    return save_workflow_template_file_service(
+        WORKFLOWS_DIR,
+        name,
+        steps,
+        mask_workflow_secret_params,
+        secure_filename,
+        WorkflowValidationError,
+        template_id=template_id,
+        overwrite=overwrite,
+        description=description,
+    )
 
 
 def get_project_root_path(project_name: str, config_snapshot: Optional[Dict[str, Any]] = None) -> Optional[Path]:
-    sanitized_project = secure_filename(project_name)
-    if not sanitized_project:
-        return None
-    snapshot = config_snapshot or get_config_copy()
-    workdir_path = snapshot['DIRECTORIES']['workdir']
-    return Path(workdir_path) / sanitized_project
+    return get_project_root_path_service(project_name, get_config_copy, secure_filename, config_snapshot=config_snapshot)
 
 
 def get_project_workflow_state_path(project_name: str, config_snapshot: Optional[Dict[str, Any]] = None) -> Optional[Path]:
-    project_root = get_project_root_path(project_name, config_snapshot=config_snapshot)
-    if not project_root:
-        return None
-    return project_root / WORKFLOW_STATE_FILENAME
+    return get_project_workflow_state_path_service(
+        project_name,
+        WORKFLOW_STATE_FILENAME,
+        get_config_copy,
+        secure_filename,
+        config_snapshot=config_snapshot,
+    )
 
 
 def load_project_workflow_state(project_name: str, config_snapshot: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-    state_path = get_project_workflow_state_path(project_name, config_snapshot=config_snapshot)
-    if not state_path or not state_path.is_file():
-        return None
-    try:
-        with state_path.open('r', encoding='utf-8') as fp:
-            raw_state = json.load(fp)
-    except (OSError, json.JSONDecodeError) as exc:
-        logging.warning("Nem sikerült betölteni a workflow állapotot (%s): %s", state_path, exc)
-        return None
-
-    if isinstance(raw_state, list):
-        steps = mask_workflow_secret_params(raw_state)
-        return {'steps': steps, 'template_id': None}
-    if isinstance(raw_state, dict):
-        steps = mask_workflow_secret_params(raw_state.get('steps') or [])
-        state: Dict[str, Any] = {
-            'steps': steps,
-            'template_id': raw_state.get('template_id')
-        }
-        if 'saved_at' in raw_state:
-            state['saved_at'] = raw_state['saved_at']
-        return state
-    return None
+    return load_project_workflow_state_service(
+        project_name,
+        WORKFLOW_STATE_FILENAME,
+        get_config_copy,
+        secure_filename,
+        mask_workflow_secret_params,
+        config_snapshot=config_snapshot,
+    )
 
 
 def save_project_workflow_state(
@@ -1470,28 +1222,18 @@ def save_project_workflow_state(
     config_snapshot: Optional[Dict[str, Any]] = None,
     saved_at: Optional[str] = None
 ) -> Dict[str, Any]:
-    state_path = get_project_workflow_state_path(project_name, config_snapshot=config_snapshot)
-    if not state_path:
-        raise WorkflowValidationError("Érvénytelen projekt azonosító.")
-    project_root = state_path.parent
-    if not project_root.is_dir():
-        raise WorkflowValidationError("A projekt könyvtára nem található.")
-
-    payload: Dict[str, Any] = {
-        'steps': mask_workflow_secret_params(steps or [])
-    }
-    if template_id:
-        payload['template_id'] = template_id
-    if saved_at:
-        payload['saved_at'] = saved_at
-
-    try:
-        with state_path.open('w', encoding='utf-8') as fp:
-            json.dump(payload, fp, ensure_ascii=False, indent=2)
-    except OSError as exc:
-        logging.error("Nem sikerült menteni a workflow állapotot (%s): %s", state_path, exc)
-        raise WorkflowValidationError("Nem sikerült menteni a workflow állapotot.") from exc
-    return payload
+    return save_project_workflow_state_service(
+        project_name,
+        steps,
+        mask_workflow_secret_params,
+        WORKFLOW_STATE_FILENAME,
+        get_config_copy,
+        secure_filename,
+        WorkflowValidationError,
+        template_id=template_id,
+        config_snapshot=config_snapshot,
+        saved_at=saved_at,
+    )
 
 
 def coerce_bool(value: Any) -> bool:
@@ -2233,69 +1975,52 @@ def render_with_language(template_name: str, *, file_name: str = 'index', **cont
     return response
 
 def update_workflow_job(job_id, **kwargs):
-    with workflow_lock:
-        if 'workflow' in kwargs:
-            kwargs['workflow'] = mask_workflow_secret_params(kwargs['workflow'])
-        if 'execution_steps' in kwargs:
-            kwargs['execution_steps'] = mask_workflow_secret_params(kwargs['execution_steps'])
-        if job_id in workflow_jobs:
-            workflow_jobs[job_id].update(kwargs)
+    update_workflow_job_service(
+        job_id,
+        workflow_lock,
+        workflow_jobs,
+        mask_workflow_secret_params,
+        **kwargs,
+    )
 
 
 def get_workflow_job(job_id):
-    with workflow_lock:
-        return workflow_jobs.get(job_id)
+    return get_workflow_job_service(job_id, workflow_lock, workflow_jobs)
 
 
 def get_project_jobs(project_name):
-    sanitized_name = secure_filename(project_name)
-    with workflow_lock:
-        return [
-            job.copy()
-            for job in workflow_jobs.values()
-            if job.get('project') == sanitized_name
-        ]
+    return get_project_jobs_service(project_name, workflow_lock, workflow_jobs, secure_filename)
 
 
 def register_workflow_job(job_id, job_data):
-    with workflow_lock:
-        if isinstance(job_data, dict):
-            if 'workflow' in job_data:
-                job_data['workflow'] = mask_workflow_secret_params(job_data['workflow'])
-            if 'execution_steps' in job_data:
-                job_data['execution_steps'] = mask_workflow_secret_params(job_data['execution_steps'])
-        workflow_jobs[job_id] = job_data
-        workflow_events[job_id] = threading.Event()
+    register_workflow_job_service(
+        job_id,
+        job_data,
+        workflow_lock,
+        workflow_jobs,
+        workflow_events,
+        mask_workflow_secret_params,
+    )
 
 
 def set_workflow_thread(job_id, thread):
-    with workflow_lock:
-        workflow_threads[job_id] = thread
+    set_workflow_thread_service(job_id, thread, workflow_lock, workflow_threads)
 
 
 def get_workflow_thread(job_id):
-    with workflow_lock:
-        return workflow_threads.get(job_id)
+    return get_workflow_thread_service(job_id, workflow_lock, workflow_threads)
 
 
 def get_workflow_event(job_id):
-    with workflow_lock:
-        return workflow_events.get(job_id)
+    return get_workflow_event_service(job_id, workflow_lock, workflow_events)
 
 
 def cleanup_workflow_resources(job_id):
-    with workflow_lock:
-        workflow_threads.pop(job_id, None)
-        workflow_events.pop(job_id, None)
+    cleanup_workflow_resources_service(job_id, workflow_lock, workflow_threads, workflow_events)
 
 
 def request_workflow_cancel(job_id):
-    event = get_workflow_event(job_id)
-    if not event:
-        return False
-    if not event.is_set():
-        event.set()
-    return True
+    return request_workflow_cancel_service(job_id, workflow_lock, workflow_events)
 
 
 def is_cancel_requested(job_id):
@@ -2304,223 +2029,35 @@ def is_cancel_requested(job_id):
 
 
 def build_log_links(project_name, logs_subdir, log_filename):
-    relative_path = os.path.join(secure_filename(project_name), logs_subdir, log_filename)
-    return {
-        'relative': relative_path,
-        'url': f"/workdir/{relative_path}"
-    }
+    return build_log_links_service(project_name, logs_subdir, log_filename, secure_filename)
 
 
 def read_log_tail(log_path, max_bytes=12000):
-    if not os.path.exists(log_path):
-        return ""
-    try:
-        with open(log_path, 'rb') as log_file:
-            log_file.seek(0, os.SEEK_END)
-            file_size = log_file.tell()
-            if file_size <= max_bytes:
-                log_file.seek(0)
-            else:
-                log_file.seek(-max_bytes, os.SEEK_END)
-            data = log_file.read().decode('utf-8', errors='replace')
-            if file_size > max_bytes:
-                newline_index = data.find('\n')
-                if newline_index != -1:
-                    data = data[newline_index + 1:]
-        return data
-    except Exception as exc:
-        logging.error("Log olvasási hiba: %s", exc, exc_info=True)
-        return ""
+    return read_log_tail_service(log_path, max_bytes=max_bytes)
 
 
 def run_workflow_job(job_id, project_name, workflow_payload):
-    sanitized_project = secure_filename(project_name)
-    log_handler = None
-    cancel_event = get_workflow_event(job_id)
-
-    def should_stop():
-        return cancel_event.is_set() if cancel_event else False
-
-    try:
-        initial_status = 'cancelling' if should_stop() else 'running'
-        initial_message = 'Megszakítás kérve, előkészítés folyamatban...' if initial_status == 'cancelling' else 'Feldolgozás előkészítése...'
-        update_workflow_job(
-            job_id,
-            status=initial_status,
-            started_at=datetime.utcnow().isoformat(),
-            message=initial_message,
-            cancel_requested=should_stop()
-        )
-
-        current_config = get_config_copy()
-        workdir_path = current_config['DIRECTORIES']['workdir']
-        project_path = os.path.join(workdir_path, sanitized_project)
-
-        ensure_project_structure(project_path, current_config['PROJECT_SUBDIRS'])
-        log_handler, log_file = setup_project_logging(
-            project_path,
-            current_config['PROJECT_SUBDIRS']['logs'],
-            sanitized_project
-        )
-        log_filename = os.path.basename(log_file)
-        log_links = build_log_links(sanitized_project, current_config['PROJECT_SUBDIRS']['logs'], log_filename)
-        update_workflow_job(job_id, log=log_links)
-
-        template_id = workflow_payload.get('template_id')
-        steps = workflow_payload.get('steps') or []
-        workflow_state = workflow_payload.get('workflow_state') or steps
-        masked_steps = mask_workflow_secret_params(steps)
-        masked_workflow_state = mask_workflow_secret_params(workflow_state)
-        active_steps = [
-            step for step in steps
-            if step.get('enabled', True) and step.get('type') != 'widget'
-        ]
-        total_steps = len(active_steps)
-        update_workflow_job(
-            job_id,
-            total_steps=total_steps,
-            template_id=template_id,
-            workflow=masked_workflow_state,
-            execution_steps=masked_steps
-        )
-
-        keyholder_snapshot = load_keyholder_data()
-        executed_steps: List[Dict[str, Any]] = []
-
-        context = {
-            'project_name': sanitized_project,
-            'project_path': project_path,
-            'keyholder': keyholder_snapshot,
-            'config': current_config,
-            'template_id': template_id
-        }
-
-        for index, step in enumerate(active_steps, start=1):
-            if should_stop():
-                logging.info("Workflow megszakítás kérve, kilépünk.")
-                update_workflow_job(
-                    job_id,
-                    status='cancelled',
-                    finished_at=datetime.utcnow().isoformat(),
-                    message='Workflow megszakítva.',
-                    cancel_requested=False,
-                    current_step=None,
-                    results=executed_steps
-                )
-                return
-
-            script_id = step.get('script')
-            script_meta = get_script_definition(script_id)
-            if not script_meta:
-                raise WorkflowValidationError(f"Ismeretlen szkript: {script_id}")
-
-            try:
-                command, applied_params = build_command_for_step(step, script_meta, context)
-            except WorkflowValidationError as exc:
-                raise
-
-            masked_command, masked_applied_params = build_masked_command_and_params(command, applied_params, script_meta)
-
-            log_prefix = f"[{script_meta['id']}]"
-            update_workflow_job(
-                job_id,
-                status='running',
-                message=f"{index}/{total_steps} · {script_meta['display_name']}",
-                current_step={
-                    'index': index,
-                    'total': total_steps,
-                    'script': script_meta['id'],
-                    'display_name': script_meta['display_name'],
-                    'command': masked_command,
-                },
-                cancel_requested=should_stop()
-            )
-
-            result = run_script_command(command, log_prefix=log_prefix, should_stop=should_stop)
-            step_record = {
-                'script': script_meta['id'],
-                'display_name': script_meta['display_name'],
-                'command': masked_command,
-                'applied_params': masked_applied_params,
-            }
-
-            if result == "cancelled":
-                step_record['status'] = 'cancelled'
-                executed_steps.append(step_record)
-                update_workflow_job(
-                    job_id,
-                    status='cancelled',
-                    finished_at=datetime.utcnow().isoformat(),
-                    message='Workflow megszakítva.',
-                    cancel_requested=False,
-                    current_step=None,
-                    results=executed_steps
-                )
-                return
-
-            if result is False:
-                step_record['status'] = 'failed'
-                executed_steps.append(step_record)
-                if step.get('halt_on_fail', True):
-                    update_workflow_job(
-                        job_id,
-                        status='failed',
-                        finished_at=datetime.utcnow().isoformat(),
-                        message=f"Hiba a(z) {script_meta['display_name']} lépés futtatása közben.",
-                        cancel_requested=False,
-                        current_step=None,
-                        results=executed_steps
-                    )
-                    return
-                else:
-                    logging.warning("A(z) %s lépés hibával futott, de a workflow folytatódik.", script_meta['display_name'])
-                    continue
-
-            step_record['status'] = 'completed'
-            executed_steps.append(step_record)
-
-        update_workflow_job(
-            job_id,
-            status='completed',
-            finished_at=datetime.utcnow().isoformat(),
-            message='Workflow sikeresen lefutott.',
-            cancel_requested=False,
-            current_step=None,
-            results=executed_steps
-        )
-    except WorkflowValidationError as exc:
-        logging.error("Workflow konfigurációs hiba: %s", exc)
-        update_workflow_job(
-            job_id,
-            status='failed',
-            finished_at=datetime.utcnow().isoformat(),
-            message=str(exc),
-            cancel_requested=False,
-            current_step=None,
-            results=locals().get('executed_steps')
-        )
-    except Exception as exc:
-        logging.exception("Workflow futtatási hiba: %s", exc)
-        if should_stop():
-            update_workflow_job(
-                job_id,
-                status='cancelled',
-                finished_at=datetime.utcnow().isoformat(),
-                message='Workflow megszakítva.',
-                cancel_requested=False
-            )
-        else:
-            update_workflow_job(
-                job_id,
-                status='failed',
-                finished_at=datetime.utcnow().isoformat(),
-                message=f'Hiba: {exc}',
-                cancel_requested=False
-            )
-    finally:
-        if log_handler:
-            remove_logging_handler(log_handler)
-        cleanup_workflow_resources(job_id)
+    return run_workflow_job_service(
+        job_id,
+        project_name,
+        workflow_payload,
+        secure_filename=secure_filename,
+        get_workflow_event_fn=get_workflow_event,
+        update_workflow_job_fn=update_workflow_job,
+        get_config_copy=get_config_copy,
+        ensure_project_structure=ensure_project_structure,
+        setup_project_logging=setup_project_logging,
+        build_log_links_fn=build_log_links,
+        mask_workflow_secret_params=mask_workflow_secret_params,
+        load_keyholder_data=load_keyholder_data,
+        get_script_definition=get_script_definition,
+        build_command_for_step=build_command_for_step,
+        build_masked_command_and_params=build_masked_command_and_params,
+        run_script_command=run_script_command,
+        workflow_validation_error=WorkflowValidationError,
+        remove_logging_handler=remove_logging_handler,
+        cleanup_workflow_resources_fn=cleanup_workflow_resources,
+    )
 
 
 register_page_routes(
