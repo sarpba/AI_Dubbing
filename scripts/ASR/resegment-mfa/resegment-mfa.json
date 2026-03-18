@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "script": "ASR/resegment-mfa/resegment-mfa.py",
   "description": "Montreal Forced Aligner segítségével finomhangolt JSON szegmentálás – szó időbélyegek pontosítása és rugalmas újraformázás angol nyelvű projektekhez.",
   "required": [
@@ -78,5 +77,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

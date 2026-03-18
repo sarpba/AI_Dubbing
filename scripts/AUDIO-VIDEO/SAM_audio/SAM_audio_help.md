@@ -1,35 +1,31 @@
-# SAM_audio – beszéd/háttér szétválasztás SAM-Audio backenddel
-**Runtime:** `sam-audio`  
-**Entry point:** `AUDIO-VIDEO/SAM_audio/SAM_audio.py`
+# SAM_audio
 
-## Overview
-Ez a modul a projekt `1.5_extracted_audio` mappájából származó audiókat választja szét
-beszéd és háttér sávokra a SAM-Audio ONNX interface (onnx_inference.py) használatával.
+**Futtatási környezet:** `sam-audio`  
+**Belépési pont:** `AUDIO-VIDEO/SAM_audio/SAM_audio.py`
 
-## Required Parameters
-- `--project-name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `workdir` alatti projekt neve.
+## Mit csinál?
+SAM-Audio ONNX wrapper a beszéd és háttér szétválasztására az extracted_audio bemenetből.
 
-## Optional Parameters
-- `--prompt` (option, alapértelmezés: `speech`): Text prompt, amely megadja a kiválasztandó hangot.
-- `--device` (option, alapértelmezés: `cuda`): Futási eszköz (`cuda` vagy `cpu`).
-- `--onnx-script` (option, alapértelmezés: `onnx_inference.py`): ONNX interface fájl elérési útja.
-- `--onnx-model-dir` (option, alapértelmezés: `onnx_models`): ONNX modelleket tartalmazó mappa.
-- `--onnx-steps` (option, alapértelmezés: `16`): ODE lépések száma az ONNX pipeline-ban.
-- `--sample-rate` (option, alapértelmezés: `48000`): FFmpeg konverziós mintavétel (Hz).
-- `--mono` (flag, alapértelmezés: `false`): Mono WAV konverzió erőltetése.
-- `--force-convert` (flag, alapértelmezés: `false`): Minden bemenet WAV-ra konvertálása.
-- `--keep-temp` (flag, alapértelmezés: `false`): Ideiglenes WAV fájlok megtartása.
-- `--predict-spans` (flag, alapértelmezés: `false`): Automatikus span predikció engedélyezése.
-- `--reranking-candidates` (option, alapértelmezés: `1`): Reranking jelöltek száma.
-- `--span-threshold` (option, alapértelmezés: `0.3`): Span predikció küszöbértéke.
-- `--chunk-seconds` (option, alapértelmezés: `60`): Feldolgozás darabolása másodpercben (0 = teljes fájl).
-- `--debug` (flag, alapértelmezés: `false`): Részletes naplózás engedélyezése.
+A script a projekt audio- és videófájljait készíti elő, alakítja át vagy fűzi össze a szinkronizálási pipeline következő lépéseihez.
 
-## Outputs
-- `2_separated_audio_speech/<fajlnev>_speech.wav`
-- `2_separated_audio_background/<fajlnev>_non_speech.wav`
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 
-## Error Handling / Tips
-- Az ffmpeg-nek elérhetőnek kell lennie a PATH-on.
-- Az ONNX interface betöltéséhez add meg a `--onnx-script` fájlt (a `matbee/sam-audio-small-onnx` repóból).
-- A `--predict-spans` és a `--reranking-candidates` csak akkor működik, ha a megfelelő ONNX modellek is jelen vannak a `--onnx-model-dir` mappában (PEAFrame/CLAP).
+## Opcionális paraméterek
+- `prompt` (opció;  kapcsoló: `--prompt`; alapértelmezés: `speech`): A szeparáló modellnek adott rövid utasítás. Meghatározza, hogy milyen hangkomponenst emeljen ki.
+- `device` (opció;  kapcsoló: `--device`; alapértelmezés: `cuda`): A futtatás eszköze, például `cpu`, `cuda`, `cuda:0` vagy `mps`.
+- `onnx_script` (opció;  kapcsoló: `--onnx-script`; alapértelmezés: `onnx_inference.py`): Az ONNX futtatást végző segédszkript neve vagy útvonala.
+- `onnx_model_dir` (opció;  kapcsoló: `--onnx-model-dir`; alapértelmezés: `onnx_models`): Az ONNX modellfájlokat tartalmazó könyvtár.
+- `onnx_steps` (opció;  kapcsoló: `--onnx-steps`; alapértelmezés: `16`): Az ONNX inferencia lépésszáma.
+- `sample_rate` (opció;  kapcsoló: `--sample-rate`; alapértelmezés: `48000`): A feldolgozás cél mintavételi frekvenciája.
+- `mono` (kapcsoló;  kapcsoló: `--mono`; alapértelmezés: `false`): A bemenetet vagy a köztes fájlokat monóvá alakítja. Alapállapotban ki van kapcsolva.
+- `force_convert` (kapcsoló;  kapcsoló: `--force-convert`; alapértelmezés: `false`): A script akkor is újrakonvertálja a bemenetet, ha használható formátumban már létezik. Alapállapotban ki van kapcsolva.
+- `keep_temp` (kapcsoló;  kapcsoló: `--keep-temp`; alapértelmezés: `false`): Megtartja az ideiglenes fájlokat a futás után is. Alapállapotban ki van kapcsolva.
+- `predict_spans` (kapcsoló;  kapcsoló: `--predict-spans`; alapértelmezés: `false`): Bekapcsolja az időtartamok vagy aktivitási szakaszok becslését. Alapállapotban ki van kapcsolva.
+- `reranking_candidates` (opció;  kapcsoló: `--reranking-candidates`; alapértelmezés: `1`): Ennyi jelöltből választja ki az utólagos rangsorolás a legjobbat.
+- `span_threshold` (opció;  kapcsoló: `--span-threshold`; alapértelmezés: `0.3`): A span előrejelzés küszöbértéke.
+- `chunk_seconds` (opció;  kapcsoló: `--chunk-seconds`; alapértelmezés: `60`): A hosszú fájlok feldolgozási darabjainak mérete másodpercben.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

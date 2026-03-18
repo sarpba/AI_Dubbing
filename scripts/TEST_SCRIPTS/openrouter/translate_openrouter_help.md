@@ -1,38 +1,31 @@
-# translate_openrouter (test) – OpenRouter alapú JSON fordítás
-**Runtime:** `sync`  
-**Entry point:** `TEST_SCRIPTS/openrouter/translate_openrouter.py`
+# translate_openrouter
 
-## Overview
-Ez a teszt-script a projekt `config.json` beállításai alapján feltérképezi a szétválasztott beszédszegmenseket tartalmazó JSON-t, majd OpenRouteren keresztül hívott modellekkel fordítja le a hiányzó részeket. A feldolgozás intelligens csoportokra bontva, rekurzív újrapróbálással, részhaladási fájl támogatással és API-naplózással történik. A kimeneti JSON metaadatai tartalmazzák a promptot, modellt, nyelvpárt és a szolgáltató nevét.
+**Futtatási környezet:** `sync`  
+**Belépési pont:** `TEST_SCRIPTS/openrouter/translate_openrouter.py`
 
-## Required Parameters
-- `-p/--project-name`: A workdir-en belüli projektmappa neve.
+## Mit csinál?
+Projekt-alapú JSON fordítás OpenRouter modellekkel, intelligens batchinggel, API-naplózással és testreszabható feliratos prompttal.
 
-## Optional Parameters
-- `-auth_key/--auth-key`: OpenRouter API kulcs. Megadáskor elmentésre kerül a `keyholder.json` fájlba. Alapértelmezés: `null`.
-- `-input_language/--input-language`: Bemeneti nyelv kódja. Ha hiányzik, a `config.json` `default_source_lang` értéke lép életbe.
-- `-output_language/--output-language`: Kimeneti nyelv kódja. Ha hiányzik, a `config.json` `default_target_lang` értéke lép életbe.
-- `-context/--context`: Rövid kontextus, ami bekerül a promptba. Alapértelmezés: `null`.
-- `--tone`: Elvárt hangnem/stílus (pl. „szarkasztikus, laza”). A prompt hangsúlyozza ezt.
-- `--target-audience`: Célközönség megadása (pl. „magyar Netflix nézők”), hogy a modell ennek megfelelő nyelvezetet használjon.
-- `--platform`: Platform vagy formátum (pl. Netflix, YouTube, podcast). Meghatározza a sorhossz/stílus elvárásokat.
-- `--style-notes`: További szabad formájú stílusinstrukciók, amelyek szó szerint bekerülnek a promptba.
-- `--glossary`: Opcionális JSON fájl (forrás→cél kulcsszópárok) a következetes terminológiához. Relatív útvonalat is megadhatsz a projektgyökérhez képest.
-- `-model/--model`: Használt OpenRouter modell neve. Alapértelmezés: `google/gemini-2.0-flash-001`.
-- `-stream/--stream`: Ha megadod, a script soronként logolja a lefordított sorokat. Alapértelmezés: `false`.
-- `-allow_sensitive_content/--allow-sensitive-content`: Engedélyezi a kényes tartalmak explicit fordítását is kérő promptot. Alapértelmezés: `false`.
-- `-systemprompt/--systemprompt`: Egyedi system prompt. Ha megadod, felülírja a script által generált, feliratfordításra optimalizált instrukciókat (támogatja a `{source_language}`, `{target_language}`, `{source_language_code}`, `{target_language_code}` helyőrzőket).
-- `--debug`: Debug mód, részletes naplózással. Alapértelmezés: `false`.
+Ez egy teszt vagy kísérleti script. Ugyanúgy projektfájlokon dolgozik, de a használata előtt érdemes ellenőrizni, hogy a viselkedése megfelel-e az aktuális workflow-nak.
 
-## Outputs
-- Frissített JSON a projekt `4_translated_json` könyvtárában, kitöltött `translated_text` mezőkkel, `metadata.translation_*` értékekkel és `metadata.translation_provider = "openrouter"` mezővel.
-- Ideiglenes `*.progress.json` fájl ugyanebben a könyvtárban; sikeres futás végén törlődik, hiba esetén folytatáshoz használható.
-- API-hívás napló (`openrouter_api_YYYYMMDD_HHMMSS.jsonl`) a projekt log könyvtárában.
-- A mentett JSON a folyamat végén automatikusan átfut a `tools/json_sanitizer.py` tisztítóján.
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 
-## Error Handling / Tips
-- Győződj meg róla, hogy a `keyholder.json` elérhető és tartalmazza az `openrouter_api_key` mezőt; ha nem, add meg a kulcsot CLI paraméterként.
-- Ha rendelkezel publikus URL-lel vagy alkalmazásnévvel, állítsd be az `OPENROUTER_HTTP_REFERER` és `OPENROUTER_APP_TITLE` környezeti változókat az OpenRouter irányelveihez igazodva.
-- A beépített prompt automatikusan igazodik a forrásnyelvhez, explicit szerepet, stílust, platformot, szlengkezelést és glosszárium emlékeztetőt tartalmaz. Egyedi `-systemprompt` megadásakor minden automatikus stratégia felülíródik.
-- Glosszárium használatakor ügyelj a helyes JSON formátumra; ha hibás, a script figyelmeztet és glosszárium nélkül fut tovább.
-- Hálózati vagy modellhibák esetén a script a batch-et felosztja és újrapróbálja, de tartós hiba esetén meghagyja a progress fájlt, így később folytatható.
+## Opcionális paraméterek
+- `auth_key` (opció;  kapcsoló: `-auth_key`, `--auth-key`; alapértelmezés: nincs): API kulcs az adott külső szolgáltatáshoz. Megadva a rendszer elmentheti későbbi használatra.
+- `input_language` (opció;  kapcsoló: `-input_language`, `--input-language`; alapértelmezés: nincs): A forrás szöveg nyelve. Ha nincs megadva, a script a konfigurációból vagy automatikus felismerésből indul ki.
+- `output_language` (opció;  kapcsoló: `-output_language`, `--output-language`; alapértelmezés: nincs): A lefordított szöveg cél nyelve.
+- `context` (opció;  kapcsoló: `-context`, `--context`; alapértelmezés: nincs): Rövid tartalmi kontextus, ami segíti a modell stílus- és szóhasználatbeli döntéseit.
+- `tone` (opció;  kapcsoló: `--tone`; alapértelmezés: nincs): A kívánt megszólalási hangnem leírása.
+- `target_audience` (opció;  kapcsoló: `--target-audience`; alapértelmezés: nincs): A célközönség rövid leírása, hogy a fordítás stílusa ehhez igazodjon.
+- `platform` (opció;  kapcsoló: `--platform`; alapértelmezés: nincs): A felhasználási platform vagy formátum, például film, sorozat, YouTube vagy közösségi média.
+- `style_notes` (opció;  kapcsoló: `--style-notes`; alapértelmezés: nincs): Rövid stílusutasítások a fordításhoz.
+- `glossary` (opció;  kapcsoló: `--glossary`; alapértelmezés: nincs): Kulcsszavak vagy fordítási szabályok rövid gyűjteménye, amelyet a modellnek követnie kell.
+- `model` (opció;  kapcsoló: `-model`, `--model`; alapértelmezés: `google/gemini-2.0-flash-001`): A használt modell neve vagy azonosítója.
+- `stream` (kapcsoló;  kapcsoló: `-stream`, `--stream`; alapértelmezés: `false`): A válasz és az előrehaladás folyamatos kiírása futás közben. Alapállapotban ki van kapcsolva.
+- `allow_sensitive_content` (kapcsoló;  kapcsoló: `-allow_sensitive_content`, `--allow-sensitive-content`; alapértelmezés: `false`): Engedélyezi, hogy a fordítás érzékeny, nyers vagy felnőtt tartalmat is pontosabban kezeljen. Alapállapotban ki van kapcsolva.
+- `systemprompt` (opció;  kapcsoló: `-systemprompt`, `--systemprompt`; alapértelmezés: nincs): Egyedi rendszerprompt. Ezzel teljesen testre szabható a fordítómodell viselkedése.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

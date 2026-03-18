@@ -1,19 +1,25 @@
-# separate_audio_easy_codex – konfigurációs útmutató
+# separate_audio_easy
 
 **Futtatási környezet:** `demucs`  
-**Belépési pont:** `separate_audio_easy.py`
+**Belépési pont:** `AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py`
 
-A szkript Demucs/MDX modellekkel szétválasztja a videóból kivont audiót beszédre és háttér-sávra. Kezeli a több modellből származó eredmények összefésülését, chunk-alapú feldolgozást és opcionális háttérkeverést.
+## Mit csinál?
+Az eredeti filból kivont audio filet beszédre és háttér zenére/sound effectekre bontja.
 
-## Kötelező beállítás
-- `project` (`-p`, `--project`, option, alapértelmezés: nincs): A `workdir` alatti projekt neve, amelynek audióját szét kell választani.
+A script a projekt audio- és videófájljait készíti elő, alakítja át vagy fűzi össze a szinkronizálási pipeline következő lépéseihez.
 
-## Opcionális beállítások
-- `device` (`--device`, option, alapértelmezés: `cuda`): A futtatandó eszköz (`cuda`/`cpu`). Ha GPU nem érhető el, automatikusan CPU-ra vált.
-- `models` (`--models`, option, alapértelmezés: `htdemucs,mdx_extra`): Vesszővel elválasztott modellnevek. A szkript ebben a sorrendben próbálja ki őket, majd kombinálja az eredményeket.
-- `chunk_size` (`--chunk_size`, option, alapértelmezés: `5.0`): Feldolgozási chunk hossza percben. `0` esetén a teljes fájlt egyben dolgozza fel.
-- `chunk_overlap` (`--chunk_overlap`, option, alapértelmezés: `10.0`): Chunk átfedés másodpercben. Nagyobb érték simább átmenetet ad, de lassítja a feldolgozást.
-- `non_speech_silence` (`--non_speech_silence`, flag, alapértelmezés: `false`): Ha be van kapcsolva, a non-speech sáv csak csendet tartalmaz; így a háttér hang nélkül menthető.
-- `background_blend` (`--background_blend`, option, alapértelmezés: `0.5`): 0–1 közötti érték, amely szabályozza, mennyire keverje vissza az eredeti mixet a modell által becsült háttérrel.
-- `keep_full_audio` (`--keep_full_audio`, flag, alapértelmezés: `false`): Elmenti a konvertált teljes audiót is a `separated_audio_speech` mappába.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás a `tools.debug_utils` modulon keresztül.
+## Kötelező paraméterek
+- `project` (opció;  kapcsoló: `-p`, `--project`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `device` (opció;  kapcsoló: `--device`; alapértelmezés: `cuda`): A futtatás eszköze, például `cpu`, `cuda`, `cuda:0` vagy `mps`.
+- `models` (opció;  kapcsoló: `--models`; alapértelmezés: `htdemucs,mdx_extra`): A használható szeparáló modellek listája, vesszővel elválasztva.
+- `chunk_size` (opció;  kapcsoló: `--chunk_size`; alapértelmezés: `5.0`): A szeparálás darabolási mérete.
+- `chunk_overlap` (opció;  kapcsoló: `--chunk_overlap`; alapértelmezés: `10.0`): Az egymást követő feldolgozási darabok átfedése.
+- `non_speech_silence` (kapcsoló;  kapcsoló: `--non_speech_silence`; alapértelmezés: `false`): A nem beszéd jellegű részeket hangsúlyosabban csendesíti vagy külön kezeli. Alapállapotban ki van kapcsolva.
+- `background_blend` (opció;  kapcsoló: `--background_blend`; alapértelmezés: `0.5`): A háttér és a beszéd szétválasztásánál használt keverési arány.
+- `keep_full_audio` (kapcsoló;  kapcsoló: `--keep_full_audio`; alapértelmezés: `false`): Megtartja a teljes hosszúságú köztes vagy referenciahangot is. Alapállapotban ki van kapcsolva.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

@@ -1,5 +1,4 @@
 {
-  "enviroment": "sam-audio",
   "script": "AUDIO-VIDEO/SAM_audio/SAM_audio.py",
   "description": "SAM-Audio ONNX wrapper a beszéd és háttér szétválasztására az extracted_audio bemenetből.",
   "required": [
@@ -126,5 +125,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sam-audio"
 }

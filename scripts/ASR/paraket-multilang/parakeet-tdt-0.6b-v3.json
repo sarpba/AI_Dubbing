@@ -1,5 +1,4 @@
 {
-  "enviroment": "nemo",
   "script": "ASR/paraket-multilang/parakeet-tdt-0.6b-v3.py",
   "description": "A Parakeet TDT 0.6B V3 modell használata a beszéd szöveggé alakítására.",
   "required": [
@@ -62,5 +61,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "nemo"
 }

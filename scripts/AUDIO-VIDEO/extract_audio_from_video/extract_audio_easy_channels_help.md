@@ -1,13 +1,19 @@
-# extract_audio_easy_channels – konfigurációs útmutató
+# extract_audio_easy_channels
 
 **Futtatási környezet:** `sync`  
-**Belépési pont:** `extract_audio_easy_channels.py`
+**Belépési pont:** `AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py`
 
-A szkript a `workdir/<projekt>/upload` mappában található első videófájlból kinyeri az audiósávot. Igény szerint minden csatornát külön WAV fájlként ment, és elmenti az FFprobe által szolgáltatott stream metaadatokat is.
+## Mit csinál?
+Az audio sávokat kinyeri a videó fájlokból, külön csatornákra bontva, vagy egy stereo csatornára muxolva.
 
-## Kötelező beállítás
-- `project_dir_name` (pozícionális, alapértelmezés: nincs): A projekt neve a `workdir` alatt. A szkript ebből határozza meg az `upload` és `extracted_audio` almappákat.
+A script a projekt audio- és videófájljait készíti elő, alakítja át vagy fűzi össze a szinkronizálási pipeline következő lépéseihez.
 
-## Opcionális beállítások
-- `keep_channels` (`--keep_channels`, flag, alapértelmezés: `false`): Többcsatornás forrásnál minden csatornát külön fájlba bont. Ha nincs bekapcsolva, vagy csak sztereó a bemenet, egyetlen sztereó WAV készül.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózást kér a `tools.debug_utils` modulon keresztül.
+## Kötelező paraméterek
+- `project_dir_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt könyvtárneve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `keep_channels` (kapcsoló;  kapcsoló: `--keep_channels`; alapértelmezés: `false`): Megőrzi a külön csatornákat külön fájlokban, ahelyett hogy egyetlen sztereó kimenet készülne. Alapállapotban ki van kapcsolva.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

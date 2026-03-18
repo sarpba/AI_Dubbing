@@ -1,12 +1,15 @@
-# collect_normalized_translations – konfigurációs útmutató
+# collect_normalized_translations
 
 **Futtatási környezet:** `f5-tts`  
-**Belépési pont:** `collect_normalized_translations.py`
+**Belépési pont:** `NORMALIZER_HELPER/collect_normalized_translations.py`
 
-A szkript bejárja a projekt `translated` könyvtárát, begyűjti az összes `translated_text` mezőt, lefuttatja rájuk a magyar normalizálót, majd naplófájlba menti az eredményt. Emellett gondoskodik a `config.json` alapú projektútvonalak felderítéséről.
+## Mit csinál?
+Az idegen nyelvű szavakat kigyüjti a normalizáló canges_new.csv fileba.
 
-## Kötelező beállítás
-- `project_dir` (`-p`, `--project`, option, alapértelmezés: nincs): A projekt neve vagy útvonala. Ha relatív nevet adsz meg, a szkript a `config.json` alapján keresi a `workdir` alatt.
+A script a projekt fordításaiból kigyűjti azokat az elemeket, amelyek hasznosak lehetnek a normalizáló CSV-k bővítéséhez.
 
-## Opcionális beállítások
-Jelenleg nincs további parancssori kapcsoló; a szkript minden egyéb viselkedést a konfigurációs fájl alapján határoz meg.
+## Kötelező paraméterek
+- `project_dir` (opció;  kapcsoló: `-p`, `--project`; alapértelmezés: nincs): A projekt könyvtára, amelynek fordításaiból a script kigyűjti az új normalizálandó elemeket.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

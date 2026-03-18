@@ -1,17 +1,23 @@
-# parakeet-tdt-0.6b-v2 – konfigurációs útmutató
+# parakeet-tdt-0.6b-v2
 
 **Futtatási környezet:** `nemo`  
-**Belépési pont:** `parakeet-tdt-0.6b-v2.py`
+**Belépési pont:** `ASR/paraket-eng/parakeet-tdt-0.6b-v2.py`
 
-A szkript az NVIDIA Parakeet TDT 0.6B V2 modellt futtatja, automatikus vagy kézi darabolással, és időbélyeges JSON átiratokat készít a `separated_audio_speech` mappában található hangokról.
+## Mit csinál?
+A Parakeet TDT 0.6B V2 modell használata a beszéd szöveggé alakítására.
 
-## Kötelező beállítás
-- `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `workdir`-ben található projektmappa neve, amelynek hanganyagát feldolgozza.
+A script a projekt hanganyagából készít átírást vagy újraszegmentált JSON-t, hogy a további fordítási és TTS lépések már strukturált bemenettel dolgozzanak.
 
-## Opcionális beállítások
-- `no_auto_chunk` (`--no-auto-chunk`, flag, alapértelmezés: `false`): Kikapcsolja az automatikus chunk-méret kalibrációt. Ha aktiválod, a `--chunk` értéke lesz érvényes.
-- `chunk` (`--chunk`, option, alapértelmezés: `30`): Fix chunkhossz másodpercben, amikor az automatikus kalibráció ki van kapcsolva.
-- `max_pause` (`--max-pause`, option, alapértelmezés: `0.6`): A mondatok közti maximális szünet másodpercben; nagyobb érték kevésbé darabolja szét a hosszú szüneteket.
-- `timestamp_padding` (`--timestamp-padding`, option, alapértelmezés: `0.2`): Az időbélyegekhez hozzáadott extra margó másodpercben, hogy a szegmensek ne vágják le a beszéd elejét-végét.
-- `max_segment_duration` (`--max-segment-duration`, option, alapértelmezés: `11.5`): Egy szegmens maximális hossza. `0` értékkel kikapcsolható a korlátozás.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás bekapcsolása.
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `no_auto_chunk` (kapcsoló;  kapcsoló: `--no-auto-chunk`; alapértelmezés: `false`): A `no auto chunk` funkció kapcsolója. Alapállapotban ki van kapcsolva; a kapcsoló aktiválásakor a script letilt egy belső funkciót.
+- `chunk` (opció;  kapcsoló: `--chunk`; alapértelmezés: `30`): A feldolgozásnál használt darabolás mérete másodpercben.
+- `max_pause` (opció;  kapcsoló: `--max-pause`; alapértelmezés: `0.6`): Legfeljebb ekkora szünetet hagy a script egy szegmensen belül. Nagyobb érték hosszabb mondatrészeket eredményezhet.
+- `timestamp_padding` (opció;  kapcsoló: `--timestamp-padding`; alapértelmezés: `0.2`): Ennyi időt ad hozzá a szegmensek elejéhez és végéhez a kényelmesebb vágás érdekében.
+- `max_segment_duration` (opció;  kapcsoló: `--max-segment-duration`; alapértelmezés: `11.5`): A szegmensek maximális hossza másodpercben.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

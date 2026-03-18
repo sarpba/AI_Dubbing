@@ -1,30 +1,26 @@
-# translate_chatgpt – ChatGPT alapú JSON fordítás
-**Runtime:** `sync`  
-**Entry point:** `TRANSLATE/chatgpt/translate_chatgpt.py`
+# translate_chatgpt
 
-## Overview
-Ez a modul a projekt `config.json` beállításai alapján megtalálja a szétválasztott beszéd szegmenseket tartalmazó JSON fájlt, majd a ChatGPT API segítségével lefordítja a hiányzó szövegeket. A feldolgozás intelligens csoportokra bontva, hibák esetén rekurzív felosztással történik, és folytatható a progress fájl újrafelhasználásával. A script a kimeneti JSON-ban metaadatként elmenti a használt system promptot, modellt és nyelvpárt.
+**Futtatási környezet:** `sync`  
+**Belépési pont:** `TRANSLATE/chatgpt/translate_chatgpt.py`
 
-## Required Parameters
-- `-p/--project-name`: A workdir-en belüli projektmappa neve.
+## Mit csinál?
+Projekt-alapú JSON fordítás ChatGPT segítségével, intelligens csoportosítással és folytatható futással.
 
-## Optional Parameters
-- `-auth_key/--auth-key`: OpenAI API kulcs. Megadáskor elmentésre kerül a `keyholder.json` fájlba. Alapértelmezés: `null`.
-- `-input_language/--input-language`: Bemeneti nyelv kódja. Ha nincs megadva, a `config.json` `default_source_lang` értéke használódik.
-- `-output_language/--output-language`: Kimeneti nyelv kódja. Ha nincs megadva, a `config.json` `default_target_lang` értéke használódik.
-- `-context/--context`: Rövid kontextus, ami bekerül a system promptba. Alapértelmezés: `null`.
-- `-model/--model`: Használt OpenAI modell neve. Alapértelmezés: `gpt-4o`.
-- `-stream/--stream`: Ha megadod, a script soronként kiírja a fordítási előrehaladást. Alapértelmezés: `false`.
-- `-allow_sensitive_content/--allow-sensitive-content`: Speciális system promptot engedélyez kényes tartalmakhoz. Alapértelmezés: `false`.
-- `-systemprompt/--systemprompt`: Egyedi system prompt szöveg. Alapértelmezés: `"You are an expert translator. Translate the numbered list from the source language to the target language. Your response MUST be a numbered list with the exact same number of items. Format: \`1. [translation]\`."`
-- `--debug`: Debug mód, amely részletesebb naplózást ad. Alapértelmezés: `false`.
+A script a projekt szöveges JSON-jait fordítja a megadott cél nyelvre, és a fordítást a projekt megfelelő kimeneti mappájába menti.
 
--## Outputs
-- Frissített JSON a projekt `4_translated_json` könyvtárában, kitöltött `translated_text` mezőkkel és `metadata.translation_*` metaadatokkal.
-- Ideiglenes `*.progress.json` fájl ugyanebben a könyvtárban, amely a futás végén automatikusan törlődik.
-- A mentett JSON automatikusan átfut a `tools/json_sanitizer.py` tisztító lépésén.
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 
-## Error Handling / Tips
-- Győződj meg róla, hogy a `keyholder.json` elérhető és a `chatgpt_api_key` mezőt tartalmazza, különben add meg az API kulcsot a CLI-ben.
-- A script hibával kilép, ha nem találja a bemeneti JSON-t vagy ha a `config.json` hiányos; futás előtt ellenőrizd a projekt struktúrát.
-- Hálózati vagy modellhibák esetén a script a batch-et felosztja és újrapróbálja, de tartós hiba esetén megszakítja a futást és meghagyja a progress fájlt folytatáshoz.
+## Opcionális paraméterek
+- `auth_key` (opció;  kapcsoló: `-auth_key`, `--auth-key`; alapértelmezés: nincs): API kulcs az adott külső szolgáltatáshoz. Megadva a rendszer elmentheti későbbi használatra.
+- `input_language` (opció;  kapcsoló: `-input_language`, `--input-language`; alapértelmezés: nincs): A forrás szöveg nyelve. Ha nincs megadva, a script a konfigurációból vagy automatikus felismerésből indul ki.
+- `output_language` (opció;  kapcsoló: `-output_language`, `--output-language`; alapértelmezés: nincs): A lefordított szöveg cél nyelve.
+- `context` (opció;  kapcsoló: `-context`, `--context`; alapértelmezés: nincs): Rövid tartalmi kontextus, ami segíti a modell stílus- és szóhasználatbeli döntéseit.
+- `model` (opció;  kapcsoló: `-model`, `--model`; alapértelmezés: `gpt-4o`): A használt modell neve vagy azonosítója.
+- `stream` (kapcsoló;  kapcsoló: `-stream`, `--stream`; alapértelmezés: `false`): A válasz és az előrehaladás folyamatos kiírása futás közben. Alapállapotban ki van kapcsolva.
+- `allow_sensitive_content` (kapcsoló;  kapcsoló: `-allow_sensitive_content`, `--allow-sensitive-content`; alapértelmezés: `false`): Engedélyezi, hogy a fordítás érzékeny, nyers vagy felnőtt tartalmat is pontosabban kezeljen. Alapállapotban ki van kapcsolva.
+- `systemprompt` (opció;  kapcsoló: `-systemprompt`, `--systemprompt`; alapértelmezés: `You are an expert translator. Translate the numbered list from the source language to the target language. Your response MUST be a numbered list with the exact same number of items. Format: `1. [translation]`.`): Egyedi rendszerprompt. Ezzel teljesen testre szabható a fordítómodell viselkedése.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

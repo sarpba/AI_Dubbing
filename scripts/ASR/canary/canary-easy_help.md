@@ -1,25 +1,30 @@
-# canary-easy – konfigurációs útmutató
+# canary-easy
 
 **Futtatási környezet:** `nemo`  
-**Belépési pont:** `canary-easy.py`
+**Belépési pont:** `ASR/canary/canary-easy.py`
 
-A szkript az NVIDIA Canary ASR modellt futtatja a `separated_audio_speech` mappában található hangfájlokon. A felvételeket darabolja, majd a Parakeet szkriptjéhez igazodó, szóalapú időbélyegekkel ellátott JSON-t ment (`segments` + `word_segments` mezők).
+## Mit csinál?
+A Canary ASR modell használata a beszéd szöveggé alakítására.
 
-## Kötelező beállítás
-- `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `workdir` alatt található projektmappa neve, amelynek hanganyagát fel kell dolgozni.
+A script a projekt hanganyagából készít átírást vagy újraszegmentált JSON-t, hogy a további fordítási és TTS lépések már strukturált bemenettel dolgozzanak.
 
-## Opcionális beállítások
-- `source_lang` (`--source-lang`, option, alapértelmezés: `auto`): Forrásnyelv kódja; `auto` esetén a Canary próbálja felismerni. Kétbetűs nyelvi kódot kell használni, pl. `hu`
-- `target_lang` (`--target-lang`, option, alapértelmezés: nincs): Célnyelv kódja, ha a Canary fordítson is. Üresen hagyva csak átírás készül. Kétbetös nyelvi kódot kell használni, pl. `hu` ha a forrással azonos nyelvet adunk meg, akkor beolvas aa modell, ha mást akkor fordít. A fordítás csak angol nyelvre van tréningezve. Fordítás feállítása esetén angolon kívül mást nem javasolt használni.
-- `model_name` (`--model-name`, option, alapértelmezés: `nvidia/canary-1b-v2`): A használandó Canary modell Hugging Face azonosítója.
-- `batch_size` (`--batch-size`, option, alapértelmezés: `4`): Hány chunk kerüljön egyszerre GPU-ra. (Jelenleg a szóalapú időbélyegek stabilitása érdekében a szkript egydarabos batch-sel fut, így ez a kapcsoló inkább jövőbeni kompatibilitás miatt maradt meg.)
-- `beam_size` (`--beam-size`, option, alapértelmezés: `5`): Beam-search szélessége a dekóderben.
-- `len_pen` (`--len-pen`, option, alapértelmezés: `1.0`): Hossz-büntetés a dekóderben; 1 felett a rövidebb, 1 alatt a hosszabb hipotéziseket részesíti előnyben.
-- `chunk` (`--chunk`, option, alapértelmezés: `30`): A chunk maximális hossza másodpercben (10–120 mp tartomány javasolt); a szkript a határ előtt legfeljebb 1 mp-nyi visszatekintésben keres legalább 0,2 mp tétlencsendet, és ha talál, ott vágja el a chunkot, csökkentve a szóvégek darabolását.
-- `max_pause` (`--max-pause`, option, alapértelmezés: `0.6`): A szóközi szünet, amely fölött új mondatszegmens indul a kimenetben.
-- `timestamp_padding` (`--timestamp-padding`, option, alapértelmezés: `0.2`): Ennyivel tolja ki a szegmentált szavak elejét/végét, hogy jobban fedjék a beszédet.
-- `max_segment_duration` (`--max-segment-duration`, option, alapértelmezés: `11.5`): A `segments` bejegyzések maximális hossza másodpercben (0 = nincs limit).
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+- `source_lang` (opció;  kapcsoló: `--source-lang`; alapértelmezés: üres érték): A bemeneti beszéd nyelve. Többnyelvű modelleknél ez segíti a pontosabb felismerést.
+- `target_lang` (opció;  kapcsoló: `--target-lang`; alapértelmezés: üres érték): A cél nyelv. Fordító vagy speech-to-speech modelleknél ez határozza meg a kimenet nyelvét.
 
-- `keep_alternatives` (`--keep-alternatives`, option, alapértelmezés: `2`): A dekóder alternatív hipotéziseinek száma chunkonként; a Parakeet-kompatibilis kimenet jelenleg ezeket nem menti el.
-- `overwrite` (`--overwrite`, flag, alapértelmezés: `false`): Ha engedélyezed, felülírja a már létező kimeneti fájlokat; ellenkező esetben kihagyja őket.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás a `tools.debug_utils` segítségével.
+## Opcionális paraméterek
+- `model_name` (opció;  kapcsoló: `--model-name`; alapértelmezés: `nvidia/canary-1b-v2`): A használt ASR modell neve vagy azonosítója.
+- `batch_size` (opció;  kapcsoló: `--batch-size`; alapértelmezés: `4`): Az egyszerre feldolgozott elemek száma. Nagyobb érték gyorsabb lehet, de több memóriát igényel.
+- `beam_size` (opció;  kapcsoló: `--beam-size`; alapértelmezés: `5`): A keresés szélessége. Nagyobb érték jobb minőséget, de lassabb futást eredményezhet.
+- `len_pen` (opció;  kapcsoló: `--len-pen`; alapértelmezés: `1.0`): Hossz-büntetés a dekódolásnál. A kimenet hosszát befolyásolja.
+- `chunk` (opció;  kapcsoló: `--chunk`; alapértelmezés: `30`): A feldolgozásnál használt darabolás mérete másodpercben.
+- `max_pause` (opció;  kapcsoló: `--max-pause`; alapértelmezés: `0.6`): Legfeljebb ekkora szünetet hagy a script egy szegmensen belül. Nagyobb érték hosszabb mondatrészeket eredményezhet.
+- `timestamp_padding` (opció;  kapcsoló: `--timestamp-padding`; alapértelmezés: `0.2`): Ennyi időt ad hozzá a szegmensek elejéhez és végéhez a kényelmesebb vágás érdekében.
+- `max_segment_duration` (opció;  kapcsoló: `--max-segment-duration`; alapértelmezés: `11.5`): A szegmensek maximális hossza másodpercben.
+- `keep_alternatives` (opció;  kapcsoló: `--keep-alternatives`; alapértelmezés: `2`): Ennyi alternatív felismerési lehetőséget tart meg, ha a script támogatja.
+- `overwrite` (kapcsoló;  kapcsoló: `--overwrite`; alapértelmezés: `false`): A már meglévő kimeneti fájlokat is újragenerálja vagy felülírja. Alapállapotban ki van kapcsolva.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

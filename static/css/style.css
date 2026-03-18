@@ -1,50 +1,105 @@
 :root {
-  /* Light theme variables */
-  --primary-color: #0d6efd;
-  --secondary-color: #6c757d;
-  --success-color: #198754;
-  --background-color: #ffffff;
-  --text-color: #212529;
-  --card-bg: #f8f9fa;
-  --border-color: #dee2e6;
-  --waveform-bg: #f0f0f0;
-  --timeline-segment-bg: rgba(230, 230, 250, 0.8);
+  --primary-color: #1f6feb;
+  --secondary-color: #6b7280;
+  --success-color: #1f9d68;
+  --background-color: #f3f6fb;
+  --text-color: #172033;
+  --card-bg: rgba(255, 255, 255, 0.88);
+  --border-color: rgba(104, 122, 148, 0.22);
+  --waveform-bg: #eef3fb;
+  --timeline-segment-bg: rgba(115, 157, 255, 0.12);
+  --surface-muted: rgba(255, 255, 255, 0.62);
+  --surface-strong: rgba(255, 255, 255, 0.95);
+  --hero-glow: rgba(31, 111, 235, 0.16);
+  --shadow-soft: 0 20px 45px rgba(15, 23, 42, 0.08);
+  --shadow-hover: 0 26px 55px rgba(15, 23, 42, 0.12);
 }
 
 [data-bs-theme="dark"] {
-  /* Dark theme variables */
-  --primary-color: #0dcaf0;
-  --secondary-color: #6c757d;
-  --success-color: #198754;
-  --background-color: #212529;
-  --text-color: #f8f9fa;
-  --card-bg: #2d3339;
-  --border-color: #495057;
-  --waveform-bg: #343a40;
-  --timeline-segment-bg: rgba(100, 100, 150, 0.8);
+  --primary-color: #73a7ff;
+  --secondary-color: #96a2b4;
+  --success-color: #41c289;
+  --background-color: #0e1624;
+  --text-color: #edf3ff;
+  --card-bg: rgba(20, 31, 49, 0.86);
+  --border-color: rgba(128, 154, 194, 0.22);
+  --waveform-bg: #172438;
+  --timeline-segment-bg: rgba(115, 167, 255, 0.22);
+  --surface-muted: rgba(18, 28, 44, 0.78);
+  --surface-strong: rgba(20, 31, 49, 0.92);
+  --hero-glow: rgba(115, 167, 255, 0.18);
+  --shadow-soft: 0 24px 52px rgba(2, 6, 23, 0.34);
+  --shadow-hover: 0 30px 64px rgba(2, 6, 23, 0.46);
 }
 
 body {
+  min-height: 100vh;
   background-color: var(--background-color);
+  background-image:
+    radial-gradient(circle at top left, var(--hero-glow), transparent 32%),
+    radial-gradient(circle at top right, rgba(31, 157, 104, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 38%);
   color: var(--text-color);
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   transition: background-color 0.3s, color 0.3s;
+}
+
+.app-shell {
+  padding-bottom: 5rem;
+}
+
+.page-shell {
+  padding-top: 1.5rem;
+}
+
+.page-header-surface {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1.1rem;
+  background: linear-gradient(135deg, var(--surface-strong), var(--surface-muted));
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(16px);
+}
+
+.page-header-surface h1,
+.page-header-surface h2,
+.page-header-surface h3 {
+  margin: 0;
+}
+
+.page-header-surface .text-muted,
+.page-header-surface p {
+  margin-bottom: 0;
 }
 
 .card {
   background-color: var(--card-bg);
   border-color: var(--border-color);
-  border-radius: 0.75rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  border-radius: 1rem;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
 }
 
 .card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-hover);
 }
 
 .card-header {
+  padding: 1rem 1.25rem;
+  background: transparent;
   border-bottom-color: var(--border-color);
+}
+
+.card-body {
+  padding: 1.25rem;
 }
 
 .list-group-item {
@@ -142,13 +197,14 @@ body {
 }
 
 .btn {
-  border-radius: 0.5rem;
-  transition: all 0.2s ease;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
 
 .btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 14px 24px rgba(15, 23, 42, 0.12);
 }
 
 .btn-primary {
@@ -170,6 +226,7 @@ body {
   background-color: var(--card-bg);
   border-color: var(--border-color);
   color: var(--text-color);
+  border-radius: 0.8rem;
 }
 
 .form-control:focus {
@@ -183,6 +240,7 @@ body {
   background-color: var(--card-bg);
   border-color: var(--border-color);
   color: var(--text-color);
+  border-radius: 0.8rem;
 }
 
 .form-select:focus {
@@ -247,10 +305,10 @@ body {
 
 .log-panel {
   border: 1px solid var(--border-color);
-  border-radius: 0.75rem;
-  background-color: var(--card-bg);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  padding: 0.75rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, var(--surface-strong), var(--card-bg));
+  box-shadow: var(--shadow-soft);
+  padding: 1rem;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -288,13 +346,16 @@ body {
 }
 
 .workflow-table thead th {
-  background-color: rgba(0, 0, 0, 0.03);
+  background-color: rgba(31, 111, 235, 0.08);
   border-color: var(--border-color);
   color: var(--text-color);
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 [data-bs-theme="dark"] .workflow-table thead th {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(115, 167, 255, 0.12);
 }
 
 .workflow-table tbody td,
@@ -304,20 +365,21 @@ body {
 
 .workflow-row {
   position: relative;
-  background-color: rgba(0, 0, 0, 0.02);
-  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  background-color: rgba(255, 255, 255, 0.35);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 [data-bs-theme="dark"] .workflow-row {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .workflow-row:hover {
-  background-color: rgba(13, 110, 253, 0.08);
+  background-color: rgba(31, 111, 235, 0.09);
+  transform: translateY(-1px);
 }
 
 [data-bs-theme="dark"] .workflow-row:hover {
-  background-color: rgba(13, 202, 240, 0.12);
+  background-color: rgba(115, 167, 255, 0.12);
 }
 
 .workflow-row-widget {
@@ -383,14 +445,14 @@ body {
   gap: 0.25rem;
   padding: 0.35rem 0.6rem;
   border-radius: 999px;
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgba(31, 111, 235, 0.08);
   border: 1px solid var(--border-color);
   font-weight: 600;
   color: var(--text-color);
 }
 
 [data-bs-theme="dark"] .workflow-env-badge {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(115, 167, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.18);
 }
 
@@ -505,13 +567,19 @@ body {
 /* Theme toggle & editor controls */
 .theme-controls {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 1.25rem;
+  right: 1.25rem;
   z-index: 1050;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 1.1rem;
+  background: linear-gradient(180deg, var(--surface-strong), var(--surface-muted));
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(18px);
 }
 
 .language-selector {
@@ -525,16 +593,16 @@ body {
 
 .theme-toggle,
 .theme-editor-button {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  border-radius: 0.9rem;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: var(--primary-color);
   color: white;
   border: none;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
   transition: all 0.3s ease;
   cursor: pointer;
 }
@@ -545,7 +613,7 @@ body {
 
 .theme-toggle:hover,
 .theme-editor-button:hover {
-  transform: scale(1.1);
+  transform: translateY(-2px) scale(1.03);
   background-color: var(--primary-color);
   opacity: 0.9;
 }
@@ -621,20 +689,25 @@ body {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .container {
-    padding-top: 60px;
-  }
-  
   .theme-controls {
-    top: 10px;
-    bottom: auto;
-    right: 10px;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    padding: 0.65rem;
   }
 
   .theme-toggle,
   .theme-editor-button {
     width: 40px;
     height: 40px;
+  }
+
+  .page-shell {
+    padding-top: 1rem;
+  }
+
+  .page-header-surface {
+    padding: 1rem 1rem;
+    margin-bottom: 1rem;
   }
   
   .card {

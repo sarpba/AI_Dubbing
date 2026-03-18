@@ -98,7 +98,7 @@
         })();
     </script>
 </head>
-<body>
+<body class="app-shell">
     <div class="theme-controls">
         {% if language_options %}
         <div class="language-selector">
@@ -123,8 +123,10 @@
         </a>
     </div>
 
-    <div class="container mt-4">
-        <h1 class="mb-4">{{ translate('general.app_heading') }}</h1>
+    <div class="container mt-4 page-shell">
+        <div class="page-header-surface">
+            <h1>{{ translate('general.app_heading') }}</h1>
+        </div>
 
         <div class="row">
             <div class="col-md-6">

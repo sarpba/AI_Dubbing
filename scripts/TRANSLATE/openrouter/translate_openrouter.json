@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "api": "openrouter",
   "script": "TRANSLATE/openrouter/translate_openrouter.py",
   "description": "Projekt-alapú JSON fordítás OpenRouter kompatibilis modellekkel, intelligens csoportosítással és folytatható futással.",
@@ -95,5 +94,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

@@ -1,12 +1,18 @@
-# unpack_srt_from_mkv_easy – konfigurációs útmutató
+# unpack_srt_from_mkv_easy
 
 **Futtatási környezet:** `sync`  
-**Belépési pont:** `unpack_srt_from_mkv_easy.py`
+**Belépési pont:** `AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py`
 
-A szkript a feltöltött videófájlba ágyazott feliratokat (`.srt`) bontja ki a projekt számára. Az eredményt a `subtitles` (vagy konfigurációban megadott) almappába menti.
+## Mit csinál?
+A feltöltött videoba ágyazott feliratokat kinyeri srt fileokként.
 
-## Kötelező beállítás
-- `project_name` (pozícionális, alapértelmezés: nincs): A `workdir` alatti projekt neve, amelynek feltöltött videójából a feliratokat ki kell nyerni.
+A script a projekt audio- és videófájljait készíti elő, alakítja át vagy fűzi össze a szinkronizálási pipeline következő lépéseihez.
 
-## Opcionális beállítás
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás bekapcsolása.
+## Kötelező paraméterek
+- `project_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

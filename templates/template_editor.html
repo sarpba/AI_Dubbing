@@ -59,7 +59,7 @@
         })();
     </script>
 </head>
-<body>
+<body class="app-shell">
     <div class="theme-controls">
         {% if language_options %}
         <div class="language-selector">
@@ -78,8 +78,8 @@
         </button>
     </div>
 
-    <div class="container mt-4 theme-editor">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div class="container mt-4 page-shell theme-editor">
+        <div class="page-header-surface">
             <div>
                 <h1 class="mb-1">{{ translate('hero.heading') }}</h1>
                 <p class="text-muted mb-0">{{ translate('hero.description') }}</p>

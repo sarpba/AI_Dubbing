@@ -1,23 +1,23 @@
-# whisx2 – konfigurációs útmutató
+# whisx_v1.1
 
 **Futtatási környezet:** `whisperx`  
-**API:** `huggingface`  
-**Belépési pont:** `whisx_v1.1.py`
+**Belépési pont:** `ASR/whisperx/whisx_v1.1.py`
 
-A szkript a WhisperX `large-v3` modellt futtatja több GPU-n, opcionális beszélő‑diarizációval. A Parakeet szkriptből átemelt, finomhangolható szegmentálási logikát használ, hogy a `separated_audio_speech` mappában található hangokról időbélyeges JSON átiratokat készítsen. A kimeneteket az audiók mellé menti.
+## Mit csinál?
+WhisperX modell használata a beszéd szöveggé alakítására, több GPU támogatással, diarizációval és egyéni, Parakeet-stílusú szegmentálással.
 
-## Kötelező beállítás
-- `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `config.json` alapján felépített `workdir/<projekt>` mappa neve. Ez határozza meg, hogy melyik projekt hanganyagai kerülnek feldolgozásra.
+A script a projekt hanganyagából készít átírást vagy újraszegmentált JSON-t, hogy a további fordítási és TTS lépések már strukturált bemenettel dolgozzanak.
 
-## Opcionális beállítások
-- `gpus` (`--gpus`, option, alapértelmezés: automatikus): Vesszővel tagolt CUDA eszköz indexek listája (például `0,1`). Ha nincs megadva, a szkript a `nvidia-smi` alapján az összes elérhető GPU-t használja.
-- `hf_token` (`--hf_token`, option, alapértelmezés: nincs): Hugging Face hozzáférési token a pyannote diarizációs modellhez. Token nélkül az átirat elkészül, de beszélő szerinti szétosztás nem történik.
-- `language` (`--language`, option, alapértelmezés: automatikus): ISO nyelvkód (pl. `en`, `hu`). Megadásával fix nyelvre kényszeríthető a modell; üresen hagyva automatikusan detektálja.
-- `max_pause` (`--max-pause`, option, alapértelmezés: `0.6`): Maximális szünet a mondatok között másodpercben; nagyobb érték kevésbé darabol.
-- `timestamp_padding` (`--timestamp-padding`, option, alapértelmezés: `0.2`): Időbélyegek kiterjesztése másodpercben, hogy ne vágja le a beszéd elejét/végét.
-- `max_segment_duration` (`--max-segment-duration`, option, alapértelmezés: `11.5`): Egy szegmens felső hosszkorlátja másodpercben (`0` = nincs limit).
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 
-## Működés és kimenet
-- Bemenet/kimenet könyvtár: `workdir/<projekt>/separated_audio_speech` a `config.json` alapján.
-- Minden feldolgozott hangfájl mellé egy azonos nevű `.json` készül a felismert `language`, a mondat szegmensek (`segments`) és a szó szintű időbélyegek (`word_segments`) mezőkkel.
-- Már létező JSON mellett a fájl kihagyásra kerül.
+## Opcionális paraméterek
+- `gpus` (opció;  kapcsoló: `--gpus`; alapértelmezés: nincs): A használható GPU-k listája vagy száma. Több GPU esetén a script párhuzamos feldolgozást is használhat.
+- `hf_token` (opció;  kapcsoló: `--hf_token`; alapértelmezés: nincs): Hugging Face token a védett modellek vagy diarizációs komponensek eléréséhez.
+- `language` (opció;  kapcsoló: `--language`; alapértelmezés: nincs): A feldolgozás nyelve vagy a kész kimenet nyelvi kódja.
+- `max_pause` (opció;  kapcsoló: `--max-pause`; alapértelmezés: `0.6`): Legfeljebb ekkora szünetet hagy a script egy szegmensen belül. Nagyobb érték hosszabb mondatrészeket eredményezhet.
+- `timestamp_padding` (opció;  kapcsoló: `--timestamp-padding`; alapértelmezés: `0.2`): Ennyi időt ad hozzá a szegmensek elejéhez és végéhez a kényelmesebb vágás érdekében.
+- `max_segment_duration` (opció;  kapcsoló: `--max-segment-duration`; alapértelmezés: `11.5`): A szegmensek maximális hossza másodpercben.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

@@ -1,15 +1,21 @@
-# merge_chunks_with_background_easy – konfigurációs útmutató
+# merge_chunks_with_background_easy
 
 **Futtatási környezet:** `sync`  
-**Belépési pont:** `merge_chunks_with_background_easy.py`
+**Belépési pont:** `AUDIO-VIDEO/merge_chunks_with_bacground_v1.1/merge_chunks_with_background_easy.py`
 
-Ez a szkript a `translated_splits` mappában található generált szegmenseket időbélyegeik alapján összefűzi, és – igény szerint – rákeveri a háttér audiót. A végeredményt a `film_dubbing` könyvtárba menti.
+## Mit csinál?
+A korábban generált szinkron darabokat összemuxolja a háttér audióval. Képes automatikusan felgyorsítani az egymásra lógó hangrészeket.
 
-## Kötelező beállítás
-- `project_name` (pozícionális, alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+A script a projekt audio- és videófájljait készíti elő, alakítja át vagy fűzi össze a szinkronizálási pipeline következő lépéseihez.
 
-## Opcionális beállítások
-- `narrator` (`-narrator`, `--narrator`, flag, alapértelmezés: `false`): Speciális „narrátor” üzemmód. Ilyenkor a háttérsáv a `extracted_audio` könyvtárból kerül kiválasztásra, és a szkript feltételezi, hogy narráció készül.
-- `background_volume` (`--background-volume`, option, alapértelmezés: `100`): Narrátor módban a háttér sáv hangereje százalékban (1–100). Ha nincs narrátor mód, a szkript hibaüzenettel jelzi, hogy ez az opció nem érvényes.
-- `time-stretching` (`--time-stretching`, flag, alapértelmezés: false): Ha aktiválva van, a szkript automatikusan felgyorsítja azokat a hangszegmenseket, amelyek hosszuk miatt átfedésbe kerülnének a soron következő szegmenssel. A gyorsítás úgy történik, hogy a hangmagasság nem változik.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózást kapcsol be (ha a `tools.debug_utils` elérhető).
+## Kötelező paraméterek
+- `project_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `narrator` (kapcsoló;  kapcsoló: `-narrator`, `--narrator`; alapértelmezés: `false`): Narrátor módot használ, vagy megadja a narrátor referenciafájlt / mappát az adott script elvárásai szerint. Alapállapotban ki van kapcsolva.
+- `background_volume` (opció;  kapcsoló: `--background-volume`; alapértelmezés: nincs): A háttérhang vagy zene hangerőszintje a keverés során.
+- `time_stretching` (kapcsoló;  kapcsoló: `--time-stretching`; alapértelmezés: `false`): A script megengedett határok között gyorsítja vagy nyújtja a hangot, ha az időzítés ezt igényli. Alapállapotban ki van kapcsolva.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

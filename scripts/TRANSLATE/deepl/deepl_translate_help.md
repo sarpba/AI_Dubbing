@@ -1,16 +1,21 @@
-# translate – konfigurációs útmutató
+# deepl_translate
 
 **Futtatási környezet:** `sync`  
-**API:** `deepl`  
-**Belépési pont:** `deepl_translate.py`
+**Belépési pont:** `TRANSLATE/deepl/deepl_translate.py`
 
-A szkript a DeepL fordító API-t használja, hogy a `separated_audio_speech` könyvtárban található időzített JSON-okat célnyelvre fordítsa. A kimenetet a `translated` almappába menti, és kezeli a `keyholder.json` titkos kulcstárolót.
+## Mit csinál?
+Időzített transcripciók fordítása különböző fordító szolgáltatások segítségével. Nyersfordítás, nem támaszkodik feliratokra.
 
-## Kötelező beállítások
-- `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A projekt neve a `workdir` alatt, amelynek anyagát fordítani kell.
+A script a projekt szöveges JSON-jait fordítja a megadott cél nyelvre, és a fordítást a projekt megfelelő kimeneti mappájába menti.
 
-## Opcionális beállítások
-- `auth_key` (`-auth_key`, `--auth-key`, option, alapértelmezés: nincs): DeepL REST API kulcs. Ha itt adod meg, a szkript base64 formában elmenti a `keyholder.json`-ba; a későbbiekben automatikusan onnan tölti vissza, ezért a paramétert csak az első futtatáskor szükséges megadni.
-- `input_language` (`-input_language`, `--input-language`, option, alapértelmezés: config vagy nincs): A forrásnyelv kódja. Üresen hagyva a `config.json` `CONFIG.default_source_lang` beállítására esik vissza.
-- `output_language` (`-output_language`, `--output-language`, option, alapértelmezés: config vagy nincs): A célnyelv kódja. Üresen hagyva a `config.json` `CONFIG.default_target_lang` értékét használja.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózást kér a `tools.debug_utils` segítségével (ha a futtatókörnyezet támogatja).
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `auth_key` (opció;  kapcsoló: `-auth_key`, `--auth-key`; alapértelmezés: nincs): API kulcs az adott külső szolgáltatáshoz. Megadva a rendszer elmentheti későbbi használatra.
+- `input_language` (opció;  kapcsoló: `-input_language`, `--input-language`; alapértelmezés: nincs): A forrás szöveg nyelve. Ha nincs megadva, a script a konfigurációból vagy automatikus felismerésből indul ki.
+- `output_language` (opció;  kapcsoló: `-output_language`, `--output-language`; alapértelmezés: nincs): A lefordított szöveg cél nyelve.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

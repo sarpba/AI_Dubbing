@@ -1,15 +1,21 @@
-# normalise_and_cut_json_easy_v1.1_codex – konfigurációs útmutató
+# normalise_and_cut_json_easy_v1.1
 
 **Futtatási környezet:** `sync`  
-**Belépési pont:** `normalise_and_cut_json_easy_v1.1.py`
+**Belépési pont:** `AUDIO-VIDEO/normalize_and_cut_tts_files/normalise_and_cut_json_easy_v1.1.py`
 
-Ez a verzió a generált szinkron szegmenseket az eredeti hang alapján időben igazítja, stabil RMS szinteket állít be és gondoskodik róla, hogy a csúcsok ne legyenek hangosabbak a referenciánál. A fájlok végi, 0,5 másodpercnél hosszabb -50 dB alatti csendet az FFmpeg `silenceremove` szűrője vágja le, miközben a szegmensek elejét továbbra is a VAD-alapú logika rendezi.
+## Mit csinál?
+A TTS-el generált audiókat az eredeti hangsáv alapján időben és hangerőben igazítja, a végeken automatikusan eltávolítja a hosszabb csendet FFmpeg silenceremove-val.
 
-## Kötelező beállítás
-- `project_name` (pozícionális, alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+A script a projekt audio- és videófájljait készíti elő, alakítja át vagy fűzi össze a szinkronizálási pipeline következő lépéseihez.
 
-## Opcionális beállítások
-- `delete_empty` (`--delete_empty`, flag, alapértelmezés: `false`): Ha egy szegmens teljesen csendes marad a VAD szerint, törli a hozzá tartozó audió fájlt.
-- `sync_loudness` (`--no-sync-loudness`, flag, alapértelmezés: `true`): Alapból RMS szerint igazítja a szegmenseket és korlátozza a csúcs hangerejüket a referencia szintjéhez. A `--no-sync-loudness` kikapcsolja ezt a lépést.
-- `min_db` (`-db`, `--min_db`, option, alapértelmezés: `-40.0`): A hangerő normalizálás alsó korlátja dB-ben. Ezzel akadályozható meg, hogy túl halk referenciát vegyen alapul.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás bekapcsolása.
+## Kötelező paraméterek
+- `project_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `delete_empty` (kapcsoló;  kapcsoló: `--delete_empty`; alapértelmezés: `false`): Eltávolítja azokat a kimeneti hangfájlokat, amelyek üresnek vagy használhatatlannak bizonyulnak. Alapállapotban ki van kapcsolva.
+- `sync_loudness` (kapcsoló;  kapcsoló: `--no-sync-loudness`; alapértelmezés: `true`): Alapból bekapcsolt hangerő-illesztés. A script a generált hangot a referencia hangerejéhez igazítja. Alapállapotban be van kapcsolva; a negatív kapcsolóval kikapcsolható.
+- `min_db` (opció;  kapcsoló: `-db`, `--min_db`; alapértelmezés: `-40.0`): Alsó hangerőkorlát decibelben. Segít elkerülni, hogy túl halk részekhez igazodjon a normalizálás.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

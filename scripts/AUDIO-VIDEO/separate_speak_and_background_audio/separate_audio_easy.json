@@ -1,5 +1,4 @@
 {
-  "enviroment": "demucs",
   "script": "AUDIO-VIDEO/separate_speak_and_background_audio/separate_audio_easy.py",
   "description": "Az eredeti filból kivont audio filet beszédre és háttér zenére/sound effectekre bontja.",
   "required": [
@@ -78,5 +77,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "demucs"
 }

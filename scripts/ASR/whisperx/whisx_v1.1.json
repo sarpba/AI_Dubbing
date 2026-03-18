@@ -1,5 +1,4 @@
 {
-  "enviroment": "whisperx",
   "script": "ASR/whisperx/whisx_v1.1.py",
   "api": "huggingface",
   "description": "WhisperX modell használata a beszéd szöveggé alakítására, több GPU támogatással, diarizációval és egyéni, Parakeet-stílusú szegmentálással.",
@@ -63,5 +62,6 @@
       "type": "option",
       "default": 11.5
     }
-  ]
+  ],
+  "environment": "whisperx"
 }

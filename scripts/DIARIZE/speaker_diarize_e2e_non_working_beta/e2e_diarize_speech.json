@@ -1,5 +1,4 @@
 {
-  "enviroment": "nemo",
   "script": "DIARIZE/speaker_diarize_e2e_non_working_beta/e2e_diarize_speech.py",
   "description": "Alpha verzió egyelóre ne használd! Beszélődiarizáció végrehajtása az End-to-End Diarization modell segítségével.",
   "required": [
@@ -161,5 +160,6 @@
       "default": 100000
     }
   ],
-  "notes": "This script uses Hydra/OmegaConf; parameters are provided via key=value CLI overrides."
+  "notes": "This script uses Hydra/OmegaConf; parameters are provided via key=value CLI overrides.",
+  "environment": "nemo"
 }

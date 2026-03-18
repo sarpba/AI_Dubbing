@@ -170,7 +170,7 @@
         }
     </style>
 </head>
-<body>
+<body class="app-shell">
     <div class="theme-controls">
         {% if language_options %}
         <div class="language-selector">
@@ -235,8 +235,8 @@
         </div>
     </div>
 
-    <div class="container-fluid mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="container-fluid mt-4 page-shell">
+    <div class="page-header-surface mb-3">
         <h1>{{ translate('header.title', project=project_name) }}</h1>
         <div>
             <a href="{{url_for('show_project', project_name=project_name)}}" class="btn btn-secondary me-2">{{ translate('header.back_button') }}</a>

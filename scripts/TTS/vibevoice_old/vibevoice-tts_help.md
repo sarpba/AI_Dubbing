@@ -1,34 +1,42 @@
-# vibevoice-tts – konfigurációs útmutató
+# vibevoice-tts
 
 **Futtatási környezet:** `vibevoice`  
-**Belépési pont:** `vibevoice-tts.py`
+**Belépési pont:** `TTS/vibevoice_old/vibevoice-tts.py`
 
-A szkript a VibeVoice TTS modellt és opcionálisan LoRA adaptereket használ, hogy a projekt `translated_splits` kimenetét új magyar hangra szintetizálja. A referencia sávot szegmensekre bontja, EQ-t és normalizálást alkalmazhat, Whisper-alapú visszaellenőrzést végez Levenshtein-távolság alapján, és több GPU-t is képes párhuzamosan kihasználni.
+## Mit csinál?
+A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból.
 
-## Kötelező beállítások
-- `project_name` (pozícionális, alapértelmezés: nincs): A `workdir` alatti projekt könyvtár neve, amelynek szegmenseit feldolgozzuk.
-- `norm` (`--norm`, option, alapértelmezés: nincs): Normalizálási profil azonosító (pl. `hun`, `eng`). A szkript ehhez igazítja a szöveg-előkészítést és a Whisper nyelvi beállítását.
+A script a lefordított szegmensekből generál szinkronhangot, és a létrejött hangfájlokat a projekt TTS kimenetei közé menti.
 
-## Opcionális beállítások
-- `model_path` (`--model_path`, option, alapértelmezés: `microsoft/VibeVoice-1.5b`): Hugging Face modellazonosító vagy lokális mappa az alap VibeVoice modellhez.
-- `model_dir` (`--model_dir`, option, alapértelmezés: nincs): Lokális könyvtár megadása; elsőbbséget élvez a `--model_path` értékével szemben.
-- `checkpoint_path` (`--checkpoint_path`, option, alapértelmezés: nincs): LoRA / adapter útvonal, amelyet a modellre töltünk.
-- `device` (`--device`, option, alapértelmezés: automatikus): Cél eszköz (`cuda`, `mps`, `cpu`). Több GPU esetén a szkript automatikusan képes párhuzamosítani.
-- `cfg_scale` (`--cfg_scale`, option, alapértelmezés: `1.3`): Classifier-Free Guidance skála; nagyobb érték erősebb stílus-követést eredményez.
-- `disable_prefill` (`--disable_prefill`, flag, alapértelmezés: `false`): Kikapcsolja a voice cloning jellegű prefill lépést (`is_prefill=False`).
-- `ddpm_steps` (`--ddpm_steps`, option, alapértelmezés: `10`): A diffúziós inference lépések száma; emelése jobb minőséget, hosszabb futást ad.
-- `eq_config` (`--eq_config`, option, alapértelmezés: `scripts/TTS/EQ.json` ha létezik): EQ görbét tartalmazó JSON, amellyel a referencia audiót korrigáljuk.
-- `normalize_ref_audio` (`--normalize_ref_audio`, flag, alapértelmezés: `false`): A referencia mintát a `ref_audio_peak` szintre normálja.
-- `ref_audio_peak` (`--ref_audio_peak`, option, alapértelmezés: `0.95`): A normalizálási cél csúcsértéke 0–1 tartományban.
-- `target_sample_rate` (`--target_sample_rate`, option, alapértelmezés: `16000`): A referencia audiót erre a mintavételi frekvenciára reszámplálja a TTS előtt; 0 vagy negatív értékkel kikapcsolható.
-- `speaker_name` (`--speaker_name`, option, alapértelmezés: `Speaker 1`): A VibeVoice által elvárt „Speaker X:” formátumhoz használt címke. A szöveg elejére automatikusan rákerül, ha hiányzik.
-- `max_retries` (`--max_retries`, option, alapértelmezés: `5`): Whisper alapú ellenőrzés esetén ennyiszer próbálkozik újragenerálással.
-- `tolerance_factor` (`--tolerance_factor`, option, alapértelmezés: `1.0`) és `min_tolerance` (`--min_tolerance`, option, alapértelmezés: `2`): A Levenshtein-távolság megengedett mértékét szabályozzák (szó-mennyiség * faktor, minimum érték).
-- `whisper_model` (`--whisper_model`, option, alapértelmezés: `openai/whisper-large-v3`) és `beam_size` (`--beam_size`, option, alapértelmezés: `5`): A visszaellenőrzéshez használt ASR modell és beamszélesség.
-- `seed` (`--seed`, option, alapértelmezés: `-1`): Véletlenmag. `-1` esetén véletlenszerűen indul, Whisperrel visszaellenőriz, és szükség esetén újra próbálkozik. Pozitív értéknél determinisztikus (visszaellenőrzés nélkül).
-- `save_failures` (`--save_failures`, flag, alapértelmezés: `false`): Sikertelen kimenetek és metaadatok mentése a `failed_generations` mappába.
-- `keep_best_over_tolerance` (`--keep_best_over_tolerance`, flag, alapértelmezés: `false`): Ha nincs tolerancián belüli találat, a legjobb (legkisebb távolságú) próbálkozást akkor is megtartja.
-- `max_segments` (`--max_segments`, option, alapértelmezés: nincs): Debug célra limitálja a feldolgozott szegmensek számát.
-- `max_workers` (`--max_workers`, option, alapértelmezés: automatikus): Több GPU esetén limitálja a párhuzamos workerek számát.
-- `overwrite` (`--overwrite`, flag, alapértelmezés: `false`): Létező kimeneti wav fájlok felülírása.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás a `tools.debug_utils` modul segítségével.
+## Kötelező paraméterek
+- `project_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+- `norm` (opció;  kapcsoló: `--norm`; alapértelmezés: nincs): A használt normalizálási profil neve. Ez határozza meg a szöveg-előkészítés nyelvi szabályait.
+
+## Opcionális paraméterek
+- `model_path` (opció;  kapcsoló: `--model_path`; alapértelmezés: `microsoft/VibeVoice-1.5b`): A betöltendő modell Hugging Face azonosítója vagy lokális útvonala.
+- `model_dir` (opció;  kapcsoló: `--model_dir`; alapértelmezés: nincs): Lokális modellkönyvtár. Ha meg van adva, a script ezt részesíti előnyben a távoli modellazonosítóval szemben.
+- `checkpoint_path` (opció;  kapcsoló: `--checkpoint_path`; alapértelmezés: nincs): Opcionális checkpoint vagy adapter fájl, amelyet a script az alapmodell fölé tölt be.
+- `device` (opció;  kapcsoló: `--device`; alapértelmezés: `auto`): A futtatás eszköze, például `cpu`, `cuda`, `cuda:0` vagy `mps`.
+- `cfg_scale` (opció;  kapcsoló: `--cfg_scale`; alapértelmezés: `1.3`): A stílus- és tartalomkövetés erőssége generálás közben.
+- `disable_prefill` (kapcsoló;  kapcsoló: `--disable_prefill`; alapértelmezés: `false`): Kikapcsolja az előfeltöltési vagy voice-cloning előkészítő lépést. Alapállapotban ki van kapcsolva.
+- `ddpm_steps` (opció;  kapcsoló: `--ddpm_steps`; alapértelmezés: `10`): A diffúziós generálás lépésszáma.
+- `eq_config` (opció;  kapcsoló: `--eq_config`; alapértelmezés: nincs): EQ beállításokat tartalmazó JSON fájl a referenciahang előkészítéséhez.
+- `normalize_ref_audio` (kapcsoló;  kapcsoló: `--normalize_ref_audio`; alapértelmezés: `false`): A referenciahangot egységes hangerőre normalizálja a generálás előtt. Alapállapotban ki van kapcsolva.
+- `ref_audio_peak` (opció;  kapcsoló: `--ref_audio_peak`; alapértelmezés: `0.95`): A referenciahang cél csúcsszintje normalizáláskor.
+- `target_sample_rate` (opció;  kapcsoló: `--target_sample_rate`; alapértelmezés: `16000`): A referenciahang cél mintavételi frekvenciája.
+- `speaker_name` (opció;  kapcsoló: `--speaker_name`; alapértelmezés: `Speaker 1`): A generált szöveghez és hanghoz használt beszélőnév vagy címke.
+- `max_retries` (opció;  kapcsoló: `--max_retries`; alapértelmezés: `5`): Ennyiszer próbálkozik újra, ha az ellenőrzés vagy a generálás nem ad elfogadható eredményt.
+- `tolerance_factor` (opció;  kapcsoló: `--tolerance_factor`; alapértelmezés: `1.0`): Az ellenőrző összehasonlítás tűrésének szorzója.
+- `min_tolerance` (opció;  kapcsoló: `--min_tolerance`; alapértelmezés: `2`): A minimálisan megengedett tűrés.
+- `whisper_model` (opció;  kapcsoló: `--whisper_model`; alapértelmezés: `openai/whisper-large-v3`): A belső ellenőrzéshez használt Whisper modell.
+- `beam_size` (opció;  kapcsoló: `--beam_size`; alapértelmezés: `5`): A keresés szélessége. Nagyobb érték jobb minőséget, de lassabb futást eredményezhet.
+- `seed` (opció;  kapcsoló: `--seed`; alapértelmezés: `-1`): A véletlenmag. Fix értékkel reprodukálhatóbb, `-1` esetén változatosabb eredmény várható.
+- `max_segments` (opció;  kapcsoló: `--max_segments`; alapértelmezés: nincs): A feldolgozható szegmensek számát korlátozza teszteléshez vagy gyors próbafutáshoz.
+- `overwrite` (kapcsoló;  kapcsoló: `--overwrite`; alapértelmezés: `false`): A már meglévő kimeneti fájlokat is újragenerálja vagy felülírja. Alapállapotban ki van kapcsolva.
+- `save_failures` (kapcsoló;  kapcsoló: `--save_failures`; alapértelmezés: `false`): Elmenti a sikertelen vagy elutasított generálásokat további elemzésre. Alapállapotban ki van kapcsolva.
+- `keep_best_over_tolerance` (kapcsoló;  kapcsoló: `--keep_best_over_tolerance`; alapértelmezés: `false`): Ha nincs teljesen megfelelő eredmény, megtartja a legjobb próbálkozást is. Alapállapotban ki van kapcsolva.
+- `max_workers` (opció;  kapcsoló: `--max_workers`; alapértelmezés: nincs): A párhuzamosan dolgozó munkafolyamatok maximális száma.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

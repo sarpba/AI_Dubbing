@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "api": "openrouter",
   "script": "TEST_SCRIPTS/openrouter/translate_openrouter.py",
   "description": "Projekt-alapú JSON fordítás OpenRouter modellekkel, intelligens batchinggel, API-naplózással és testreszabható feliratos prompttal.",
@@ -135,5 +134,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

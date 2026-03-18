@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "script": "ASR/elevenlabs/elevenlabs.py",
   "api": "evenlabs",
   "description": "Evenlabs ASR API használata a projekthez tartozó hangfájlok feldolgozására, normalizált szó szintű (word_segments) JSON kimenettel.",
@@ -63,5 +62,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

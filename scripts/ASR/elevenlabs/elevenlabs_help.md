@@ -1,40 +1,23 @@
-# evenlabs – konfigurációs útmutató
+# elevenlabs
 
-**Futtatási környezet:** `sync`
-**Belépési pont:** `elevenlabs.py`
+**Futtatási környezet:** `sync`  
+**Belépési pont:** `ASR/elevenlabs/elevenlabs.py`
 
-A szkript az Evenlabs speech-to-text API-t hívja meg, és a projekt `separated_audio_speech` mappájában található hangfájlokhoz normalizált `word_segments` listát ment el. Minden szó objektum tartalmazza a szót, a kezdő- és végidőt (másodpercben), opcionális pontossági értéket és – ha elérhető – a beszélő azonosítót.
+## Mit csinál?
+Evenlabs ASR API használata a projekthez tartozó hangfájlok feldolgozására, normalizált szó szintű (word_segments) JSON kimenettel.
 
-> **Fontos:** A keletkező `word_segments` JSON-t a következő lépésben a `scripts/ASR/resegment/resegment.py` szkripttel szükséges mondatszintre újraszegmentálni, ezért ezt a lépést illeszd be közvetlenül az elevenlabs futtatása után.
+A script a projekt hanganyagából készít átírást vagy újraszegmentált JSON-t, hogy a további fordítási és TTS lépések már strukturált bemenettel dolgozzanak.
 
-Példa kimenet:
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 
-```json
-{
-  "word_segments": [
-    {
-      "word": "If",
-      "start": 1.28,
-      "end": 1.46,
-      "score": null,
-      "speaker": "speaker_0"
-    }
-  ],
-  "language": "en",
-  "provider": "evenlabs",
-  "diarization": true
-}
-```
+## Opcionális paraméterek
+- `language` (opció;  kapcsoló: `--language`; alapértelmezés: nincs): A feldolgozás nyelve vagy a kész kimenet nyelvi kódja.
+- `model` (opció;  kapcsoló: `--model`; alapértelmezés: `scribe_v1_experimental`): A használt modell neve vagy azonosítója.
+- `api_url` (opció;  kapcsoló: `--api-url`; alapértelmezés: `https://api.elevenlabs.io/v1/speech-to-text`): Az API végpontja. Általában csak akkor módosítsd, ha saját vagy eltérő szolgáltatói endpointot használsz.
+- `api_key` (opció;  kapcsoló: `--api-key`; alapértelmezés: nincs): API kulcs az adott külső szolgáltatáshoz.
+- `no_diarize` (kapcsoló;  kapcsoló: `--no-diarize`; alapértelmezés: `false`): Kikapcsolja a beszélőfelismerést. Alapállapotban a script diarizációval dolgozik. Alapállapotban ki van kapcsolva; a kapcsoló aktiválásakor a script letilt egy belső funkciót.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
 
-## Kötelező beállítás
-- `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): A `workdir` alatti projektmappa neve, amelynek hanganyagát feldolgozza.
-
-## Opcionális beállítások
-- `language` (`--language`, option, alapértelmezés: nincs): ISO nyelvkód (pl. `en`, `hu`). Ha nincs megadva, az Evenlabs automatikus nyelvfelismerésével dolgozik.
-- `model` (`--model`, option, alapértelmezés: `scribe_v1_experimental`): Az Evenlabs ASR modell azonosítója.
-- `api_url` (`--api-url`, option, alapértelmezés: `https://api.elevenlabs.io/v1/speech-to-text`): A használni kívánt Evenlabs STT végpont.
-- `api_key` (`--api-key`, option, alapértelmezés: nincs): Evenlabs API kulcs. Megadáskor elmenti base64 formában a `keyholder.json` fájlba. Alternatíva az `EVENLABS_API_KEY` környezeti változó.
-- `diarize` (`--diarize` / `--no-diarize`, flag, alapértelmezés: `--diarize`): A diarizáció be- vagy kikapcsolása az API kérésben.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletes naplózás, figyelmeztetések megjelenítése.
-
-> **Megjegyzés:** A szkript minden feldolgozott hangfájllal azonos nevű `.json` fájlt hoz létre ugyanabban a mappában, amely az ElevenLabs válaszából származó normalizált `word_segments` listát tartalmazza.
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

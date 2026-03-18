@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "script": "AUDIO-VIDEO/merge_chunks_with_bacground_v1.1/merge_chunks_with_background_easy.py",
   "description": "A korábban generált szinkron darabokat összemuxolja a háttér audióval. Képes automatikusan felgyorsítani az egymásra lógó hangrészeket.",
   "required": [
@@ -24,7 +23,8 @@
       "flags": [
         "--background-volume"
       ],
-      "type": "option"
+      "type": "option",
+      "default": null
     },
     {
       "name": "time_stretching",
@@ -42,5 +42,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

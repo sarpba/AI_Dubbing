@@ -1,5 +1,4 @@
 {
-  "enviroment": "vibevoice",
   "script": "TTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
   "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból, továbbfejlesztett több-GPU kezeléssel és szegmensenkénti pitch ellenőrzéssel.",
   "required": [
@@ -259,5 +258,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "vibevoice"
 }

@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "script": "ASR/resegment/resegment.py",
   "description": "JSON szegmensek újraformázása - ASR script által létrehozott JSON fájlok biztonsági mentése és újraformázása különböző paraméterekkel.",
   "required": [
@@ -86,5 +85,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

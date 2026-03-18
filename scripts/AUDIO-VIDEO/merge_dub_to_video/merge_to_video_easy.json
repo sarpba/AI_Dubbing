@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "script": "AUDIO-VIDEO/merge_dub_to_video/merge_to_video_easy.py",
   "description": "A korábban létrehozott szinkron audiót összemuxolja a forrás videóval. Valamint ha volt felirat, feltöltve, vagy az eredeti videóból kinyerve, akkor azt is beágyazza a videóba.",
   "required": [
@@ -35,5 +34,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

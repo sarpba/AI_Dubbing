@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "script": "AUDIO-VIDEO/extract_audio_from_video/extract_audio_easy_channels.py",
   "description": "Az audio sávokat kinyeri a videó fájlokból, külön csatornákra bontva, vagy egy stereo csatornára muxolva.",
   "required": [
@@ -26,5 +25,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

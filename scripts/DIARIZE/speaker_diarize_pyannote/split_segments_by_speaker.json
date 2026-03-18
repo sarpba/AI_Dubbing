@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "api": "huggingface",
   "script": "DIARIZE/speaker_diarize_pyannote/split_segments_by_speaker.py",
   "description": "A beszéd szegmenseket beszélőnként szétválasztja.",
@@ -103,5 +102,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

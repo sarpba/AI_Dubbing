@@ -1,5 +1,4 @@
 {
-  "enviroment": "nemo",
   "script": "ASR/canary/canary-easy.py",
   "description": "A Canary ASR modell használata a beszéd szöveggé alakítására.",
   "required": [
@@ -118,5 +117,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "nemo"
 }

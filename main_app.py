@@ -547,6 +547,7 @@ PROJECT_AUTOFILL_OVERRIDES = {
     'project_path': 'project_path',
 }
 SECRET_PARAM_NAMES = {'auth_key', 'api_key', 'hf_token'}
+NEGATIVE_FLAG_NAME_PREFIXES: Tuple[str, ...] = ('no_', 'disable_', 'skip_', 'without_')
 ENCODED_SECRET_PREFIX = 'base64:'
 SECRET_VALUE_PLACEHOLDER = '***'
 ALLOWED_WORKFLOW_WIDGETS = {'reviewContinue', 'cycleWidget', 'translatedSplitLoopWidget'}
@@ -1165,6 +1166,26 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     api_name = raw_entry.get('api')
     parameters: List[Dict[str, Any]] = []
 
+    def humanize_param_name(name: str) -> str:
+        return name.replace('_', ' ').strip()
+
+    def strip_negative_prefix(name: str) -> str:
+        for prefix in NEGATIVE_FLAG_NAME_PREFIXES:
+            if name.startswith(prefix):
+                stripped = name[len(prefix):]
+                if stripped:
+                    return stripped
+        return name
+
+    def resolve_flag_mode(name: str, flags: List[str]) -> Tuple[str, str]:
+        positive_flag = next((flag for flag in flags if not flag.startswith('--no-')), None)
+        negative_flag = next((flag for flag in flags if flag.startswith('--no-')), None)
+        if negative_flag and not positive_flag:
+            if any(name.startswith(prefix) for prefix in NEGATIVE_FLAG_NAME_PREFIXES):
+                return 'negative_only_negative', humanize_param_name(strip_negative_prefix(name))
+            return 'negative_only_positive', humanize_param_name(name)
+        return 'standard', humanize_param_name(name)
+
     def append_params(param_list, required: bool):
         for param in param_list or []:
             name = param.get('name')
@@ -1173,14 +1194,21 @@ def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             param_type = param.get('type', 'option')
             flags = param.get('flags') or []
             default_value = param.get('default')
+            flag_mode = 'standard'
+            ui_name = humanize_param_name(name)
+            if param_type == 'flag':
+                flag_mode, ui_name = resolve_flag_mode(name, flags)
             parameters.append({
                 'name': name,
+                'ui_name': ui_name,
                 'type': param_type,
                 'flags': flags,
+                'flag_mode': flag_mode,
                 'required': required,
                 'autofill': infer_autofill_kind(name),
                 'secret': name in SECRET_PARAM_NAMES,
-                'default': default_value
+                'default': default_value,
+                'description': param.get('description')
             })
 
     append_params(raw_entry.get('required'), True)
@@ -1738,8 +1766,19 @@ def build_argument_fragment(param_meta: Dict[str, Any], value: Any) -> List[str]
         if not flags:
             return []
 
+        flag_mode = param_meta.get('flag_mode', 'standard')
         positive_flag = next((flag for flag in flags if not flag.startswith('--no-')), None)
         negative_flag = next((flag for flag in flags if flag.startswith('--no-')), None)
+
+        if flag_mode == 'negative_only_negative':
+            if value is True and negative_flag:
+                return [negative_flag]
+            return []
+
+        if flag_mode == 'negative_only_positive':
+            if value is False and negative_flag:
+                return [negative_flag]
+            return []
 
         if value is True:
             return [positive_flag] if positive_flag else []

@@ -1,113 +1,25 @@
-# Resegment MFA Script – JSON szegmensek MFA alapú finomítása
+# resegment-mfa
 
-## Áttekintés
+**Futtatási környezet:** `sync`  
+**Belépési pont:** `ASR/resegment-mfa/resegment-mfa.py`
 
-Ez a script az ASR által készített JSON fájlokat szegmentálja újra, miközben opcionálisan a Montreal Forced Aligner (MFA) segítségével finomítja a szó időbélyegeket. A folyamat elsősorban angol nyelvű anyagokra van optimalizálva, és az MFA `english_mfa` akusztikus modelljét, valamint szótárát használja. A script biztonsági mentést készít az eredeti JSON fájlról (kikapcsolható), majd az újraszegmentált tartalmat ugyanabba a fájlba írja vissza.
+## Mit csinál?
+Montreal Forced Aligner segítségével finomhangolt JSON szegmentálás – szó időbélyegek pontosítása és rugalmas újraformázás angol nyelvű projektekhez.
 
-## Főbb funkciók
+A script a projekt hanganyagából készít átírást vagy újraszegmentált JSON-t, hogy a további fordítási és TTS lépések már strukturált bemenettel dolgozzanak.
 
-- **MFA integráció**: Szó időbélyegek pontosítása a Montreal Forced Alignerrel
-- **Rugalmas szegmentálás**: Állítható szünet, időbélyeg padding és szegmenshossz paraméterek
-- **Speaker-alapú bontás**: Igény szerint szétszedi a szegmenseket beszélőváltásnál
-- **Egyszavas mód**: Minden szó külön szegmensbe helyezhető
-- **Biztonsági mentés**: Opcionális `.json.bak` mentés az eredeti állományról
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 
-## Előfeltételek
+## Opcionális paraméterek
+- `max_pause` (opció;  kapcsoló: `--max-pause`; alapértelmezés: `0.8`): Legfeljebb ekkora szünetet hagy a script egy szegmensen belül. Nagyobb érték hosszabb mondatrészeket eredményezhet.
+- `timestamp_padding` (opció;  kapcsoló: `--timestamp-padding`; alapértelmezés: `0.1`): Ennyi időt ad hozzá a szegmensek elejéhez és végéhez a kényelmesebb vágás érdekében.
+- `max_segment_duration` (opció;  kapcsoló: `--max-segment-duration`; alapértelmezés: `11.5`): A szegmensek maximális hossza másodpercben.
+- `enforce_single_speaker` (kapcsoló;  kapcsoló: `--enforce-single-speaker`; alapértelmezés: `false`): Arra kényszeríti az újraszegmentálást, hogy egy szegmens lehetőleg csak egy beszélőt tartalmazzon. Alapállapotban ki van kapcsolva.
+- `no_backup` (kapcsoló;  kapcsoló: `--no-backup`; alapértelmezés: `false`): Kikapcsolja a biztonsági mentés készítését. Alapállapotban a script mentést készít a módosított fájlokról. Alapállapotban ki van kapcsolva; a kapcsoló aktiválásakor a script letilt egy belső funkciót.
+- `use_mfa_refine` (kapcsoló;  kapcsoló: `--use-mfa-refine`; alapértelmezés: `false`): Bekapcsolja a Montreal Forced Aligner alapú pontosítást. Alapállapotban ki van kapcsolva.
+- `word_by_word_segments` (kapcsoló;  kapcsoló: `--word-by-word-segments`; alapértelmezés: `false`): A kimenetet a lehető legkisebb, szóközeli egységekre bontja. Alapállapotban ki van kapcsolva.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
 
-- Telepített `ffmpeg` eszköz a hangfájlok 16 kHz mono WAV formátumba konvertálásához
-- Telepített Montreal Forced Aligner (`pip install montreal-forced-aligner`, vagy hivatalos binary)
-- Letöltött MFA erőforrások:
-  ```bash
-  mfa model download acoustic english_mfa
-  mfa model download dictionary english_mfa
-  ```
-- Python `textgrid` csomag:
-  ```bash
-  pip install textgrid
-  ```
-
-## Használat
-
-### Alapvető futtatás
-
-```bash
-python scripts/ASR/resegment-mfa/resegment-mfa.py -p <projekt_név>
-```
-
-### Példa MFA finomítással
-
-```bash
-python scripts/ASR/resegment-mfa/resegment-mfa.py \
-  -p MyEnglishProject \
-  --max-pause 0.9 \
-  --timestamp-padding 0.15 \
-  --max-segment-duration 12.0 \
-  --enforce-single-speaker \
-  --use-mfa-refine
-```
-
-### Tippek
-
-- A `--use-mfa-refine` kapcsoló csak akkor működik, ha az adott JSON-hoz tartozó hangfájl (azonos fájlnévvel és `.wav/.mp3/.flac/.m4a/.ogg` kiterjesztéssel) elérhető.
-- Ha az MFA nem található vagy hibát ad, a script kihagyja az időbélyeg finomítást, és naplózza az okot.
-
-## Paraméterek
-
-### Kötelező
-
-- `-p`, `--project-name`: A projekt neve (a `config.json` `DIRECTORIES.workdir`/`<projekt>` alatt)
-
-### Opcionális
-
-- `--max-pause`: Szavak közötti maximális szünet másodpercben (alapértelmezett: 0.8)
-- `--timestamp-padding`: Szó időbélyegek bővítése másodpercben (alapértelmezett: 0.1)
-- `--max-segment-duration`: Egy szegmens maximális hossza másodpercben (alapértelmezett: 11.5)
-- `--enforce-single-speaker`: Szegmens bontása beszélőváltáskor (diarizáció szükséges)
-- `--no-backup`: Biztonsági mentés kikapcsolása
-- `--use-mfa-refine`: MFA-alapú szó időbélyeg finomítás bekapcsolása
-- `--word-by-word-segments`: Minden szó külön szegmens
-- `--debug`: Részletes naplózás bekapcsolása
-
-## Kimenet
-
-1. **Biztonsági mentés**: `<fájl>.json.bak` – ha a backup engedélyezve van
-2. **Új JSON**: Az eredeti állomány felülírása az újraszegmentált tartalommal
-
-### JSON példa (részlet)
-
-```json
-{
-  "segments": [...],
-  "word_segments": [...],
-  "provider": "resegment_mfa",
-  "resegment_parameters": {
-    "max_pause_s": 0.8,
-    "padding_s": 0.1,
-    "max_segment_s": 11.5,
-    "enforce_single_speaker": false,
-    "mfa_refine": true
-  },
-  "alignment_adjustment": {
-    "status": "applied_mfa_alignment",
-    "audio": "clip.wav"
-  }
-}
-```
-
-## Hibakezelés
-
-- **Hiányzó hangfájl**: Az MFA finomítás kimarad, a script figyelmeztetést ír a logba
-- **Érvénytelen JSON**: A fájl feldolgozása sikertelennek jelölődik, a script a következővel folytatja
-- **Mentési probléma**: A mentés hibáját a log tartalmazza, az eredeti fájl változatlan marad
-
-## Ajánlott munkafolyamat
-
-1. **ASR futtatása**: pl. `python scripts/ASR/elevenlabs/elevenlabs.py -p MyEnglishProject`
-2. **Resegment MFA teszt**: `python scripts/ASR/resegment-mfa/resegment-mfa.py -p MyEnglishProject --use-mfa-refine --no-backup`
-3. **Finomhangolás**: Paraméterek igazítása (`--max-pause`, `--timestamp-padding`) és végleges futtatás backup-pal
-
-## Megjegyzések
-
-- A script csak `.json` kiterjesztésű állományokat dolgoz fel az adott projekt `separated_audio_speech` mappájában.
-- Az MFA futása időigényes lehet; nagy projektek esetén célszerű előbb kisebb mintán tesztelni.
-- Ha a `textgrid` modul nincs telepítve, a script nem indul el – telepítése kötelező MFA módhoz.
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "script": "AUDIO-VIDEO/normalize_and_cut_tts_files/normalise_and_cut_json_easy_v1.1.py",
   "description": "A TTS-el generált audiókat az eredeti hangsáv alapján időben és hangerőben igazítja, a végeken automatikusan eltávolítja a hosszabb csendet FFmpeg silenceremove-val.",
   "required": [
@@ -43,5 +42,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

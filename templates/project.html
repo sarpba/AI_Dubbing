@@ -949,6 +949,68 @@
             return defaults;
         }
 
+        function normalizeFlagValue(value) {
+            if (value === undefined || value === null) {
+                return undefined;
+            }
+            if (typeof value === 'string') {
+                const trimmed = value.trim().toLowerCase();
+                if (trimmed === 'true' || trimmed === '1') {
+                    return true;
+                }
+                if (trimmed === 'false' || trimmed === '0') {
+                    return false;
+                }
+                return trimmed.length > 0;
+            }
+            return Boolean(value);
+        }
+
+        function getFlagMode(param) {
+            return (param && param.flag_mode) || 'standard';
+        }
+
+        function getParamLabel(param) {
+            return (param && (param.ui_name || param.name)) || '';
+        }
+
+        function getDisplayFlagValue(param, rawValue, defaultValue) {
+            const normalizedRaw = normalizeFlagValue(rawValue);
+            const normalizedDefault = normalizeFlagValue(defaultValue);
+            const effectiveRaw = normalizedRaw !== undefined ? normalizedRaw : normalizedDefault;
+            if (effectiveRaw === undefined) {
+                return false;
+            }
+            if (getFlagMode(param) === 'negative_only_negative') {
+                return !effectiveRaw;
+            }
+            return effectiveRaw;
+        }
+
+        function getStoredFlagValue(param, displayValue) {
+            if (getFlagMode(param) === 'negative_only_negative') {
+                return !displayValue;
+            }
+            return displayValue;
+        }
+
+        function serializeDatasetBool(value) {
+            if (value === undefined) {
+                return 'none';
+            }
+            return value ? 'true' : 'false';
+        }
+
+        function parseDatasetBool(value) {
+            if (value === 'true') {
+                return true;
+            }
+            if (value === 'false') {
+                return false;
+            }
+            return undefined;
+        }
+
         function buildWorkdirUrl(relativePath) {
             const segments = [PROJECT_NAME];
             if (relativePath) {
@@ -2045,22 +2107,24 @@
                 return t('workflow.messages.missing_required', { missing: missing.join(', ') }, `Missing required parameters: ${missing.join(', ')}`);
             }
             const summary = [];
+            const defaults = getScriptParamDefaults(script);
             if (script && script.parameters) {
                 script.parameters.forEach(param => {
                     const value = step.params ? step.params[param.name] : undefined;
+                    const defaultValue = defaults.has(param.name) ? defaults.get(param.name) : undefined;
                     const hasValue = value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
                     if (param.type === 'flag') {
-                        if (value === true) {
-                            summary.push(`${param.name}=on`);
-                        } else if (value === false) {
-                            summary.push(`${param.name}=off`);
+                        const resolvedValue = hasValue ? value : defaultValue;
+                        if (resolvedValue !== undefined) {
+                            const displayValue = getDisplayFlagValue(param, resolvedValue, defaultValue);
+                            summary.push(`${getParamLabel(param)}=${displayValue ? 'on' : 'off'}`);
                         }
                     } else if (param.secret) {
                         if (hasValue) {
-                            summary.push(`${param.name}=${SECRET_VALUE_PLACEHOLDER}`);
+                            summary.push(`${getParamLabel(param)}=${SECRET_VALUE_PLACEHOLDER}`);
                         }
                     } else if (hasValue) {
-                        summary.push(`${param.name}=${value}`);
+                        summary.push(`${getParamLabel(param)}=${value}`);
                     }
                 });
             }
@@ -3599,7 +3663,7 @@
                     group.className = 'border rounded p-2 bg-body-tertiary';
                     const label = document.createElement('div');
                     label.className = 'fw-semibold';
-                    label.textContent = param.name;
+                    label.textContent = getParamLabel(param);
                     const help = document.createElement('div');
                     help.className = 'small text-muted';
                     help.textContent = param.autofill === 'project_name'
@@ -3618,49 +3682,25 @@
                     input.id = `workflow-param-${param.name}`;
                     input.dataset.param = param.name;
                     input.dataset.type = param.type;
-                    const normalizeFlag = value => {
-                        if (value === undefined || value === null) {
-                            return undefined;
-                        }
-                        if (typeof value === 'string') {
-                            const trimmed = value.trim().toLowerCase();
-                            if (trimmed === 'true') {
-                                return true;
-                            }
-                            if (trimmed === 'false') {
-                                return false;
-                            }
-                            if (trimmed === '1') {
-                                return true;
-                            }
-                            if (trimmed === '0') {
-                                return false;
-                            }
-                            return trimmed.length > 0;
-                        }
-                        return Boolean(value);
-                    };
-                    const normalizedRaw = normalizeFlag(rawValue);
-                    const defaultFlag = hasDefault ? normalizeFlag(defaultValue) : undefined;
-                    if (normalizedRaw !== undefined) {
-                        input.checked = normalizedRaw;
-                    } else {
-                        input.checked = false;
-                    }
-                    if (defaultFlag === undefined) {
-                        input.dataset.defaultValue = 'none';
-                    } else {
-                        input.dataset.defaultValue = defaultFlag ? 'true' : 'false';
-                    }
+                    input.dataset.flagMode = getFlagMode(param);
+                    const defaultFlag = hasDefault ? normalizeFlagValue(defaultValue) : undefined;
+                    input.checked = getDisplayFlagValue(param, rawValue, defaultValue);
+                    input.dataset.defaultRawValue = serializeDatasetBool(defaultFlag);
                     const label = document.createElement('label');
                     label.className = 'form-check-label';
                     label.setAttribute('for', input.id);
-                    label.textContent = param.name;
+                    label.textContent = getParamLabel(param);
                     group.append(input, label);
+                    if (param.description) {
+                        const descriptionInfo = document.createElement('div');
+                        descriptionInfo.className = 'form-text';
+                        descriptionInfo.textContent = param.description;
+                        group.append(descriptionInfo);
+                    }
                     if (defaultFlag !== undefined) {
                         const defaultInfo = document.createElement('div');
                         defaultInfo.className = 'form-text';
-                        defaultInfo.textContent = defaultFlag
+                        defaultInfo.textContent = getDisplayFlagValue(param, defaultFlag, defaultFlag)
                             ? t('workflow.labels_extra.default_flag_on')
                             : t('workflow.labels_extra.default_flag_off');
                         group.append(defaultInfo);
@@ -3670,7 +3710,7 @@
                     const label = document.createElement('label');
                     label.className = 'form-label fw-semibold';
                     label.setAttribute('for', `workflow-param-${param.name}`);
-                    label.textContent = param.name + (param.required ? ' *' : '');
+                    label.textContent = getParamLabel(param) + (param.required ? ' *' : '');
                     group.append(label);
                     const input = document.createElement('input');
                     input.className = 'form-control';
@@ -3740,6 +3780,12 @@
                         }
                     }
                     group.append(input);
+                    if (param.description) {
+                        const descriptionInfo = document.createElement('div');
+                        descriptionInfo.className = 'form-text';
+                        descriptionInfo.textContent = param.description;
+                        group.append(descriptionInfo);
+                    }
                     if (helper) {
                         group.append(helper);
                     }
@@ -3868,20 +3914,15 @@
                 const name = input.dataset.param;
                 const type = input.dataset.type;
                 if (type === 'flag') {
-                    const defaultAttr = input.dataset.defaultValue || 'none';
-                    let defaultValue;
-                    if (defaultAttr === 'true') {
-                        defaultValue = true;
-                    } else if (defaultAttr === 'false') {
-                        defaultValue = false;
-                    } else {
-                        defaultValue = undefined;
-                    }
-                    const checked = input.checked;
-                    if (defaultValue !== undefined && checked === defaultValue) {
+                    const flagMode = input.dataset.flagMode || 'standard';
+                    const defaultValue = parseDatasetBool(input.dataset.defaultRawValue || 'none');
+                    const storedValue = flagMode === 'negative_only_negative'
+                        ? !input.checked
+                        : input.checked;
+                    if (defaultValue !== undefined && storedValue === defaultValue) {
                         delete newParams[name];
                     } else {
-                        newParams[name] = checked;
+                        newParams[name] = storedValue;
                     }
                 } else {
                     const isSecret = input.dataset.secret === 'true';
@@ -4988,7 +5029,7 @@
         });
     </script>
 </head>
-<body>
+<body class="app-shell">
     {% macro render_file_tree(entries) -%}
         <ul class="file-browser-tree list-unstyled mb-0">
             {%- for entry in entries %}
@@ -5062,8 +5103,8 @@
         </button>
     </div>
 
-    <div class="container mt-4">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+    <div class="container mt-4 page-shell">
+        <div class="page-header-surface">
             <h1 class="mb-0">{{ translate('header.title', project=project.name) }}</h1>
             <a href="/" class="btn btn-secondary">{{ translate('header.back_to_home') }}</a>
         </div>

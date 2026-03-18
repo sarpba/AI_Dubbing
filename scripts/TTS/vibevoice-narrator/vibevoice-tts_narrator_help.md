@@ -1,36 +1,43 @@
-# vibevoice-tts_narrátor – konfigurációs útmutató
+# vibevoice-tts_narrator
 
 **Futtatási környezet:** `vibevoice`  
-**Belépési pont:** `vibevoice-tts_narrator.py`
+**Belépési pont:** `TTS/vibevoice-narrator/vibevoice-tts_narrator.py`
 
-A szkript a standard `vibevoice-tts` folyamatot bővíti azzal, hogy a narrátor hangmintát nem a fordított sávokból vágja ki, hanem egy külön megadott könyvtárban található, egyetlen WAV fájlból tölti be. A betöltött referencia hangra ugyanazokat az EQ, normalizálási és újramintavételezési lépéseket alkalmazza, majd minden szegmenshez ugyanazt a mintát használja a VibeVoice TTS modell betanításához.
+## Mit csinál?
+A VibeVoice modellt használja a fordított szegmensek szintetizálására, miközben a narrátor hangját egy külön könyvtárban lévő, egyetlen WAV fájlból veszi.
 
-## Kötelező beállítások
-- `project_name` (pozícionális, alapértelmezés: nincs): A `workdir` alatti projekt azonosítója, amelynek szegmenseit feldolgozzuk.
-- `norm` (`--norm`, option, alapértelmezés: nincs): Normalizálási profil (pl. `hun`, `eng`). Meghatározza a szöveg-előkészítést és a Whisper ellenőrzés nyelvét.
-- `narrator` (`--narrator`, option, alapértelmezés: nincs): A narrátor referencia könyvtár elérési útja. A mappában pontosan egy darab `.wav` fájlnak kell lennie; ezt a szkript ideiglenes fájlba konvertálja, és minden szegmenshez ezt használja hangmintaként.
+A script a lefordított szegmensekből generál szinkronhangot, és a létrejött hangfájlokat a projekt TTS kimenetei közé menti.
 
-## Opcionális beállítások
-- `model_path` / `model_dir`: A VibeVoice modell vagy lokális könyvtár elérési útja. Ha mindkettő meg van adva, a `model_dir` élvez elsőbbséget.
-- `checkpoint_path`: LoRA vagy adapter könyvtár, amelyet betölt a modellre.
-- `device`: Cél eszköz (`cuda`, `mps`, `cpu`, `auto`). Több GPU esetén automatikusan szétosztja a szegmenseket.
-- `cfg_scale`, `disable_prefill`, `ddpm_steps`: A VibeVoice generálás finomhangolása (CF guidance, prefill kikapcsolása, diffúziós lépések száma).
-- `eq_config`: EQ görbét tartalmazó JSON. Ha létezik, a narrátor mintára alkalmazzuk, mielőtt ideiglenes fájlba írnánk.
-- `normalize_ref_audio`, `ref_audio_peak`: A narrátor referencia hang normalizálása a megadott csúcsértékre.
-- `target_sample_rate`: Ha >0, a narrátor mintát erre a mintavételi frekvenciára reszámpláljuk.
-- `speaker_name`: A beszélő prefixe, amelyet a szkript automatikusan beilleszt a generálandó szöveg elejére, ha hiányzik.
-- `seed`, `max_retries`, `tolerance_factor`, `min_tolerance`, `whisper_model`, `beam_size`: A Whisper-alapú visszaellenőrzés és újragenerálás paraméterei, megegyeznek az alap szkripttel.
-- `max_segments`, `overwrite`, `save_failures`, `keep_best_over_tolerance`, `max_workers`, `debug`: Debug és futtatási beállítások a feldolgozás limitálására, logolásra, illetve hibás kimenetek mentésére.
+## Kötelező paraméterek
+- `project_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+- `norm` (opció;  kapcsoló: `--norm`; alapértelmezés: nincs): A használt normalizálási profil neve. Ez határozza meg a szöveg-előkészítés nyelvi szabályait.
+- `narrator` (opció;  kapcsoló: `--narrator`; alapértelmezés: nincs): A narrátor referenciahangját tartalmazó fájl vagy mappa.
 
-## Folyamat áttekintése
-1. A projektből betölti a `translated` JSON-t, és előkészíti a kimeneti mappákat (`translated_splits`, `noice_splits`).
-2. Kiválasztja a narrátor könyvtár egyetlen WAV fájlját, alkalmazza az EQ/normalizálás/reszámplálás lépéseket, majd ideiglenes fájlba menti.
-3. (Opcionálisan) a projekt eredeti hivatkozó sávjából kimenti a zaj-szegmenseket változatlan módon.
-4. A szegmenseket a kiválasztott eszköz(ök)re osztja ki, minden szegmensnél ugyanazzal a narrátor mintával futtatja a VibeVoice modellt, majd Whisperrel ellenőrzi az eredményt (ha `--seed -1`).
-5. A sikeres szegmenseket beírja a `translated_splits` mappába, opcionálisan menti a sikertelen próbálkozásokat diagnosztikai célra.
+## Opcionális paraméterek
+- `model_path` (opció;  kapcsoló: `--model_path`; alapértelmezés: `sarpba/VibeVoice-large-HUN`): A betöltendő modell Hugging Face azonosítója vagy lokális útvonala.
+- `model_dir` (opció;  kapcsoló: `--model_dir`; alapértelmezés: nincs): Lokális modellkönyvtár. Ha meg van adva, a script ezt részesíti előnyben a távoli modellazonosítóval szemben.
+- `checkpoint_path` (opció;  kapcsoló: `--checkpoint_path`; alapértelmezés: nincs): Opcionális checkpoint vagy adapter fájl, amelyet a script az alapmodell fölé tölt be.
+- `device` (opció;  kapcsoló: `--device`; alapértelmezés: `auto`): A futtatás eszköze, például `cpu`, `cuda`, `cuda:0` vagy `mps`.
+- `cfg_scale` (opció;  kapcsoló: `--cfg_scale`; alapértelmezés: `1.3`): A stílus- és tartalomkövetés erőssége generálás közben.
+- `disable_prefill` (kapcsoló;  kapcsoló: `--disable_prefill`; alapértelmezés: `false`): Kikapcsolja az előfeltöltési vagy voice-cloning előkészítő lépést. Alapállapotban ki van kapcsolva.
+- `ddpm_steps` (opció;  kapcsoló: `--ddpm_steps`; alapértelmezés: `10`): A diffúziós generálás lépésszáma.
+- `eq_config` (opció;  kapcsoló: `--eq_config`; alapértelmezés: nincs): EQ beállításokat tartalmazó JSON fájl a referenciahang előkészítéséhez.
+- `normalize_ref_audio` (kapcsoló;  kapcsoló: `--normalize_ref_audio`; alapértelmezés: `false`): A referenciahangot egységes hangerőre normalizálja a generálás előtt. Alapállapotban ki van kapcsolva.
+- `ref_audio_peak` (opció;  kapcsoló: `--ref_audio_peak`; alapértelmezés: `0.95`): A referenciahang cél csúcsszintje normalizáláskor.
+- `target_sample_rate` (opció;  kapcsoló: `--target_sample_rate`; alapértelmezés: `16000`): A referenciahang cél mintavételi frekvenciája.
+- `speaker_name` (opció;  kapcsoló: `--speaker_name`; alapértelmezés: `Speaker 1`): A generált szöveghez és hanghoz használt beszélőnév vagy címke.
+- `max_retries` (opció;  kapcsoló: `--max_retries`; alapértelmezés: `5`): Ennyiszer próbálkozik újra, ha az ellenőrzés vagy a generálás nem ad elfogadható eredményt.
+- `tolerance_factor` (opció;  kapcsoló: `--tolerance_factor`; alapértelmezés: `1.0`): Az ellenőrző összehasonlítás tűrésének szorzója.
+- `min_tolerance` (opció;  kapcsoló: `--min_tolerance`; alapértelmezés: `2`): A minimálisan megengedett tűrés.
+- `whisper_model` (opció;  kapcsoló: `--whisper_model`; alapértelmezés: `openai/whisper-large-v3`): A belső ellenőrzéshez használt Whisper modell.
+- `beam_size` (opció;  kapcsoló: `--beam_size`; alapértelmezés: `5`): A keresés szélessége. Nagyobb érték jobb minőséget, de lassabb futást eredményezhet.
+- `seed` (opció;  kapcsoló: `--seed`; alapértelmezés: `-1`): A véletlenmag. Fix értékkel reprodukálhatóbb, `-1` esetén változatosabb eredmény várható.
+- `max_segments` (opció;  kapcsoló: `--max_segments`; alapértelmezés: nincs): A feldolgozható szegmensek számát korlátozza teszteléshez vagy gyors próbafutáshoz.
+- `overwrite` (kapcsoló;  kapcsoló: `--overwrite`; alapértelmezés: `false`): A már meglévő kimeneti fájlokat is újragenerálja vagy felülírja. Alapállapotban ki van kapcsolva.
+- `save_failures` (kapcsoló;  kapcsoló: `--save_failures`; alapértelmezés: `false`): Elmenti a sikertelen vagy elutasított generálásokat további elemzésre. Alapállapotban ki van kapcsolva.
+- `keep_best_over_tolerance` (kapcsoló;  kapcsoló: `--keep_best_over_tolerance`; alapértelmezés: `false`): Ha nincs teljesen megfelelő eredmény, megtartja a legjobb próbálkozást is. Alapállapotban ki van kapcsolva.
+- `max_workers` (opció;  kapcsoló: `--max_workers`; alapértelmezés: nincs): A párhuzamosan dolgozó munkafolyamatok maximális száma.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
 
-## Hasznos tippek
-- Ügyelj rá, hogy a narrátor könyvtárban tényleg csak egy `.wav` fájl legyen, különben a szkript hibát dob.
-- Hosszabb narrátor mintát is használhatsz; a szkript csak egyszer tölti be és előkészíti, majd minden worker ugyanazt az ideiglenes fájlt olvassa.
-- Ha új EQ vagy normalizálási beállításokat próbálnál ki, egyszerűen add meg a megfelelő flaget; a narrátor referencia újra lesz generálva a futtatás elején.
-- Több GPU esetén érdemes `--max_workers` értéket megadni, hogy kontrolláld az egyidejű példányok számát.
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

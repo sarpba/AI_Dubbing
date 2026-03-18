@@ -1,17 +1,21 @@
-# audio-copy-helper – konfigurációs útmutató
+# audio-copy-helper
 
 **Futtatási környezet:** `sync`  
-**Belépési pont:** `audio-copy-helper.py`
+**Belépési pont:** `AUDIO-VIDEO/audio_copy_helper/audio-copy-helper.py`
 
-A segédszkript a projekt `upload` mappájában lévő audió fájlokat 44,1 kHz-es WAV formátumba konvertálja, majd a megadott célmappákba másolja őket. A háttér sáv esetében néma (0 hangerős) változatot készít.
+## Mit csinál?
+Az upload mappába érkező audió fájlokat 44,1 kHz-es WAV formátumba alakítja, majd a kiválasztott projekt mappákba másolja őket.
 
-## Kötelező beállítás
-- `project_name` (`-p`, `--project-name`, option, alapértelmezés: nincs): Annak a projektmappának a neve, amelynek `upload` könyvtárában találhatók az átkonvertálandó fájlok.
+A script a projekt audio- és videófájljait készíti elő, alakítja át vagy fűzi össze a szinkronizálási pipeline következő lépéseihez.
 
-## Opcionális beállítások
-- `extracted_audio` (`--extracted_audio`, flag, alapértelmezés: `false`): A konvertált fájlt elhelyezi a `1.5_extracted_audio` mappában.
-- `separated_audio_background` (`--separated_audio_background`, flag, alapértelmezés: `false`): Néma másolatot készít a `2_separated_audio_background` mappába.
-- `separated_audio_speech` (`--separated_audio_speech`, flag, alapértelmezés: `false`): A konvertált hangot a `2_separated_audio_speech` mappába másolja.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Részletesebb naplózás engedélyezése.
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-p`, `--project-name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
 
-> 💡 Tipp: legalább egy célkapcsolót aktiválj, különben a szkript hibaüzenettel leáll.
+## Opcionális paraméterek
+- `extracted_audio` (kapcsoló;  kapcsoló: `--extracted_audio`; alapértelmezés: `false`): A konvertált hangfájlt az `extracted_audio` mappába másolja. Alapállapotban ki van kapcsolva.
+- `separated_audio_background` (kapcsoló;  kapcsoló: `--separated_audio_background`; alapértelmezés: `false`): A konvertált hangfájlt a háttérhang mappájába másolja. Alapállapotban ki van kapcsolva.
+- `separated_audio_speech` (kapcsoló;  kapcsoló: `--separated_audio_speech`; alapértelmezés: `false`): A konvertált hangfájlt a beszédhang mappájába másolja. Alapállapotban ki van kapcsolva.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

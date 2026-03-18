@@ -1,5 +1,4 @@
 {
-  "enviroment": "sync",
   "api": "chatgpt",
   "script": "TRANSLATE/chatgpt/translate_chatgpt.py",
   "description": "Projekt-alapú JSON fordítás ChatGPT segítségével, intelligens csoportosítással és folytatható futással.",
@@ -95,5 +94,6 @@
       "type": "flag",
       "default": false
     }
-  ]
+  ],
+  "environment": "sync"
 }

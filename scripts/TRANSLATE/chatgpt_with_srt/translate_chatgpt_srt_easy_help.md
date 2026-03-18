@@ -1,20 +1,25 @@
-# translate_chatgpt_srt_easy_codex – konfigurációs útmutató
+# translate_chatgpt_srt_easy
 
 **Futtatási környezet:** `sync`  
-**API:** `chatgpt`  
-**Belépési pont:** `translate_chatgpt_srt_easy.py`
+**Belépési pont:** `TRANSLATE/chatgpt_with_srt/translate_chatgpt_srt_easy.py`
 
-A szkript a ChatGPT API-t használja arra, hogy a projekt időzített transzkripcióját cél nyelvre fordítsa, miközben opcionálisan figyelembe veszi az eredeti feliratot (SRT) kontextusként. A kulcsokat a `keyholder.json` fájlban tárolja, és gondoskodik a chunkolt feldolgozásról a tokénlimit elkerülésére.
+## Mit csinál?
+A beolvasott időzített transcripciót a rendelkezésre álló feliratot felhasználva lefordítja a kívánt nyelvre a ChatGPT segítségével.
 
-## Kötelező beállítás
-- `project_name` (`-project_name`, option, alapértelmezés: nincs): A `workdir` alatti projekt neve, amelynek anyagát fordítani kell.
+A script a projekt szöveges JSON-jait fordítja a megadott cél nyelvre, és a fordítást a projekt megfelelő kimeneti mappájába menti.
 
-## Opcionális beállítások
-- `input_language` (`-input_language`, option, alapértelmezés: `EN`): A transzkriptben várható bemeneti nyelv kódja. A script ezt használja a kontextusfájl kiválasztásához.
-- `output_language` (`-output_language`, option, alapértelmezés: `HU`): A kívánt célnyelv kódja; az SRT kontextuskeresés is ezt veszi alapul.
-- `auth_key` (`-auth_key`, option, alapértelmezés: nincs): OpenAI API kulcs. Megadáskor base64 kódolással a `keyholder.json`-ba menti, különben onnan próbálja visszatölteni.
-- `context` (`-context`, option, alapértelmezés: nincs): A paraméter jelen változatban figyelmen kívül marad; megtartották kompatibilitási okokból.
-- `model` (`-model`, option, alapértelmezés: `gpt-4o`): A használandó OpenAI modell azonosítója. Bármely támogatott ChatGPT modell megadható.
-- `stream` (`-stream`, flag, alapértelmezés: `false`): Valós idejű streamelt választ kér a kliensből, így futás közben is látszik az előrehaladás.
-- `allow_sensitive_content` (`--allow-sensitive-content`/`--no-allow-sensitive-content`, flag, alapértelmezés: `true`): A jelenlegi implementáció nem használja, de a CLI kompatibilitás miatt szerepel.
-- `debug` (`--debug`, flag, alapértelmezés: `false`): Extra naplózást kapcsol be a `tools.debug_utils` modulon keresztül.
+## Kötelező paraméterek
+- `project_name` (opció;  kapcsoló: `-project_name`; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+
+## Opcionális paraméterek
+- `input_language` (opció;  kapcsoló: `-input_language`; alapértelmezés: `EN`): A forrás szöveg nyelve. Ha nincs megadva, a script a konfigurációból vagy automatikus felismerésből indul ki.
+- `output_language` (opció;  kapcsoló: `-output_language`; alapértelmezés: `HU`): A lefordított szöveg cél nyelve.
+- `auth_key` (opció;  kapcsoló: `-auth_key`; alapértelmezés: nincs): API kulcs az adott külső szolgáltatáshoz. Megadva a rendszer elmentheti későbbi használatra.
+- `context` (opció;  kapcsoló: `-context`; alapértelmezés: nincs): Rövid tartalmi kontextus, ami segíti a modell stílus- és szóhasználatbeli döntéseit.
+- `model` (opció;  kapcsoló: `-model`; alapértelmezés: `gpt-4o`): A használt modell neve vagy azonosítója.
+- `stream` (kapcsoló;  kapcsoló: `-stream`; alapértelmezés: `false`): A válasz és az előrehaladás folyamatos kiírása futás közben. Alapállapotban ki van kapcsolva.
+- `allow_sensitive_content` (kapcsoló;  kapcsoló: `--allow-sensitive-content`, `--no-allow-sensitive-content`; alapértelmezés: `true`): Engedélyezi, hogy a fordítás érzékeny, nyers vagy felnőtt tartalmat is pontosabban kezeljen. Mindkét állapot explicit megadható a kapcsolópárral.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.
