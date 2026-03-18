@@ -58,174 +58,44 @@
         let videoPreviewModal = null;
         let jsonPreviewModal = null;
 
-        const workflowWidgets = [
-            {
-                id: 'reviewContinue',
-                name: t('workflow.widgets.review.name', {}, 'Review + Continue'),
-                description: t('workflow.widgets.review.description'),
-                continueLabel: t('workflow.widgets.review.continue_label', {}, 'Continue'),
-                reviewLabel: t('workflow.widgets.review.review_label', {}, 'Review')
-            },
-            {
-                id: 'cycleWidget',
-                name: t('workflow.widgets.cycle.name', {}, 'Cycle'),
-                description: t('workflow.widgets.cycle.description'),
-                continueLabel: t('workflow.widgets.cycle.continue_label', {}, 'Run cycle'),
-                reviewLabel: t('workflow.widgets.cycle.review_label', {}, 'Review'),
-                parameters: [
-                    {
-                        name: 'repeat_count',
-                        label: t('workflow.widgets.cycle.parameters.repeat.label'),
-                        type: 'number',
-                        min: 1,
-                        step: 1,
-                        default: 1,
-                        required: true,
-                        helper: t('workflow.widgets.cycle.parameters.repeat.helper')
-                    },
-                    {
-                        name: 'step_back',
-                        label: t('workflow.widgets.cycle.parameters.step_back.label'),
-                        type: 'number',
-                        min: 1,
-                        step: 1,
-                        default: 1,
-                        required: true,
-                        helper: t('workflow.widgets.cycle.parameters.step_back.helper')
-                    }
-                ],
-                help: t('workflow.widgets.cycle.help')
-            },
-            {
-                id: 'translatedSplitLoopWidget',
-                name: t('workflow.widgets.segment_loop.name', {}, 'Translated Split Loop'),
-                description: t(
-                    'workflow.widgets.segment_loop.description',
-                    {},
-                    'Checks translated split progress and reruns the post-review block until enough files are ready.'
-                ),
-                continueLabel: t('workflow.widgets.segment_loop.continue_label', {}, 'Check loop'),
-                reviewLabel: t('workflow.widgets.segment_loop.review_label', {}, 'Review'),
-                parameters: [
-                    {
-                        name: 'allowed_missing_segments',
-                        label: t('workflow.widgets.segment_loop.parameters.allowed_missing.label'),
-                        type: 'number',
-                        min: 0,
-                        step: 1,
-                        default: 0,
-                        required: true,
-                        helper: t('workflow.widgets.segment_loop.parameters.allowed_missing.helper')
-                    }
-                ],
-                help: t('workflow.widgets.segment_loop.help')
-            }
-        ];
+        const workflowWidgetApi = window.ProjectWorkflowWidgets || {};
+        const workflowStateApi = window.ProjectWorkflowState || {};
+        const workflowWidgets = workflowWidgetApi.createWorkflowWidgets ? workflowWidgetApi.createWorkflowWidgets(t) : [];
 
         function findWidgetById(widgetId) {
-            if (!widgetId) {
-                return null;
-            }
-            return workflowWidgets.find(widget => widget.id === widgetId) || null;
+            return workflowWidgetApi.findWidgetById(workflowWidgets, widgetId);
         }
 
         function normalizeWorkflowStep(step) {
-            if (!step || typeof step !== 'object') {
-                return;
-            }
-            if (!step.type) {
-                if (step.widget) {
-                    step.type = 'widget';
-                } else if (step.script) {
-                    step.type = 'script';
-                }
-            }
-            if (step.type === 'widget') {
-                if (!step.widget) {
-                    step.widget = 'unknownWidget';
-                }
-                if (step.enabled === undefined) {
-                    step.enabled = true;
-                }
-                if (!step.params || typeof step.params !== 'object') {
-                    step.params = {};
-                }
-                const widgetMeta = findWidgetById(step.widget);
-                if (widgetMeta && Array.isArray(widgetMeta.parameters)) {
-                    widgetMeta.parameters.forEach(param => {
-                        if (param && param.name && step.params[param.name] === undefined && param.default !== undefined) {
-                            step.params[param.name] = param.default;
-                        }
-                    });
-                }
-            } else {
-                step.type = 'script';
-                if (step.enabled === undefined) {
-                    step.enabled = true;
-                }
-                if (step.halt_on_fail === undefined) {
-                    step.halt_on_fail = true;
-                }
-                if (!step.params || typeof step.params !== 'object') {
-                    step.params = {};
-                }
-            }
+            return workflowWidgetApi.normalizeWorkflowStep(step, workflowWidgets);
         }
 
         function normalizeWorkflowStepList(steps) {
-            (steps || []).forEach(normalizeWorkflowStep);
-            return steps || [];
+            return workflowWidgetApi.normalizeWorkflowStepList(steps, workflowWidgets);
         }
 
         function buildRunStepFromWorkflowStep(step) {
-            return {
-                script: step.script,
-                enabled: true,
-                halt_on_fail: step.halt_on_fail !== false,
-                params: cloneObject(step.params)
-            };
+            return workflowWidgetApi.buildRunStepFromWorkflowStep(step, cloneObject);
         }
 
         function collectWorkflowSegment(startIndex = 0) {
-            const segment = {
-                startIndex,
-                steps: [],
-                widgetIndex: null
-            };
-            for (let i = startIndex; i < workflowSteps.length; i++) {
-                const step = workflowSteps[i];
-                if (step.type === 'widget') {
-                    if (step.enabled !== false) {
-                        segment.widgetIndex = i;
-                        break;
-                    }
-                    continue;
-                }
-                if (step.enabled === false) {
-                    continue;
-                }
-                segment.steps.push(buildRunStepFromWorkflowStep(step));
-            }
-            return segment;
+            return workflowWidgetApi.collectWorkflowSegment(workflowSteps, cloneObject, startIndex);
         }
 
         function collectScriptStepsForRun(startIndex = 0) {
-            return collectWorkflowSegment(startIndex).steps;
+            return workflowWidgetApi.collectScriptStepsForRun(workflowSteps, cloneObject, startIndex);
         }
 
         function collectWorkflowState() {
-            return cloneSteps(workflowSteps);
+            return workflowWidgetApi.collectWorkflowState(workflowSteps, cloneSteps);
         }
 
         function buildWorkflowSnapshot() {
-            return {
-                steps: collectWorkflowState(),
-                template_id: currentTemplateId || null
-            };
+            return workflowWidgetApi.buildWorkflowSnapshot(workflowSteps, currentTemplateId, cloneSteps);
         }
 
         function hasEnabledScriptStep(steps) {
-            return (steps || []).some(step => step && step.type !== 'widget' && step.enabled !== false);
+            return workflowWidgetApi.hasEnabledScriptStep(steps);
         }
 
         function resetWorkflowAutoSave() {
@@ -252,111 +122,34 @@
         }
 
         async function runWorkflowAutoSave() {
-            workflowAutoSaveTimer = null;
-            if (!workflowAutoSaveEnabled || workflowSuppressAutoSave) {
-                return;
-            }
-            if (!workflowAutoSavePending) {
-                return;
-            }
-            if (workflowSaving) {
-                scheduleWorkflowAutoSave(300);
-                return;
-            }
-
-            const snapshot = buildWorkflowSnapshot();
-            const snapshotKey = JSON.stringify(snapshot);
-            if (snapshotKey === workflowLastSavedSnapshot) {
-                workflowAutoSavePending = false;
-                return;
-            }
-
-            if (!hasEnabledScriptStep(snapshot.steps)) {
-                workflowLastSavedSnapshot = snapshotKey;
-                workflowAutoSavePending = false;
-                return;
-            }
-
-            workflowSaving = true;
-            try {
-                const payload = {
-                    steps: snapshot.steps,
-                    template_id: snapshot.template_id,
-                    saved_at: new Date().toISOString()
-                };
-                await persistProjectWorkflowState(payload);
-                workflowLastSavedSnapshot = snapshotKey;
-                workflowAutoSavePending = false;
-            } catch (error) {
-                console.error(t('js.logs.workflow_state_save_failed'), error);
-                workflowAutoSavePending = true;
-                scheduleWorkflowAutoSave(2000);
-            } finally {
-                workflowSaving = false;
-            }
+            return workflowStateApi.runWorkflowAutoSave({
+                projectName: PROJECT_NAME,
+                t,
+                buildWorkflowSnapshot,
+                hasEnabledScriptStep,
+                scheduleWorkflowAutoSave,
+                getWorkflowAutoSaveEnabled: () => workflowAutoSaveEnabled,
+                getWorkflowSuppressAutoSave: () => workflowSuppressAutoSave,
+                getWorkflowAutoSavePending: () => workflowAutoSavePending,
+                getWorkflowSaving: () => workflowSaving,
+                getWorkflowLastSavedSnapshot: () => workflowLastSavedSnapshot,
+                setWorkflowAutoSaveTimer: value => { workflowAutoSaveTimer = value; },
+                setWorkflowAutoSavePending: value => { workflowAutoSavePending = value; },
+                setWorkflowSaving: value => { workflowSaving = value; },
+                setWorkflowLastSavedSnapshot: value => { workflowLastSavedSnapshot = value; }
+            });
         }
 
         async function persistProjectWorkflowState(payload) {
-            const response = await fetch(`/api/project-workflow-state/${encodeURIComponent(PROJECT_NAME)}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload || {})
-            });
-            let result = null;
-            try {
-                result = await response.json();
-            } catch (error) {
-                // ignore JSON parsing issues; handled below
-            }
-            if (!response.ok || !result || !result.success) {
-                const message = result && result.error ? result.error : `HTTP ${response.status}`;
-                throw new Error(message);
-            }
-            return result.state || null;
+            return workflowStateApi.persistProjectWorkflowState(PROJECT_NAME, payload);
         }
 
         async function loadProjectWorkflowState() {
-            try {
-                const response = await fetch(`/api/project-workflow-state/${encodeURIComponent(PROJECT_NAME)}`, { cache: 'no-store' });
-                if (response.status === 404) {
-                    return null;
-                }
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                const result = await response.json();
-                if (!result || result.success !== true) {
-                    const message = result && result.error ? result.error : t('workflow.errors.unknown_error');
-                    throw new Error(message);
-                }
-                const data = result.state || {};
-                const steps = Array.isArray(data.steps) ? data.steps : [];
-                const templateId = data.template_id || null;
-                return { steps, template_id: templateId };
-        } catch (error) {
-            console.warn(t('js.logs.workflow_state_load_failed'), error);
-        }
-            return null;
+            return workflowStateApi.loadProjectWorkflowState(PROJECT_NAME, t);
         }
 
         async function loadDefaultWorkflowTemplate(templates) {
-            const list = Array.isArray(templates) ? templates : [];
-            const defaultEntry = list.find(item => item && item.id === 'default');
-            if (!defaultEntry) {
-                return null;
-            }
-            try {
-                const response = await fetch(`/api/workflow-template/${encodeURIComponent(defaultEntry.id)}`);
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    throw new Error(result.error || t('workflow.errors.unknown_error'));
-                }
-                const template = result.template || {};
-                return Array.isArray(template.steps) ? template.steps : [];
-            } catch (error) {
-                console.error(t('js.logs.workflow_default_load_failed'), error);
-                return null;
-            }
+            return workflowStateApi.loadDefaultWorkflowTemplate(templates, t);
         }
 
         function collectScriptStepsBefore(index, requiredCount) {

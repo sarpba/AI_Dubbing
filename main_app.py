@@ -24,6 +24,13 @@ import wave
 import math
 from collections import OrderedDict
 from app_factory import create_flask_app, register_app_routes
+from services.script_catalog import (
+    get_script_definition as get_script_definition_service,
+    get_scripts_catalog as get_scripts_catalog_service,
+    infer_autofill_kind as infer_autofill_kind_service,
+    prepare_script_entry as prepare_script_entry_service,
+    rebuild_scripts_config_file as rebuild_scripts_config_file_service,
+)
 from services.script_meta import validate_script_meta
 from services.project_files import (
     build_audio_metadata as build_audio_metadata_service,
@@ -61,6 +68,17 @@ from services.workflow_state import (
     save_workflow_template_file as save_workflow_template_file_service,
     sanitize_workflow_id as sanitize_workflow_id_service,
     load_workflow_file as load_workflow_file_service,
+)
+from services.workflow_execution import (
+    build_command_for_step as build_command_for_step_service,
+    build_masked_command_and_params as build_masked_command_and_params_service,
+    coerce_bool as coerce_bool_service,
+    mask_workflow_secret_params as mask_workflow_secret_params_service,
+    mask_applied_params_for_ui as mask_applied_params_for_ui_service,
+    mask_command_for_ui as mask_command_for_ui_service,
+    normalize_workflow_steps as normalize_workflow_steps_service,
+    run_script_command as run_script_command_service,
+    unmask_secret_param_value as unmask_secret_param_value_service,
 )
 app = create_flask_app(__name__)
 
@@ -628,64 +646,38 @@ def is_secret_param(name: str) -> bool:
 
 
 def mask_workflow_secret_params(steps: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-    masked_steps: List[Dict[str, Any]] = copy.deepcopy(steps or [])
-    for step in masked_steps:
-        params = step.get('params')
-        if not isinstance(params, dict):
-            continue
-        for key, value in list(params.items()):
-            if not is_secret_param(key):
-                continue
-            if isinstance(value, str):
-                if value.startswith(ENCODED_SECRET_PREFIX):
-                    continue
-                encoded_value = encode_keyholder_value(value)
-                if encoded_value:
-                    params[key] = f"{ENCODED_SECRET_PREFIX}{encoded_value}"
-                else:
-                    params.pop(key, None)
-            elif value is None:
-                params.pop(key, None)
-    return masked_steps
+    return mask_workflow_secret_params_service(
+        steps,
+        secret_param_names=SECRET_PARAM_NAMES,
+        encoded_secret_prefix=ENCODED_SECRET_PREFIX,
+        encode_keyholder_value=encode_keyholder_value,
+    )
 
 
 def unmask_secret_param_value(value: Any) -> Any:
-    if isinstance(value, str) and value.startswith(ENCODED_SECRET_PREFIX):
-        decoded = decode_keyholder_value(value[len(ENCODED_SECRET_PREFIX):])
-        if decoded is not None:
-            return decoded
-    return value
+    return unmask_secret_param_value_service(
+        value,
+        encoded_secret_prefix=ENCODED_SECRET_PREFIX,
+        decode_keyholder_value=decode_keyholder_value,
+    )
 
 
 def mask_applied_params_for_ui(applied_params: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
-    masked: List[Dict[str, Any]] = []
-    for param in applied_params or []:
-        entry = param.copy()
-        if is_secret_param(entry.get('name')):
-            entry['value'] = SECRET_VALUE_PLACEHOLDER
-        masked.append(entry)
-    return masked
+    return mask_applied_params_for_ui_service(
+        applied_params,
+        secret_param_names=SECRET_PARAM_NAMES,
+        secret_value_placeholder=SECRET_VALUE_PLACEHOLDER,
+    )
 
 
 def mask_command_for_ui(command: Optional[List[str]], applied_params: Optional[List[Dict[str, Any]]], script_meta: Dict[str, Any]) -> List[str]:
-    masked = list(command or [])
-    secret_flags: Set[str] = set()
-    for param_meta in script_meta.get('parameters', []):
-        if is_secret_param(param_meta.get('name')):
-            for flag in param_meta.get('flags') or []:
-                secret_flags.add(flag)
-    for idx, token in enumerate(masked[:-1]):
-        if token in secret_flags:
-            masked[idx + 1] = SECRET_VALUE_PLACEHOLDER
-    secret_values = {
-        str(param.get('value'))
-        for param in applied_params or []
-        if is_secret_param(param.get('name')) and param.get('value') is not None
-    }
-    for idx, token in enumerate(masked):
-        if token in secret_values:
-            masked[idx] = SECRET_VALUE_PLACEHOLDER
-    return masked
+    return mask_command_for_ui_service(
+        command,
+        applied_params,
+        script_meta,
+        secret_param_names=SECRET_PARAM_NAMES,
+        secret_value_placeholder=SECRET_VALUE_PLACEHOLDER,
+    )
 
 
 def build_masked_command_and_params(
@@ -693,9 +685,12 @@ def build_masked_command_and_params(
     applied_params: Optional[List[Dict[str, Any]]],
     script_meta: Dict[str, Any]
 ) -> Tuple[List[str], List[Dict[str, Any]]]:
-    return (
-        mask_command_for_ui(command, applied_params, script_meta),
-        mask_applied_params_for_ui(applied_params),
+    return build_masked_command_and_params_service(
+        command,
+        applied_params,
+        script_meta,
+        secret_param_names=SECRET_PARAM_NAMES,
+        secret_value_placeholder=SECRET_VALUE_PLACEHOLDER,
     )
 
 
@@ -891,16 +886,7 @@ def build_failed_generation_json_metadata(
 
 
 def infer_autofill_kind(param_name: str) -> Optional[str]:
-    if not param_name:
-        return None
-    normalized = param_name.strip().lower()
-    if normalized in PROJECT_AUTOFILL_OVERRIDES:
-        return PROJECT_AUTOFILL_OVERRIDES[normalized]
-    if 'project' in normalized:
-        if 'dir' in normalized or 'path' in normalized:
-            return 'project_path'
-        return 'project_name'
-    return None
+    return infer_autofill_kind_service(param_name, PROJECT_AUTOFILL_OVERRIDES)
 
 
 def load_scripts_file() -> List[Dict[str, Any]]:
@@ -909,195 +895,33 @@ def load_scripts_file() -> List[Dict[str, Any]]:
 
 
 def rebuild_scripts_config_file() -> List[Dict[str, Any]]:
-    if not SCRIPTS_DIR.exists():
-        logging.warning("scripts könyvtár nem található: %s", SCRIPTS_DIR)
-        return []
-
-    collected_entries: List[Dict[str, Any]] = []
-    latest_source_mtime = 0.0
-
-    for json_path in SCRIPTS_DIR.rglob('*.json'):
-        if json_path == SCRIPTS_CONFIG_PATH:
-            continue
-
-        relative_json = json_path.relative_to(SCRIPTS_DIR)
-        py_candidate = SCRIPTS_DIR / relative_json.with_suffix('.py')
-        if not py_candidate.is_file():
-            continue
-
-        try:
-            with json_path.open('r', encoding='utf-8') as fp:
-                entry = json.load(fp)
-        except json.JSONDecodeError as exc:
-            logging.error("Hibás JSON fájl: %s (%s)", json_path, exc)
-            continue
-        except OSError as exc:
-            logging.error("Nem olvasható JSON fájl: %s (%s)", json_path, exc)
-            continue
-
-        if not isinstance(entry, dict):
-            logging.warning("A JSON fájl nem objektum: %s", json_path)
-            continue
-
-        issues = validate_script_meta(json_path, entry, SCRIPTS_DIR)
-        for issue in issues:
-            log_message = "%s: %s"
-            if issue.level == 'error':
-                logging.error(log_message, issue.path, issue.message)
-            else:
-                logging.warning(log_message, issue.path, issue.message)
-
-        # biztosítsuk, hogy a script mező a valós relatív útvonalra mutat
-        relative_script = relative_json.with_suffix('.py').as_posix()
-        entry = copy.deepcopy(entry)
-        entry['script'] = relative_script
-
-        collected_entries.append(entry)
-
-        try:
-            latest_source_mtime = max(
-                latest_source_mtime,
-                json_path.stat().st_mtime,
-                py_candidate.stat().st_mtime,
-            )
-        except OSError:
-            continue
-
-    collected_entries.sort(key=lambda item: item.get('script', ''))
-
-    existing_data: Optional[List[Dict[str, Any]]] = None
-    target_mtime = 0.0
-    if SCRIPTS_CONFIG_PATH.exists():
-        try:
-            target_mtime = SCRIPTS_CONFIG_PATH.stat().st_mtime
-            with SCRIPTS_CONFIG_PATH.open('r', encoding='utf-8') as fp:
-                existing_data = json.load(fp)
-        except (OSError, json.JSONDecodeError):
-            existing_data = None
-
-    if existing_data != collected_entries or target_mtime < latest_source_mtime:
-        try:
-            SCRIPTS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with SCRIPTS_CONFIG_PATH.open('w', encoding='utf-8') as fp:
-                json.dump(collected_entries, fp, ensure_ascii=False, indent=2)
-                fp.write('\n')
-        except OSError as exc:
-            logging.error("Nem sikerült frissíteni a scripts.json fájlt: %s", exc)
-            return collected_entries
-
-    return collected_entries
+    return rebuild_scripts_config_file_service(
+        SCRIPTS_DIR,
+        SCRIPTS_CONFIG_PATH,
+        validate_script_meta,
+    )
 
 
 def prepare_script_entry(raw_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    script_name = raw_entry.get('script')
-    if not script_name:
-        return None
-    environment = (raw_entry.get('enviroment') or raw_entry.get('environment') or '') or ''
-    api_name = raw_entry.get('api')
-    parameters: List[Dict[str, Any]] = []
-
-    def humanize_param_name(name: str) -> str:
-        return name.replace('_', ' ').strip()
-
-    def strip_negative_prefix(name: str) -> str:
-        for prefix in NEGATIVE_FLAG_NAME_PREFIXES:
-            if name.startswith(prefix):
-                stripped = name[len(prefix):]
-                if stripped:
-                    return stripped
-        return name
-
-    def resolve_flag_mode(name: str, flags: List[str]) -> Tuple[str, str]:
-        positive_flag = next((flag for flag in flags if not flag.startswith('--no-')), None)
-        negative_flag = next((flag for flag in flags if flag.startswith('--no-')), None)
-        if negative_flag and not positive_flag:
-            if any(name.startswith(prefix) for prefix in NEGATIVE_FLAG_NAME_PREFIXES):
-                return 'negative_only_negative', humanize_param_name(strip_negative_prefix(name))
-            return 'negative_only_positive', humanize_param_name(name)
-        return 'standard', humanize_param_name(name)
-
-    def append_params(param_list, required: bool):
-        for param in param_list or []:
-            name = param.get('name')
-            if not name:
-                continue
-            param_type = param.get('type', 'option')
-            flags = param.get('flags') or []
-            default_value = param.get('default')
-            flag_mode = 'standard'
-            ui_name = humanize_param_name(name)
-            if param_type == 'flag':
-                flag_mode, ui_name = resolve_flag_mode(name, flags)
-            parameters.append({
-                'name': name,
-                'ui_name': ui_name,
-                'type': param_type,
-                'flags': flags,
-                'flag_mode': flag_mode,
-                'required': required,
-                'autofill': infer_autofill_kind(name),
-                'secret': name in SECRET_PARAM_NAMES,
-                'default': default_value,
-                'description': param.get('description')
-            })
-
-    append_params(raw_entry.get('required'), True)
-    append_params(raw_entry.get('optional'), False)
-
-    help_markdown: Optional[str] = None
-    try:
-        script_path = Path(script_name)
-        if script_path.is_absolute():
-            script_path = Path(script_path.name)
-        help_path = (SCRIPTS_DIR / script_path).with_name(f"{script_path.stem}_help.md")
-        if help_path.is_file():
-            try:
-                help_markdown = help_path.read_text(encoding='utf-8')
-            except OSError as exc:
-                logging.warning("Nem olvasható segédlet fájl: %s (%s)", help_path, exc)
-    except (OSError, ValueError) as exc:
-        logging.warning("Hibás segédlet elérési út: %s (%s)", script_name, exc)
-
-    return {
-        'id': script_name,
-        'script': script_name,
-        'display_name': raw_entry.get('name') or script_name,
-        'environment': environment,
-        'description': raw_entry.get('description'),
-        'parameters': parameters,
-        'notes': raw_entry.get('notes'),
-        'raw': raw_entry,
-        'required_keys': sorted(SCRIPT_KEY_REQUIREMENTS.get(script_name, set())),
-        'api': api_name,
-        'help_markdown': help_markdown,
-    }
+    return prepare_script_entry_service(
+        raw_entry,
+        scripts_dir=SCRIPTS_DIR,
+        negative_flag_name_prefixes=NEGATIVE_FLAG_NAME_PREFIXES,
+        secret_param_names=SECRET_PARAM_NAMES,
+        script_key_requirements=SCRIPT_KEY_REQUIREMENTS,
+        project_autofill_overrides=PROJECT_AUTOFILL_OVERRIDES,
+    )
 
 
 def get_scripts_catalog(force_reload: bool = False) -> List[Dict[str, Any]]:
-    try:
-        current_mtime = SCRIPTS_CONFIG_PATH.stat().st_mtime
-    except OSError:
-        current_mtime = None
-
-    with SCRIPTS_CACHE_LOCK:
-        cached_mtime = SCRIPTS_CACHE.get('mtime')
-        if not force_reload and cached_mtime == current_mtime and SCRIPTS_CACHE.get('data'):
-            return copy.deepcopy(SCRIPTS_CACHE['data'])
-
-        raw_entries = load_scripts_file()
-        try:
-            current_mtime = SCRIPTS_CONFIG_PATH.stat().st_mtime
-        except OSError:
-            current_mtime = None
-        catalog = []
-        for entry in raw_entries:
-            prepared = prepare_script_entry(entry)
-            if prepared:
-                catalog.append(prepared)
-
-        SCRIPTS_CACHE['mtime'] = current_mtime
-        SCRIPTS_CACHE['data'] = catalog
-        return copy.deepcopy(catalog)
+    return get_scripts_catalog_service(
+        force_reload=force_reload,
+        scripts_config_path=SCRIPTS_CONFIG_PATH,
+        scripts_cache=SCRIPTS_CACHE,
+        scripts_cache_lock=SCRIPTS_CACHE_LOCK,
+        load_scripts_file=load_scripts_file,
+        prepare_script_entry_fn=prepare_script_entry,
+    )
 
 
 def initialize_scripts_catalog() -> None:
@@ -1108,13 +932,7 @@ def initialize_scripts_catalog() -> None:
 
 
 def get_script_definition(script_id: str) -> Optional[Dict[str, Any]]:
-    if not script_id:
-        return None
-    catalog = get_scripts_catalog()
-    for entry in catalog:
-        if entry['id'] == script_id:
-            return entry
-    return None
+    return get_script_definition_service(script_id, get_scripts_catalog)
 
 
 def ensure_workflows_dir() -> Path:
@@ -1205,17 +1023,7 @@ def save_project_workflow_state(
 
 
 def coerce_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in ('1', 'true', 'yes', 'on', 'igen'):
-            return True
-        if normalized in ('0', 'false', 'no', 'off', 'nem'):
-            return False
-    if isinstance(value, (int, float)):
-        return bool(value)
-    return False
+    return coerce_bool_service(value)
 
 
 def normalize_cycle_widget_params(raw_params: Dict[str, Any]) -> Dict[str, int]:
@@ -1441,35 +1249,15 @@ def determine_parameter_value(
     script_meta: Dict[str, Any],
     context: Dict[str, Any]
 ) -> Any:
-    name = param_meta['name']
-    value = user_params.get(name)
-
-    if isinstance(value, str):
-        value = value.strip()
-        if value == "":
-            value = None
-
-    if value is None:
-        autofill_kind = param_meta.get('autofill')
-        if autofill_kind == 'project_name':
-            value = context['project_name']
-        elif autofill_kind == 'project_path':
-            value = context['project_path']
-
-    if value is None:
-        key_mapping = SCRIPT_PARAM_KEYHOLDER.get(script_meta['id'], {}).get(name)
-        if key_mapping:
-            value = get_keyholder_value(context['keyholder'], key_mapping)
-
-    if value is None and 'default' in param_meta:
-        default_value = param_meta.get('default')
-        if default_value is not None:
-            value = default_value
-
-    if param_meta['type'] == 'flag':
-        return coerce_bool(value)
-
-    return value
+    from services.workflow_execution import determine_parameter_value as determine_parameter_value_service
+    return determine_parameter_value_service(
+        param_meta,
+        user_params,
+        script_meta,
+        context,
+        script_param_keyholder=SCRIPT_PARAM_KEYHOLDER,
+        get_keyholder_value=get_keyholder_value,
+    )
 
 
 def build_argument_fragment(param_meta: Dict[str, Any], value: Any) -> List[str]:
@@ -1526,111 +1314,29 @@ def build_command_for_step(
     script_meta: Dict[str, Any],
     context: Dict[str, Any]
 ) -> Tuple[List[str], List[Dict[str, Any]]]:
-    environment = script_meta.get('environment')
-    python_exec = get_conda_python(environment)
-    if not python_exec:
-        raise WorkflowValidationError(f"Nem található Python futtató a(z) '{environment}' környezethez.")
-
-    script_path = Path(app.root_path) / 'scripts' / script_meta['script']
-    if not script_path.is_file():
-        raise WorkflowValidationError(f"A szkript nem található: {script_path}")
-
-    user_params = step_config.get('params') or {}
-    applied_params: List[Dict[str, Any]] = []
-    command = [python_exec, str(script_path)]
-
-    for param_meta in script_meta['parameters']:
-        value = determine_parameter_value(param_meta, user_params, script_meta, context)
-        if value is None and param_meta['required'] and param_meta['type'] != 'flag':
-            raise WorkflowValidationError(f"Hiányzó kötelező paraméter: {param_meta['name']} ({script_meta['script']})")
-        fragment = build_argument_fragment(param_meta, value)
-        if fragment:
-            command.extend(fragment)
-            applied_params.append({
-                'name': param_meta['name'],
-                'value': value,
-                'type': param_meta['type']
-            })
-
-    return command, applied_params
+    return build_command_for_step_service(
+        step_config,
+        script_meta,
+        context,
+        get_conda_python=get_conda_python,
+        app_root_path=app.root_path,
+        workflow_validation_error=WorkflowValidationError,
+        script_param_keyholder=SCRIPT_PARAM_KEYHOLDER,
+        get_keyholder_value=get_keyholder_value,
+    )
 
 
 def normalize_workflow_steps(payload: Any) -> Tuple[List[Dict[str, Any]], Set[str], int]:
-    if not isinstance(payload, list):
-        raise WorkflowValidationError("A workflow lépéseit listában kell megadni.")
-
-    normalized_steps: List[Dict[str, Any]] = []
-    required_keys: Set[str] = set()
-    enabled_count = 0
-
-    for index, step in enumerate(payload, start=1):
-        if not isinstance(step, dict):
-            raise WorkflowValidationError(f"A(z) {index}. lépés formátuma hibás.")
-
-        step_type = step.get('type')
-        if step_type == 'widget' or (step.get('widget') and not step.get('script')):
-            widget_id = step.get('widget')
-            if not widget_id:
-                raise WorkflowValidationError(f"A(z) {index}. widget lépéshez hiányzik a widget azonosítója.")
-            if widget_id not in ALLOWED_WORKFLOW_WIDGETS:
-                logging.warning("Ismeretlen workflow widget: %s", widget_id)
-            widget_params = step.get('params')
-            if widget_params is None:
-                widget_params = {}
-            if not isinstance(widget_params, dict):
-                raise WorkflowValidationError(f"A(z) {index}. widget lépés paraméterei hibás formátumúak.")
-            normalized_widget_step: Dict[str, Any] = {
-                'type': 'widget',
-                'widget': widget_id,
-                'enabled': coerce_bool(step.get('enabled', True))
-            }
-            if widget_id == 'cycleWidget':
-                normalized_widget_step['params'] = normalize_cycle_widget_params(widget_params)
-            elif widget_id == 'translatedSplitLoopWidget':
-                normalized_widget_step['params'] = normalize_translated_split_loop_widget_params(widget_params)
-            elif widget_params:
-                normalized_widget_step['params'] = copy.deepcopy(widget_params)
-            normalized_steps.append(normalized_widget_step)
-            continue
-
-        script_id = step.get('script')
-        script_meta = get_script_definition(script_id)
-        if not script_meta:
-            raise WorkflowValidationError(f"Ismeretlen szkript: {script_id}")
-
-        enabled = coerce_bool(step.get('enabled', True))
-        halt_on_fail = coerce_bool(step.get('halt_on_fail', True))
-        params = step.get('params') or {}
-        if not isinstance(params, dict):
-            raise WorkflowValidationError(f"A(z) {script_meta['display_name']} paraméterei hibás formátumúak.")
-        normalized_params: Dict[str, Any] = {}
-        for key, value in params.items():
-            current_value = value
-            if isinstance(current_value, str):
-                current_value = current_value.strip()
-                if current_value == '':
-                    current_value = None
-            if is_secret_param(key) and current_value is not None:
-                normalized_params[key] = unmask_secret_param_value(current_value)
-            else:
-                normalized_params[key] = current_value
-
-        normalized_step = {
-            'script': script_meta['id'],
-            'enabled': enabled,
-            'halt_on_fail': halt_on_fail,
-            'params': normalized_params
-        }
-        if enabled:
-            enabled_count += 1
-            required_keys.update(script_meta.get('required_keys', []))
-
-        normalized_steps.append(normalized_step)
-
-    if enabled_count == 0:
-        raise WorkflowValidationError("Legalább egy lépést engedélyezni kell a futtatáshoz.")
-
-    return normalized_steps, required_keys, enabled_count
+    return normalize_workflow_steps_service(
+        payload,
+        workflow_validation_error=WorkflowValidationError,
+        allowed_workflow_widgets=ALLOWED_WORKFLOW_WIDGETS,
+        get_script_definition=get_script_definition,
+        normalize_cycle_widget_params=normalize_cycle_widget_params,
+        normalize_translated_split_loop_widget_params=normalize_translated_split_loop_widget_params,
+        secret_param_names=SECRET_PARAM_NAMES,
+        unmask_secret_param_value_fn=unmask_secret_param_value,
+    )
 
 
 def run_script_command(
@@ -1639,39 +1345,12 @@ def run_script_command(
     env: Optional[Dict[str, str]] = None,
     should_stop: Optional[Callable[[], bool]] = None
 ) -> Any:
-    command_str = ' '.join(f'"{c}"' if ' ' in c else c for c in command_list)
-    logging.info("%s Parancs futtatása: %s", log_prefix, command_str)
-    try:
-        proc = subprocess.Popen(
-            command_list,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            bufsize=1,
-            env=env or os.environ.copy(),
-        )
-        if proc.stdout:
-            for line in iter(proc.stdout.readline, ''):
-                logging.info("%s %s", log_prefix, line.rstrip())
-                if should_stop and should_stop():
-                    logging.warning("%s Megszakítás kérve, a parancs leállítása...", log_prefix)
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
-                    return "cancelled"
-        rc = proc.wait()
-        if rc != 0:
-            logging.error("%s A parancs hibával ért véget (%s)", log_prefix, rc)
-            return False
-        logging.info("%s Parancs sikeresen lefutott.", log_prefix)
-        return True
-    except Exception as exc:
-        logging.error("%s Váratlan hiba a parancs futtatása közben: %s", log_prefix, exc, exc_info=True)
-        return False
+    return run_script_command_service(
+        command_list,
+        log_prefix=log_prefix,
+        env=env,
+        should_stop=should_stop,
+    )
 
 
 def determine_workflow_key_status(required_keys: Optional[Set[str]] = None) -> Dict[str, Any]:
