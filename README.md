@@ -78,8 +78,8 @@ Az alábbi összefoglaló a `scripts/` könyvtár `*_help.md` fájljaira támasz
 - `scripts/TTS/EQ.json` – Többpontos EQ beállítás, amelyet az F5-TTS és VibeVoice szkriptek `--eq-config` kapcsolóval olvasnak; a `global_gain_db` és `points` mezőket igény szerint testre szabhatod.
 
 ### Fejlesztői dokumentáció
-- `scripts/How_to_create_new_script_modul/how_to_create_scripts_help.md` – Útmutató config-alapú szkriptek készítéséhez: `config.json` feloldás, `-p/--project-name` argumentum, debug flag és hibakezelési minták.
-- `scripts/How_to_create_new_script_modul/how_to_create_scripts_json_help.md` – Részletezi a `scripts.json` sémáját (`enviroment`, `required`, `optional`) és hogyan maradjon szinkronban a CLI definícióval.
+- `scripts/How_to_create_new_script_modul/how_to_create_script_modul.md` – Összefoglalt fejlesztői útmutató új, a keretrendszerbe illeszthető script modulokhoz.
+- `scripts/How_to_create_new_script_modul/how_to_create_script_modul_AI.md` – Belső, repo-specifikus emlékeztető az AI/ügynök alapú scriptfejlesztéshez a valós integrációs szabályokkal.
 
 ## Alkalmazás futtatása (HU)
 ```bash

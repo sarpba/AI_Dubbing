@@ -424,733 +424,74 @@
             return span;
         }
 
+        const fileBrowserApi = (window.ProjectFileBrowser && window.ProjectFileBrowser.createProjectFileBrowser)
+            ? window.ProjectFileBrowser.createProjectFileBrowser({
+                projectName: PROJECT_NAME,
+                defaultChunkSizeBytes: DEFAULT_CHUNK_SIZE_BYTES,
+                audioExtensions: AUDIO_EXTENSIONS,
+                videoExtensions: VIDEO_EXTENSIONS,
+                textPreviewExtensions: TEXT_PREVIEW_EXTENSIONS,
+                t,
+                getFileExtension,
+                buildWorkdirUrl,
+                createMetadataElement,
+                createFailedOriginalTextElement
+            })
+            : null;
+
         function createFileTreeList(entries) {
-            const list = document.createElement('ul');
-            list.className = 'file-browser-tree list-unstyled mb-0';
-            (entries || []).forEach(entry => {
-                const item = document.createElement('li');
-                if (entry.type === 'directory') {
-                    const details = document.createElement('details');
-                    details.className = 'file-browser-directory';
-                    details.dataset.path = entry.path || '';
-                    if (entry.highlight_class) {
-                        entry.highlight_class.split(/\s+/).forEach(cls => {
-                            if (cls) {
-                                details.classList.add(cls);
-                            }
-                        });
-                        details.dataset.highlight = entry.highlight_class;
-                    }
-
-                    const summary = document.createElement('summary');
-                    summary.className = 'file-browser-summary';
-                    const label = document.createElement('span');
-                    label.className = 'file-browser-label';
-                    label.textContent = entry.name || t('files.unnamed_folder', {}, '(unnamed folder)');
-                    const actions = document.createElement('div');
-                    actions.className = 'file-browser-actions';
-                    const uploadBtn = document.createElement('button');
-                    uploadBtn.type = 'button';
-                    uploadBtn.className = 'btn btn-sm btn-outline-secondary file-upload-trigger';
-                    uploadBtn.dataset.path = entry.path || '';
-                    uploadBtn.title = t('file_browser.upload_title');
-                    uploadBtn.textContent = t('file_browser.upload_button');
-                    actions.append(uploadBtn);
-
-                    const clearBtn = document.createElement('button');
-                    clearBtn.type = 'button';
-                    clearBtn.className = 'btn btn-sm btn-outline-danger file-directory-clear-btn';
-                    clearBtn.dataset.path = entry.path || '';
-                    clearBtn.title = t('file_browser.clear_title');
-                    clearBtn.textContent = t('file_browser.clear_button');
-                    actions.append(clearBtn);
-
-                    summary.append(label);
-                    summary.append(actions);
-                    details.append(summary);
-
-                    const children = document.createElement('div');
-                    children.className = 'file-browser-children';
-                    if (entry.children && entry.children.length) {
-                        children.appendChild(createFileTreeList(entry.children));
-                    }
-                    details.append(children);
-
-                    item.appendChild(details);
-                } else {
-                    const fileRow = document.createElement('div');
-                    fileRow.className = 'file-browser-item';
-                    fileRow.dataset.filePath = entry.path || '';
-                    fileRow.dataset.fileName = entry.name || '';
-                    const extension = getFileExtension(entry.name || '');
-                    fileRow.dataset.fileExtension = extension;
-                    if (entry.enable_failed_move) {
-                        fileRow.dataset.enableFailedMove = 'true';
-                    }
-
-                    const link = document.createElement('a');
-                    link.className = 'file-browser-link';
-                    link.href = buildWorkdirUrl(entry.path || '');
-                    link.target = '_blank';
-                    link.rel = 'noopener';
-                    link.textContent = entry.name || t('files.unnamed_file', {}, '(unnamed file)');
-
-                    fileRow.appendChild(link);
-
-                    const actions = document.createElement('div');
-                    actions.className = 'file-browser-actions';
-
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.type = 'button';
-                    deleteBtn.className = 'btn btn-sm btn-outline-danger file-delete-btn';
-                    deleteBtn.title = t('file_browser.delete_title');
-                    deleteBtn.textContent = t('file_browser.delete_button');
-                    actions.append(deleteBtn);
-
-                    if (entry.enable_failed_move && extension === '.wav') {
-                        const moveBtn = document.createElement('button');
-                        moveBtn.type = 'button';
-                        moveBtn.className = 'btn btn-sm btn-outline-primary file-move-to-translated-btn';
-                        moveBtn.title = t('file_browser.move_title');
-                        moveBtn.textContent = t('file_browser.move_button');
-                        actions.append(moveBtn);
-                    }
-
-                    fileRow.appendChild(actions);
-                    const metadataElement = createMetadataElement(entry);
-                    if (metadataElement) {
-                        fileRow.insertBefore(metadataElement, actions);
-                    }
-                    const noteElement = createFailedOriginalTextElement(entry);
-                    if (noteElement) {
-                        fileRow.insertBefore(noteElement, actions);
-                    }
-                    if (entry.duration_from_name !== undefined && entry.duration_from_name !== null) {
-                        fileRow.dataset.durationFromName = String(entry.duration_from_name);
-                    }
-                    if (entry.duration_actual !== undefined && entry.duration_actual !== null) {
-                        fileRow.dataset.durationActual = String(entry.duration_actual);
-                    }
-                    if (entry.duration_display) {
-                        fileRow.dataset.durationDisplay = entry.duration_display;
-                    }
-                    if (entry.failed_original_text !== undefined && entry.failed_original_text !== null) {
-                        fileRow.dataset.failedOriginalText = entry.failed_original_text;
-                    }
-                    if (entry.failed_original_text_display) {
-                        fileRow.dataset.failedOriginalTextDisplay = entry.failed_original_text_display;
-                    }
-                    item.appendChild(fileRow);
-                }
-                list.appendChild(item);
-            });
-            return list;
-        }
-
-        function updateDirectoryHighlight(detailsElement, highlightClass) {
-            if (!detailsElement) {
-                return;
-            }
-            const previous = detailsElement.dataset.highlight || '';
-            if (previous) {
-                previous.split(/\s+/).forEach(cls => {
-                    if (cls) {
-                        detailsElement.classList.remove(cls);
-                    }
-                });
-            }
-            if (highlightClass && highlightClass.trim()) {
-                highlightClass.split(/\s+/).forEach(cls => {
-                    if (cls) {
-                        detailsElement.classList.add(cls);
-                    }
-                });
-                detailsElement.dataset.highlight = highlightClass;
-            } else {
-                delete detailsElement.dataset.highlight;
-            }
-        }
-
-        function updateFailedLegend(visible) {
-            const legend = document.getElementById('failedGenerationLegend');
-            if (!legend) {
-                return;
-            }
-            if (visible) {
-                legend.classList.remove('d-none');
-            } else {
-                legend.classList.add('d-none');
-            }
+            return fileBrowserApi.createFileTreeList
+                ? fileBrowserApi.createFileTreeList(entries)
+                : document.createElement('ul');
         }
 
         async function refreshDirectory(detailsElement) {
-            const childrenContainer = detailsElement.querySelector('.file-browser-children');
-            if (!childrenContainer) {
+            if (!fileBrowserApi || !fileBrowserApi.refreshDirectory) {
                 return;
             }
-            const relativePath = detailsElement.dataset.path || '';
-            childrenContainer.innerHTML = `<div class="small text-muted">${t('files.loading', {}, 'Loading...')}</div>`;
-            try {
-                const url = `/api/project-tree/${encodeURIComponent(PROJECT_NAME)}?path=${encodeURIComponent(relativePath)}`;
-                const response = await fetch(url);
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    throw new Error(result.error || t('files.load_failed'));
-                }
-                const entries = result.entries || [];
-                updateDirectoryHighlight(detailsElement, result.current_highlight || '');
-                if (Object.prototype.hasOwnProperty.call(result, 'has_highlights')) {
-                    updateFailedLegend(Boolean(result.has_highlights));
-                }
-                childrenContainer.innerHTML = '';
-                if (!entries.length) {
-                    const empty = document.createElement('div');
-                    empty.className = 'small text-muted';
-                    empty.textContent = t('files.empty_folder', {}, 'Folder is empty.');
-                    childrenContainer.appendChild(empty);
-                } else {
-                    childrenContainer.appendChild(createFileTreeList(entries));
-                }
-            } catch (error) {
-                console.error('Directory refresh failed:', error);
-                childrenContainer.innerHTML = `<div class="text-danger small">${t('files.load_failed', {}, 'Unable to load folder contents.')}</div>`;
-            }
+            return fileBrowserApi.refreshDirectory(detailsElement);
         }
 
         function cssEscape(value) {
-            if (window.CSS && typeof window.CSS.escape === 'function') {
-                return window.CSS.escape(value);
+            if (!fileBrowserApi || !fileBrowserApi.cssEscape) {
+                if (window.CSS && typeof window.CSS.escape === 'function') {
+                    return window.CSS.escape(value);
+                }
+                return (value || '').replace(/[^a-zA-Z0-9_\-]/g, (char) => `\\${char}`);
             }
-            return (value || '').replace(/[^a-zA-Z0-9_\-]/g, (char) => `\\${char}`);
+            return fileBrowserApi.cssEscape(value);
         }
 
         async function reloadFileBrowser(targetPath = '') {
-            const browserRoot = document.getElementById('projectFileBrowser');
-            if (!browserRoot) {
+            if (!fileBrowserApi) {
                 return;
             }
-            const normalized = (targetPath || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-
-            if (!normalized) {
-                browserRoot.innerHTML = `<div class="small text-muted">${t('files.refreshing', {}, 'Refreshing...')}</div>`;
-                try {
-                    const url = `/api/project-tree/${encodeURIComponent(PROJECT_NAME)}?path=`;
-                    const response = await fetch(url);
-                    const result = await response.json();
-                    if (!response.ok || !result.success) {
-                        throw new Error(result.error || t('files.load_failed'));
-                    }
-                    const entries = result.entries || [];
-                    browserRoot.innerHTML = '';
-                    if (!entries.length) {
-                        const empty = document.createElement('div');
-                        empty.className = 'small text-muted';
-                        empty.textContent = t('files.empty_folder', {}, 'Folder is empty.');
-                        browserRoot.appendChild(empty);
-                    } else {
-                        browserRoot.appendChild(createFileTreeList(entries));
-                    }
-                    if (Object.prototype.hasOwnProperty.call(result, 'has_highlights')) {
-                        updateFailedLegend(Boolean(result.has_highlights));
-                    }
-                } catch (error) {
-                    console.error('Root refresh failed:', error);
-                    browserRoot.innerHTML = `<div class="text-danger small">${t('files.refresh_failed', {}, 'Unable to refresh file list.')}</div>`;
-                }
-                return;
-            }
-
-            const selector = `details.file-browser-directory[data-path="${cssEscape(normalized)}"]`;
-            const details = browserRoot.querySelector(selector);
-            if (details) {
-                await refreshDirectory(details);
-                details.setAttribute('open', '');
-            } else {
-                await reloadFileBrowser('');
-            }
+            return fileBrowserApi.reloadFileBrowser(targetPath);
         }
 
         function openUploadDialog(targetPath = '') {
-            const uploadInput = document.getElementById('projectFileUploadInput');
-            if (!uploadInput) {
+            if (!fileBrowserApi) {
                 return;
             }
-            uploadInput.dataset.targetPath = targetPath || '';
-            uploadInput.value = '';
-            uploadInput.click();
-        }
-
-        async function uploadFileToPath(targetPath, file) {
-            const formData = new FormData();
-            formData.append('projectName', PROJECT_NAME);
-            formData.append('targetPath', targetPath || '');
-            formData.append('file', file);
-
-            const response = await fetch('/api/project-file/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            let result = {};
-            try {
-                result = await response.json();
-            } catch (error) {
-                // ignore JSON parse error, handled below
-            }
-
-            if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || t('js.errors.upload_failed', {}, 'Failed to upload file.'));
-            }
-            return result;
-        }
-
-        async function deleteProjectFile(filePath, { ignoreMissing = false } = {}) {
-            const response = await fetch(`/api/project-file/${encodeURIComponent(PROJECT_NAME)}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ path: filePath })
-            });
-
-            if (response.status === 404 && ignoreMissing) {
-                return { success: true, skipped: true };
-            }
-
-            let result = {};
-            try {
-                result = await response.json();
-            } catch (error) {
-                // ignore
-            }
-
-            if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || t('js.errors.delete_failed', {}, 'Failed to delete file.'));
-            }
-            return result;
-        }
-
-        async function clearProjectDirectory(directoryPath) {
-            const response = await fetch(`/api/project-directory/${encodeURIComponent(PROJECT_NAME)}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ path: directoryPath })
-            });
-
-            let result = {};
-            try {
-                result = await response.json();
-            } catch (error) {
-                // ignore
-            }
-
-            if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || t('js.errors.clear_directory_failed', {}, 'Failed to clear directory contents.'));
-            }
-            return result;
-        }
-
-        async function moveFailedGenerationFileRequest(filePath) {
-            const response = await fetch('/api/project-file/move-failed', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    projectName: PROJECT_NAME,
-                    sourcePath: filePath
-                })
-            });
-
-            let result = {};
-            try {
-                result = await response.json();
-            } catch (error) {
-                // ignore
-            }
-
-            if (!response.ok || !result.success) {
-                throw new Error((result && result.error) || t('js.errors.move_failed', {}, 'Failed to move file.'));
-            }
-            return result;
+            fileBrowserApi.openUploadDialog(targetPath);
         }
 
         async function uploadFilesToTtsRequest(targetPath, files) {
-            const orderedKeys = ['model', 'vocab', 'config'];
-            let lastResponse = null;
-            let processedFiles = 0;
-            const totalFiles = orderedKeys.filter(key => files[key]).length || 1;
-            for (const key of orderedKeys) {
-                const fileObj = files[key];
-                if (!fileObj) {
-                    continue;
-                }
-                lastResponse = await uploadSingleTtsFileChunk(targetPath, key, fileObj, processedFiles, totalFiles);
-                processedFiles += 1;
+            if (!fileBrowserApi) {
+                return { success: false };
             }
-            return lastResponse || { success: true };
-        }
-
-        function createTtsChunkUploadId(prefix = 'tts') {
-            if (window.crypto && window.crypto.randomUUID) {
-                return `${prefix}-${crypto.randomUUID()}`;
-            }
-            return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-        }
-
-        function getTtsChunkSizeBytes(fileSize) {
-            if (!fileSize) {
-                return DEFAULT_CHUNK_SIZE_BYTES;
-            }
-            return Math.min(DEFAULT_CHUNK_SIZE_BYTES, fileSize);
-        }
-
-        function formatBytes(bytes) {
-            if (!bytes) {
-                return '0 B';
-            }
-            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const unitIndex = Math.floor(Math.log(bytes) / Math.log(1024));
-            const value = bytes / Math.pow(1024, unitIndex);
-            return `${value.toFixed(2)} ${units[unitIndex]}`;
-        }
-
-        async function uploadSingleTtsFileChunk(targetPath, fileKey, fileObj, filesDone, totalFiles) {
-            const chunkSizeBytes = getTtsChunkSizeBytes(fileObj.size);
-            const totalChunks = Math.max(1, Math.ceil(fileObj.size / chunkSizeBytes));
-            const uploadId = createTtsChunkUploadId(fileKey);
-            let uploadedBytes = 0;
-            if (window.__updateTtsProgress) {
-                window.__updateTtsProgress(0, t('tts.upload_prepare', { fileKey }, `Preparing upload (${fileKey})...`));
-            }
-
-            for (let index = 0; index < totalChunks; index++) {
-                const start = index * chunkSizeBytes;
-                const end = Math.min(fileObj.size, start + chunkSizeBytes);
-                const chunk = fileObj.slice(start, end);
-                const formData = new FormData();
-                if (targetPath) {
-                    formData.append('targetPath', targetPath);
-                }
-                formData.append('chunkUploadId', uploadId);
-                formData.append('chunkFileKey', fileKey);
-                formData.append('chunkIndex', index);
-                formData.append('totalChunks', totalChunks);
-                formData.append('chunkSize', chunkSizeBytes);
-                formData.append('fileName', fileObj.name);
-                formData.append('file', chunk, fileObj.name);
-
-                const response = await fetch('/api/tts-upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                let result = {};
-                try {
-                    result = await response.json();
-                } catch (error) {
-                    // ignore
-                }
-                if (!response.ok || !result.success) {
-                    throw new Error((result && result.error) || t('js.errors.tts_upload_failed', {}, 'Failed to upload file to the TTS directory.'));
-                }
-
-                uploadedBytes = end;
-                const chunkPercent = Math.round((uploadedBytes / fileObj.size) * 100);
-                const overallPercent = Math.round(((filesDone + (uploadedBytes / fileObj.size)) / totalFiles) * 100);
-                if (window.__updateTtsProgress) {
-                    window.__updateTtsProgress(
-                        overallPercent,
-                        t('tts.chunk_status', {
-                            fileKey,
-                            current: index + 1,
-                            total: totalChunks,
-                            chunkPercent,
-                            uploaded: formatBytes(uploadedBytes),
-                            totalBytes: formatBytes(fileObj.size)
-                        }, `File (${fileKey}) chunk ${index + 1}/${totalChunks} – ${chunkPercent}% (${formatBytes(uploadedBytes)} / ${formatBytes(fileObj.size)})`)
-                    );
-                }
-
-                if (result.completed) {
-                    if (window.__updateTtsProgress) {
-                        window.__updateTtsProgress(
-                            Math.round(((filesDone + 1) / totalFiles) * 100),
-                            t('tts.upload_complete', { fileKey }, `File (${fileKey}) upload complete.`),
-                            false,
-                            filesDone + 1 === totalFiles
-                        );
-                    }
-                    return result;
-                }
-            }
-
-            if (window.__updateTtsProgress) {
-                window.__updateTtsProgress(
-                    Math.round(((filesDone + 1) / totalFiles) * 100),
-                    t('tts.upload_complete', { fileKey }, `File (${fileKey}) upload complete.`),
-                    false,
-                    filesDone + 1 === totalFiles
-                );
-            }
-            return { success: true };
-        }
-
-        function extractDownloadFilename(dispositionHeader) {
-            if (!dispositionHeader || typeof dispositionHeader !== 'string') {
-                return null;
-            }
-            const utf8Match = dispositionHeader.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
-            if (utf8Match && utf8Match[1]) {
-                const rawValue = utf8Match[1].trim().replace(/^\"|\"$/g, '');
-                try {
-                    return decodeURIComponent(rawValue.replace(/\+/g, '%20'));
-                } catch (error) {
-                    return rawValue;
-                }
-            }
-            const asciiMatch = dispositionHeader.match(/filename=\"?([^\";]+)\"?/i);
-            if (asciiMatch && asciiMatch[1]) {
-                return asciiMatch[1].trim();
-            }
-            return null;
-        }
-
-        async function requestProjectBackup() {
-            if (!PROJECT_NAME) {
-                alert(t('backup.project_missing'));
-                return;
-            }
-            const backupBtn = document.getElementById('projectBackupBtn');
-            if (backupBtn) {
-                backupBtn.dataset.originalLabel = backupBtn.dataset.originalLabel || backupBtn.textContent;
-                backupBtn.disabled = true;
-                backupBtn.textContent = t('backup.working');
-            }
-            try {
-                const response = await fetch('/api/project-backup', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        projectName: PROJECT_NAME
-                    })
-                });
-                const contentType = response.headers.get('content-type') || '';
-                if (!response.ok) {
-                    let errorMessage = t('backup.create_failed');
-                    if (contentType.includes('application/json')) {
-                        try {
-                            const result = await response.json();
-                            if (result && result.error) {
-                                errorMessage = result.error;
-                            }
-                        } catch (error) {
-                            // ignore parse error
-                        }
-                    }
-                    throw new Error(errorMessage);
-                }
-
-                const blob = await response.blob();
-                const disposition = response.headers.get('content-disposition') || '';
-                const fallbackName = `${PROJECT_NAME || 'project'}_backup.tar.gz`;
-                const filename = extractDownloadFilename(disposition) || fallbackName;
-                const urlCreator = window.URL || window.webkitURL;
-                const downloadUrl = urlCreator.createObjectURL(blob);
-                const tempLink = document.createElement('a');
-                tempLink.href = downloadUrl;
-                tempLink.download = filename;
-                document.body.appendChild(tempLink);
-                tempLink.click();
-                document.body.removeChild(tempLink);
-                urlCreator.revokeObjectURL(downloadUrl);
-            } catch (error) {
-                console.error('Projekt backup hiba:', error);
-                alert(error.message || t('backup.create_failed'));
-            } finally {
-                if (backupBtn) {
-                    backupBtn.disabled = false;
-                    const original = backupBtn.dataset.originalLabel || t('files.download_backup');
-                    backupBtn.textContent = original;
-                }
-            }
-        }
-
-        function showVideoPreview(fileName, fileUrl) {
-            const modalElement = document.getElementById('videoPreviewModal');
-            if (!modalElement) {
-                window.open(fileUrl, '_blank');
-                return;
-            }
-            if (!videoPreviewModal) {
-                videoPreviewModal = new bootstrap.Modal(modalElement);
-            }
-
-            const titleElement = document.getElementById('videoPreviewTitle');
-            if (titleElement) {
-                titleElement.textContent = fileName || t('video_modal.default_title', {}, 'Play video');
-            }
-
-            const videoElement = document.getElementById('videoPreviewPlayer');
-            if (!videoElement) {
-                window.open(fileUrl, '_blank');
-                return;
-            }
-
-            videoElement.pause();
-            videoElement.src = fileUrl;
-            videoElement.load();
-
-            const handleShown = () => {
-                videoElement.play().catch(() => {
-                    // Autoplay might be blocked; user can start manually.
-                });
-            };
-
-            if (modalElement.classList.contains('show')) {
-                handleShown();
-            } else {
-                modalElement.addEventListener('shown.bs.modal', handleShown, { once: true });
-            }
-
-            videoPreviewModal.show();
-        }
-
-        async function showTextPreview(fileName, fileUrl, extension) {
-            const modalElement = document.getElementById('jsonPreviewModal');
-            if (!modalElement) {
-                window.open(fileUrl, '_blank');
-                return;
-            }
-            if (!jsonPreviewModal) {
-                jsonPreviewModal = new bootstrap.Modal(modalElement);
-            }
-            const titleElement = document.getElementById('jsonPreviewTitle');
-            if (titleElement) {
-                titleElement.textContent = fileName || t('json_modal.default_title', {}, 'File preview');
-            }
-            const contentElement = document.getElementById('jsonPreviewContent');
-            if (contentElement) {
-                contentElement.textContent = t('json_modal.loading', {}, 'Loading...');
-            }
-            jsonPreviewModal.show();
-
-            try {
-                const response = await fetch(fileUrl, {
-                    headers: {
-                        'Accept': 'application/json, text/plain;q=0.9, */*;q=0.8'
-                    }
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                const text = await response.text();
-                let formatted = text;
-                if (extension === '.json') {
-                    try {
-                        const parsed = JSON.parse(text);
-                        formatted = JSON.stringify(parsed, null, 2);
-                    } catch (error) {
-                        // fallback to raw text
-                    }
-                }
-                if (contentElement) {
-                    contentElement.textContent = formatted || t('json_modal.empty', {}, 'Empty file.');
-                }
-            } catch (error) {
-                console.error('Text preview failed:', error);
-                if (contentElement) {
-                    contentElement.textContent = t('json_modal.load_error', { error: error.message || error }, `Failed to load file.\n${error.message || error}`);
-                }
-            }
+            return fileBrowserApi.uploadFilesToTtsRequest(targetPath, files);
         }
 
         function initPreviewModals() {
-            const audioModalElement = document.getElementById('audioPreviewModal');
-            if (audioModalElement && (!window.AudioTrimmer || typeof AudioTrimmer.init !== 'function')) {
-                audioModalElement.addEventListener('hidden.bs.modal', () => {
-                    const titleElement = document.getElementById('audioPreviewTitle');
-                    if (titleElement) {
-                        titleElement.textContent = '';
-                    }
-                });
-            }
-
-            const videoModalElement = document.getElementById('videoPreviewModal');
-            if (videoModalElement) {
-                videoPreviewModal = new bootstrap.Modal(videoModalElement);
-                videoModalElement.addEventListener('hidden.bs.modal', () => {
-                    const videoElement = document.getElementById('videoPreviewPlayer');
-                    if (videoElement) {
-                        videoElement.pause();
-                        videoElement.removeAttribute('src');
-                        videoElement.load();
-                    }
-                    const titleElement = document.getElementById('videoPreviewTitle');
-                    if (titleElement) {
-                        titleElement.textContent = '';
-                    }
-                });
-            }
-
-            const jsonModalElement = document.getElementById('jsonPreviewModal');
-            if (jsonModalElement) {
-                jsonPreviewModal = new bootstrap.Modal(jsonModalElement);
-                jsonModalElement.addEventListener('hidden.bs.modal', () => {
-                    const contentElement = document.getElementById('jsonPreviewContent');
-                    if (contentElement) {
-                        contentElement.textContent = '';
-                    }
-                    const titleElement = document.getElementById('jsonPreviewTitle');
-                    if (titleElement) {
-                        titleElement.textContent = '';
-                    }
-                });
+            if (fileBrowserApi) {
+                fileBrowserApi.initPreviewModals();
             }
         }
 
         function initProjectFileActions() {
-            const uploadInput = document.getElementById('projectFileUploadInput');
-            if (uploadInput) {
-                uploadInput.addEventListener('change', async (event) => {
-                    const files = Array.from(event.target.files || []);
-                    if (!files.length) {
-                        return;
-                    }
-                    const targetPath = uploadInput.dataset.targetPath || '';
-                    try {
-                        await uploadFileToPath(targetPath, files[0]);
-                        alert(t('notifications.file_upload_success'));
-                        await reloadFileBrowser(targetPath);
-                    } catch (error) {
-                        alert(error.message || t('notifications.file_upload_failed'));
-                    } finally {
-                        uploadInput.value = '';
-                        delete uploadInput.dataset.targetPath;
-                    }
-                });
-            }
-
-            const rootUploadBtn = document.getElementById('rootUploadBtn');
-            if (rootUploadBtn) {
-                rootUploadBtn.addEventListener('click', () => openUploadDialog(''));
-            }
-
-            const refreshBtn = document.getElementById('refreshFileBrowserBtn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', () => {
-                    reloadFileBrowser('');
-                });
-            }
-
-            const backupBtn = document.getElementById('projectBackupBtn');
-            if (backupBtn) {
-                backupBtn.addEventListener('click', () => {
-                    requestProjectBackup();
-                });
+            if (fileBrowserApi) {
+                fileBrowserApi.initProjectFileActions();
             }
         }
 
@@ -1252,187 +593,9 @@
         }
 
         function initFileBrowser() {
-            const browserRoot = document.getElementById('projectFileBrowser');
-            if (!browserRoot) {
-                return;
+            if (fileBrowserApi) {
+                fileBrowserApi.initFileBrowser();
             }
-
-            browserRoot.addEventListener('click', async (event) => {
-                const uploadButton = event.target.closest('.file-upload-trigger');
-                if (uploadButton && browserRoot.contains(uploadButton)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    openUploadDialog(uploadButton.dataset.path || '');
-                    return;
-                }
-
-                const clearDirectoryButton = event.target.closest('.file-directory-clear-btn');
-                if (clearDirectoryButton && browserRoot.contains(clearDirectoryButton)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const detailsElement = clearDirectoryButton.closest('details.file-browser-directory');
-                    if (!detailsElement) {
-                        return;
-                    }
-                    const directoryPath = clearDirectoryButton.dataset.path || detailsElement.dataset.path || '';
-                    if (!directoryPath) {
-                        alert(t('directories.path_missing'));
-                        return;
-                    }
-                    const labelElement = detailsElement.querySelector('.file-browser-label');
-                    const directoryName = (labelElement && labelElement.textContent) ? labelElement.textContent.trim() : directoryPath;
-                    const confirmed = confirm(t('directories.clear_confirm', { name: directoryName }));
-                    if (!confirmed) {
-                        return;
-                    }
-                    clearDirectoryButton.disabled = true;
-                    try {
-                        await clearProjectDirectory(directoryPath);
-                        alert(t('directories.clear_success'));
-                        await refreshDirectory(detailsElement);
-                        detailsElement.setAttribute('open', '');
-                    } catch (error) {
-                        alert(error.message || t('directories.clear_error'));
-                    } finally {
-                        clearDirectoryButton.disabled = false;
-                    }
-                    return;
-                }
-
-                const deleteButton = event.target.closest('.file-delete-btn');
-                if (deleteButton && browserRoot.contains(deleteButton)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const fileRow = deleteButton.closest('.file-browser-item');
-                    if (!fileRow) {
-                        return;
-                    }
-                    const filePath = fileRow.dataset.filePath || '';
-                    if (!filePath) {
-                        return;
-                    }
-                    const fileName = fileRow.dataset.fileName || filePath.split('/').pop();
-                    const confirmed = confirm(t('directories.delete_confirm', { name: fileName }));
-                    if (!confirmed) {
-                        return;
-                    }
-                    try {
-                        await deleteProjectFile(filePath);
-                        const parentPath = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
-                        alert(t('directories.delete_success'));
-                        await reloadFileBrowser(parentPath);
-                    } catch (error) {
-                        alert(error.message || t('directories.delete_error'));
-                    }
-                    return;
-                }
-
-                const moveButton = event.target.closest('.file-move-to-translated-btn');
-                if (moveButton && browserRoot.contains(moveButton)) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const fileRow = moveButton.closest('.file-browser-item');
-                    if (!fileRow) {
-                        return;
-                    }
-                    const filePath = fileRow.dataset.filePath || '';
-                    if (!filePath) {
-                        return;
-                    }
-                    const fileName = fileRow.dataset.fileName || filePath.split('/').pop();
-                    const confirmed = confirm(t('directories.move_confirm', { name: fileName }));
-                    if (!confirmed) {
-                        return;
-                    }
-                    moveButton.disabled = true;
-                    try {
-                        await moveFailedGenerationFileRequest(filePath);
-                        const parentPath = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
-                        alert(t('directories.move_success'));
-                        await reloadFileBrowser(parentPath);
-                    } catch (error) {
-                        alert(error.message || t('directories.move_error'));
-                    } finally {
-                        moveButton.disabled = false;
-                    }
-                    return;
-                }
-
-                const fileLink = event.target.closest('.file-browser-link');
-                if (fileLink && browserRoot.contains(fileLink)) {
-                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
-                        return;
-                    }
-                    const fileRow = fileLink.closest('.file-browser-item');
-                    if (!fileRow) {
-                        return;
-                    }
-                    const fileName = fileRow.dataset.fileName || '';
-                    const filePath = fileRow.dataset.filePath || '';
-                    const extension = (fileRow.dataset.fileExtension || '').toLowerCase();
-
-                    if (AUDIO_EXTENSIONS.has(extension)) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (window.AudioTrimmer && typeof AudioTrimmer.showPreview === 'function') {
-                            AudioTrimmer.showPreview(fileName, buildWorkdirUrl(filePath), filePath);
-                        } else {
-                            window.open(buildWorkdirUrl(filePath), '_blank');
-                        }
-                        return;
-                    }
-
-                    if (VIDEO_EXTENSIONS.has(extension)) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        showVideoPreview(fileName, buildWorkdirUrl(filePath));
-                        return;
-                    }
-
-                    if (TEXT_PREVIEW_EXTENSIONS.has(extension)) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        await showTextPreview(fileName, buildWorkdirUrl(filePath), extension);
-                        return;
-                    }
-
-                    return;
-                }
-
-                const summary = event.target.closest('summary.file-browser-summary');
-                if (!summary || !browserRoot.contains(summary)) {
-                    return;
-                }
-
-                const details = summary.closest('details.file-browser-directory');
-                if (!details) {
-                    return;
-                }
-
-                if (event.target.closest('.file-browser-actions')) {
-                    return;
-                }
-
-                event.preventDefault();
-
-                if (details.dataset.loading === 'true') {
-                    return;
-                }
-
-                const isOpen = details.hasAttribute('open');
-                if (isOpen) {
-                    details.removeAttribute('open');
-                    return;
-                }
-
-                details.dataset.loading = 'true';
-                try {
-                    await refreshDirectory(details);
-                    details.setAttribute('open', '');
-                } finally {
-                    delete details.dataset.loading;
-                }
-            });
         }
 
         function findScriptById(scriptId) {
@@ -1562,251 +725,89 @@
             badge.classList.toggle('d-none', !hasMissing);
         }
 
+        const workflowEditorApi = (window.ProjectWorkflowEditor && window.ProjectWorkflowEditor.createProjectWorkflowEditor)
+            ? window.ProjectWorkflowEditor.createProjectWorkflowEditor({
+                projectName: PROJECT_NAME,
+                t,
+                cloneSteps,
+                markWorkflowDirty,
+                updateInfoBox,
+                handleStartWorkflow,
+                stopWorkflow,
+                collectWorkflowState,
+                collectScriptStepsForRun,
+                normalizeWorkflowStep,
+                findWidgetById,
+                findScriptById,
+                getMissingParams,
+                describeStepParameters,
+                describeWidgetParameters,
+                formatScriptDirectoryName,
+                updateMissingBadge,
+                handleWidgetContinue,
+                openWorkflowParams,
+                openWorkflowWidgetParams,
+                moveWorkflowStep,
+                removeWorkflowStep,
+                updateCycleDisplay,
+                addWorkflowStep,
+                getWorkflowTemplates: () => workflowTemplates,
+                setWorkflowTemplates: value => { workflowTemplates = value; },
+                getCurrentTemplateId: () => currentTemplateId,
+                setCurrentTemplateId: value => { currentTemplateId = value; },
+                getDefaultWorkflow: () => defaultWorkflow,
+                setDefaultWorkflow: value => { defaultWorkflow = value; },
+                getWorkflowSteps: () => workflowSteps,
+                setWorkflowSteps: value => { workflowSteps = value; },
+                getWorkflowSaveModal: () => workflowSaveModal,
+                setWorkflowSaveModal: value => { workflowSaveModal = value; },
+                getWorkflowStepModal: () => workflowStepModal,
+                getCycleState: () => cycleState,
+                getCurrentWorkflowJobId: () => currentWorkflowJobId,
+                getAvailableScripts: () => availableScripts
+            })
+            : null;
+
         function findTemplateById(templateId) {
-            if (!templateId) {
-                return null;
-            }
-            return workflowTemplates.find(item => item.id === templateId) || null;
+            return workflowEditorApi ? workflowEditorApi.findTemplateById(templateId) : null;
         }
 
         function populateWorkflowTemplateSelect(selectedId) {
-            const select = document.getElementById('workflowTemplateSelect');
-            if (!select) {
-                return;
-            }
-            const previousValue = selectedId !== undefined ? selectedId : select.value;
-            select.innerHTML = '';
-
-            const placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.textContent = t('workflow.templates.placeholder', {}, 'Select a template...');
-            select.append(placeholder);
-
-            workflowTemplates.forEach(template => {
-                const option = document.createElement('option');
-                option.value = template.id;
-                option.textContent = template.name || template.id;
-                select.append(option);
-            });
-
-            const targetValue = selectedId !== undefined ? selectedId : previousValue;
-            if (targetValue && Array.from(select.options).some(option => option.value === targetValue)) {
-                select.value = targetValue;
-                currentTemplateId = targetValue;
-            } else {
-                select.value = '';
-                if (selectedId !== undefined) {
-                    currentTemplateId = null;
-                }
+            if (workflowEditorApi) {
+                workflowEditorApi.populateWorkflowTemplateSelect(selectedId);
             }
         }
 
         async function refreshWorkflowTemplates(selectedId = currentTemplateId) {
-            try {
-                const response = await fetch('/api/workflow-templates');
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    throw new Error(result.error || t('workflow.templates.list_failed'));
-                }
-                workflowTemplates = result.templates || [];
-                populateWorkflowTemplateSelect(selectedId);
-            } catch (error) {
-                console.error('Workflow sablon lista frissítési hiba:', error);
+            if (!workflowEditorApi) {
+                return;
             }
+            return workflowEditorApi.refreshWorkflowTemplates(selectedId);
         }
 
         async function loadWorkflowTemplateById(templateId, showMessage = true) {
-            if (!templateId) {
-                alert(t('workflow.templates.select_prompt'));
+            if (!workflowEditorApi) {
                 return;
             }
-            try {
-                const response = await fetch(`/api/workflow-template/${encodeURIComponent(templateId)}`);
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                    throw new Error(result.error || t('workflow.templates.load_failed'));
-                }
-                const template = result.template || {};
-                currentTemplateId = template.id || templateId;
-                workflowSteps = cloneSteps(template.steps || []);
-                defaultWorkflow = cloneSteps(template.steps || []);
-                markWorkflowDirty();
-                populateWorkflowTemplateSelect(currentTemplateId);
-                renderWorkflowSteps();
-                if (showMessage) {
-                    updateInfoBox('info', t('workflow.templates.loaded', { name: template.name || currentTemplateId }));
-                }
-            } catch (error) {
-                console.error('Workflow sablon betöltési hiba:', error);
-                alert(t('workflow.templates.load_error', { error: error.message }));
-            }
+            return workflowEditorApi.loadWorkflowTemplateById(templateId, showMessage);
         }
 
         function showSaveWorkflowModal() {
-            const modalElement = document.getElementById('workflowSaveModal');
-            if (!modalElement) {
-                return;
+            if (workflowEditorApi) {
+                workflowEditorApi.showSaveWorkflowModal();
             }
-            const nameInput = document.getElementById('workflowSaveName');
-            const descriptionInput = document.getElementById('workflowSaveDescription');
-            const overwriteCheckbox = document.getElementById('workflowSaveOverwrite');
-            const overwriteInfo = document.getElementById('workflowSaveOverwriteInfo');
-            const errorBox = document.getElementById('workflowSaveError');
-
-            const currentTemplate = findTemplateById(currentTemplateId);
-            if (nameInput) {
-                nameInput.value = currentTemplate ? (currentTemplate.name || '') : '';
-            }
-            if (descriptionInput) {
-                descriptionInput.value = currentTemplate ? (currentTemplate.description || '') : '';
-            }
-            if (overwriteCheckbox) {
-                overwriteCheckbox.checked = false;
-                overwriteCheckbox.disabled = !currentTemplateId;
-            }
-            if (overwriteInfo) {
-                if (currentTemplate) {
-                    overwriteInfo.textContent = t('workflow.templates.overwrite_current', {
-                        name: currentTemplate.name || '',
-                        id: currentTemplate.id || ''
-                    });
-                    overwriteInfo.classList.remove('d-none');
-                } else {
-                    overwriteInfo.classList.add('d-none');
-                }
-            }
-            if (errorBox) {
-                errorBox.classList.add('d-none');
-                errorBox.textContent = '';
-            }
-            if (!workflowSaveModal) {
-                workflowSaveModal = new bootstrap.Modal(modalElement);
-            }
-            workflowSaveModal.show();
         }
 
         async function saveWorkflowTemplateFromModal() {
-            const nameInput = document.getElementById('workflowSaveName');
-            const descriptionInput = document.getElementById('workflowSaveDescription');
-            const overwriteCheckbox = document.getElementById('workflowSaveOverwrite');
-            const errorBox = document.getElementById('workflowSaveError');
-
-            const name = nameInput ? nameInput.value.trim() : '';
-            const description = descriptionInput ? descriptionInput.value.trim() : '';
-            const overwrite = overwriteCheckbox ? overwriteCheckbox.checked : false;
-
-            if (errorBox) {
-                errorBox.classList.add('d-none');
-                errorBox.textContent = '';
-            }
-
-            if (overwrite && !currentTemplateId) {
-                if (errorBox) {
-                    errorBox.textContent = t('workflow.templates.none_selected_overwrite');
-                    errorBox.classList.remove('d-none');
-                }
+            if (!workflowEditorApi) {
                 return;
             }
-
-            if (!name && !overwrite) {
-                if (errorBox) {
-                    errorBox.textContent = t('workflow.templates.name_required');
-                    errorBox.classList.remove('d-none');
-                }
-                return;
-            }
-
-            const workflowState = collectWorkflowState();
-            const body = {
-                name,
-                description,
-                steps: workflowState,
-                overwrite
-            };
-            if (overwrite && currentTemplateId) {
-                body.template_id = currentTemplateId;
-            }
-
-            try {
-                const response = await fetch('/api/save-workflow-template', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const result = await response.json();
-                if (!response.ok || !result.success) {
-                throw new Error(result.error || t('workflow.templates.save_failed'));
-                }
-                if (workflowSaveModal) {
-                    workflowSaveModal.hide();
-                }
-                const savedTemplate = result.template || {};
-                currentTemplateId = savedTemplate.id || currentTemplateId;
-                defaultWorkflow = cloneSteps(workflowState);
-                await refreshWorkflowTemplates(currentTemplateId);
-                populateWorkflowTemplateSelect(currentTemplateId);
-                updateInfoBox('success', t('workflow.templates.saved', { name: savedTemplate.name || currentTemplateId }));
-            } catch (error) {
-                console.error('Workflow sablon mentési hiba:', error);
-                if (errorBox) {
-                    errorBox.textContent = error.message;
-                    errorBox.classList.remove('d-none');
-                }
-            }
+            return workflowEditorApi.saveWorkflowTemplateFromModal();
         }
 
         function initWorkflowButtons() {
-            const templateSelect = document.getElementById('workflowTemplateSelect');
-            if (templateSelect) {
-                templateSelect.addEventListener('change', event => {
-                    const value = event.target.value || '';
-                    if (!value) {
-                        currentTemplateId = null;
-                        return;
-                    }
-                    if (value === currentTemplateId) {
-                        return;
-                    }
-                    currentTemplateId = value;
-                    loadWorkflowTemplateById(currentTemplateId);
-                });
-            }
-
-            const saveTemplateBtn = document.getElementById('saveWorkflowBtn');
-            if (saveTemplateBtn) {
-                saveTemplateBtn.addEventListener('click', showSaveWorkflowModal);
-            }
-
-            const resetBtn = document.getElementById('resetWorkflowBtn');
-            if (resetBtn) {
-                resetBtn.addEventListener('click', () => {
-                    if (!defaultWorkflow.length) {
-                        alert(t('workflow.templates.default_missing'));
-                        return;
-                    }
-                    if (!confirm(t('workflow.templates.reset_confirm'))) {
-                        return;
-                    }
-                    workflowSteps = cloneSteps(defaultWorkflow);
-                    markWorkflowDirty();
-                    renderWorkflowSteps();
-                    updateInfoBox('info', t('workflow.templates.default_loaded'));
-                });
-            }
-
-            const startBtn = document.getElementById('startWorkflowBtn');
-            if (startBtn) {
-                startBtn.addEventListener('click', handleStartWorkflow);
-            }
-
-            const stopBtn = document.getElementById('stopWorkflowBtn');
-            if (stopBtn) {
-                stopBtn.addEventListener('click', stopWorkflow);
-            }
-
-            const searchInput = document.getElementById('workflowStepSearch');
-            if (searchInput) {
-                searchInput.addEventListener('input', event => populateWorkflowStepList(event.target.value || ''));
+            if (workflowEditorApi) {
+                workflowEditorApi.initWorkflowButtons();
             }
         }
 
@@ -2246,437 +1247,27 @@
         }
 
         function renderWorkflowSteps() {
-            const tbody = document.getElementById('workflowStepsBody');
-            if (!tbody) {
-                return;
-            }
-            tbody.innerHTML = '';
-            if (!workflowSteps.length) {
-                const row = document.createElement('tr');
-                row.className = 'text-muted';
-                const cell = document.createElement('td');
-                cell.colSpan = 5;
-                cell.textContent = t('workflow.table_empty');
-                row.append(cell);
-                tbody.append(row);
-                updateMissingBadge();
-                const startButtonEmpty = document.getElementById('startWorkflowBtn');
-                if (startButtonEmpty) {
-                    startButtonEmpty.disabled = true;
-                }
-                return;
-            }
-
-            workflowSteps.forEach((step, index) => {
-                normalizeWorkflowStep(step);
-                const isWidget = step.type === 'widget';
-                const script = !isWidget ? findScriptById(step.script) : null;
-                const widget = isWidget ? findWidgetById(step.widget) : null;
-                const row = document.createElement('tr');
-                row.classList.add('workflow-row');
-                row.dataset.stepIndex = String(index);
-                if (isWidget) {
-                    row.classList.add('workflow-row-widget');
-                }
-                if (step.enabled === false) {
-                    row.classList.add('workflow-row-disabled', 'text-muted');
-                }
-                const missing = (!isWidget && step.enabled !== false) ? getMissingParams(step, script) : [];
-                if (missing.length) {
-                    row.classList.add('workflow-row-missing');
-                }
-
-                const enabledCell = document.createElement('td');
-                const enabledWrapper = document.createElement('div');
-                enabledWrapper.className = 'form-check form-switch';
-                const enabledCheckbox = document.createElement('input');
-                enabledCheckbox.type = 'checkbox';
-                enabledCheckbox.className = 'form-check-input';
-                enabledCheckbox.checked = step.enabled !== false;
-                enabledCheckbox.addEventListener('change', () => {
-                    step.enabled = enabledCheckbox.checked;
-                    markWorkflowDirty();
-                    renderWorkflowSteps();
-                });
-                enabledWrapper.append(enabledCheckbox);
-                enabledCell.append(enabledWrapper);
-                row.append(enabledCell);
-
-                const infoCell = document.createElement('td');
-                if (isWidget) {
-                    const title = document.createElement('div');
-                    title.className = 'fw-semibold';
-                    title.textContent = widget ? widget.name : t('workflow.labels_extra.special_widget');
-                    infoCell.append(title);
-
-                    if (widget && widget.description) {
-                        const desc = document.createElement('div');
-                        desc.className = 'small text-muted';
-                        desc.textContent = widget.description;
-                        infoCell.append(desc);
-                    }
-
-                    const buttonRow = document.createElement('div');
-                    buttonRow.className = 'd-flex flex-wrap gap-2 mt-2';
-
-                    const reviewBtn = document.createElement('button');
-                    reviewBtn.type = 'button';
-                    reviewBtn.className = 'btn btn-sm btn-outline-info';
-                    reviewBtn.textContent = widget && widget.reviewLabel ? widget.reviewLabel : 'Review';
-                    reviewBtn.disabled = step.enabled === false;
-                    reviewBtn.addEventListener('click', () => {
-                        const url = `/review/${encodeURIComponent(PROJECT_NAME)}`;
-                        window.open(url, '_blank', 'noopener');
-                    });
-
-                    const continueBtn = document.createElement('button');
-                    continueBtn.type = 'button';
-                    continueBtn.className = 'btn btn-sm btn-success';
-                    continueBtn.textContent = widget && widget.continueLabel ? widget.continueLabel : 'Continue';
-                    const hasRemainingScripts = collectScriptStepsForRun(index + 1).length > 0;
-                    continueBtn.disabled = step.enabled === false || !hasRemainingScripts;
-                    if (!hasRemainingScripts) {
-                        continueBtn.title = t('workflow.messages.no_more_steps');
-                    }
-                    continueBtn.addEventListener('click', () => handleWidgetContinue(index));
-
-                    buttonRow.append(reviewBtn, continueBtn);
-                    infoCell.append(buttonRow);
-
-                    if (widget && Array.isArray(widget.parameters) && widget.parameters.length) {
-                        const summary = describeWidgetParameters(widget, step);
-                        if (summary) {
-                            const summaryDiv = document.createElement('div');
-                            summaryDiv.className = 'small text-muted mt-2';
-                            summaryDiv.textContent = summary;
-                            infoCell.append(summaryDiv);
-                        }
-                    }
-                } else {
-                    const titleWrap = document.createElement('div');
-                    const titleRow = document.createElement('div');
-                    titleRow.className = 'd-flex align-items-center gap-2 flex-wrap';
-                    const title = document.createElement('div');
-                    title.className = 'fw-semibold mb-0';
-                    title.textContent = formatScriptDirectoryName(script, step);
-                    titleRow.append(title);
-                    if (script && script.api) {
-                        const apiBadge = document.createElement('span');
-                        apiBadge.className = 'badge bg-warning text-dark script-api-badge';
-                        apiBadge.textContent = `${String(script.api).toUpperCase()} API`;
-                        titleRow.append(apiBadge);
-                    }
-                    titleWrap.append(titleRow);
-
-                    if (script && script.description) {
-                        const desc = document.createElement('div');
-                        desc.className = 'small text-muted';
-                        desc.textContent = script.description;
-                        titleWrap.append(desc);
-                    }
-
-                    infoCell.append(titleWrap);
-
-                    const summary = document.createElement('div');
-                    summary.className = 'small mt-1';
-                    summary.textContent = describeStepParameters(step, script, missing);
-                    infoCell.append(summary);
-
-                    if (script && script.api) {
-                        const apiInfoLine = document.createElement('div');
-                        apiInfoLine.className = 'small mt-1 script-api-highlight';
-                        const apiUsageLabel = t('workflow.labels_extra.api_usage');
-                        apiInfoLine.textContent = `${apiUsageLabel}: ${String(script.api).toUpperCase()}`;
-                        infoCell.append(apiInfoLine);
-                    }
-
-                    if (script && script.required_keys && script.required_keys.length) {
-                        const keyLine = document.createElement('div');
-                        keyLine.className = 'small mt-1';
-                        script.required_keys.forEach(key => {
-                            const badge = document.createElement('span');
-                            badge.className = 'badge bg-secondary me-1';
-                            badge.textContent = key;
-                            keyLine.append(badge);
-                        });
-                        infoCell.append(keyLine);
-                    }
-                }
-                row.append(infoCell);
-
-                const envCell = document.createElement('td');
-                if (isWidget) {
-                    const widgetBadge = document.createElement('span');
-                    widgetBadge.className = 'badge workflow-env-badge';
-                    widgetBadge.textContent = t('workflow.labels_extra.widget_badge', {}, 'Widget');
-                    envCell.append(widgetBadge);
-                } else if (script && script.environment) {
-                    const envBadge = document.createElement('span');
-                    envBadge.className = 'badge workflow-env-badge';
-                    envBadge.textContent = script.environment;
-                    envCell.append(envBadge);
-                } else {
-                    envCell.innerHTML = '&mdash;';
-                }
-                row.append(envCell);
-
-                const haltCell = document.createElement('td');
-                if (isWidget) {
-                    haltCell.innerHTML = '&mdash;';
-                } else {
-                    const haltWrapper = document.createElement('div');
-                    haltWrapper.className = 'form-check form-switch';
-                    const haltCheckbox = document.createElement('input');
-                    haltCheckbox.type = 'checkbox';
-                    haltCheckbox.className = 'form-check-input';
-                    haltCheckbox.checked = step.halt_on_fail !== false;
-                    haltCheckbox.addEventListener('change', () => {
-                        step.halt_on_fail = haltCheckbox.checked;
-                        markWorkflowDirty();
-                        renderWorkflowSteps();
-                    });
-                    const haltLabel = document.createElement('label');
-                    haltLabel.className = 'form-check-label small';
-                    haltLabel.textContent = haltCheckbox.checked
-                        ? t('workflow.labels_extra.halt_on_fail')
-                        : t('workflow.labels_extra.continue_on_fail');
-                    haltWrapper.append(haltCheckbox, haltLabel);
-                    haltCell.append(haltWrapper);
-                }
-                row.append(haltCell);
-
-                const actionsCell = document.createElement('td');
-                actionsCell.className = 'text-end';
-                if (!isWidget) {
-                    const editBtn = document.createElement('button');
-                    editBtn.type = 'button';
-                    editBtn.className = 'btn btn-sm btn-outline-primary me-2';
-                    editBtn.textContent = t('workflow.buttons_extra.parameters');
-                    editBtn.addEventListener('click', () => openWorkflowParams(index));
-                    actionsCell.append(editBtn);
-                } else if (widget && Array.isArray(widget.parameters) && widget.parameters.length) {
-                    const editBtn = document.createElement('button');
-                    editBtn.type = 'button';
-                    editBtn.className = 'btn btn-sm btn-outline-primary me-2';
-                    editBtn.textContent = t('workflow.buttons_extra.parameters');
-                    editBtn.addEventListener('click', () => openWorkflowWidgetParams(index));
-                    actionsCell.append(editBtn);
-                }
-
-                const upBtn = document.createElement('button');
-                upBtn.type = 'button';
-                upBtn.className = 'btn btn-sm btn-outline-secondary me-1';
-                upBtn.innerHTML = '&uarr;';
-                upBtn.disabled = index === 0;
-                upBtn.addEventListener('click', () => moveWorkflowStep(index, -1));
-
-                const downBtn = document.createElement('button');
-                downBtn.type = 'button';
-                downBtn.className = 'btn btn-sm btn-outline-secondary me-1';
-                downBtn.innerHTML = '&darr;';
-                downBtn.disabled = index === workflowSteps.length - 1;
-                downBtn.addEventListener('click', () => moveWorkflowStep(index, 1));
-
-                const removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'btn btn-sm btn-outline-danger';
-                removeBtn.innerHTML = '&times;';
-                removeBtn.addEventListener('click', () => removeWorkflowStep(index));
-
-                actionsCell.append(upBtn, downBtn, removeBtn);
-                row.append(actionsCell);
-
-                tbody.append(row);
-            });
-
-            if (cycleState) {
-                const widgetIndex = cycleState.widgetIndex;
-                const currentIteration = cycleState.activeIteration !== null
-                    ? cycleState.activeIteration
-                    : Math.max(0, cycleState.nextIteration - 1);
-                updateCycleDisplay(widgetIndex, currentIteration, cycleState.totalIterations);
-            }
-
-            updateMissingBadge();
-
-            const startButton = document.getElementById('startWorkflowBtn');
-            if (startButton) {
-                const runnableSegment = collectScriptStepsForRun(0);
-                startButton.disabled = runnableSegment.length === 0;
-            }
-
-            const statusText = document.getElementById('workflowStatusText');
-            if (statusText && !currentWorkflowJobId) {
-                const hasAnyScript = workflowSteps.some(step => step.type !== 'widget');
-                const hasEnabledScripts = workflowSteps.some(step => step.type !== 'widget' && step.enabled !== false);
-                const runnableSegment = collectScriptStepsForRun(0);
-                if (!hasAnyScript) {
-                    statusText.textContent = t('workflow.status_texts.add_steps');
-                } else if (!hasEnabledScripts) {
-                    statusText.textContent = t('workflow.status_texts.enable_steps');
-                } else if (!runnableSegment.length) {
-                    statusText.textContent = t('workflow.status_texts.no_steps_before_widget');
-                } else {
-                    statusText.textContent = t('workflow.status_texts.ready');
-                }
+            if (workflowEditorApi) {
+                workflowEditorApi.renderWorkflowSteps();
             }
         }
 
         function openWorkflowStepPicker() {
-            populateWorkflowStepList('');
-            if (workflowStepModal) {
-                workflowStepModal.show();
+            if (workflowEditorApi) {
+                workflowEditorApi.openWorkflowStepPicker();
             }
         }
 
         function populateWorkflowStepList(filterText) {
-            const list = document.getElementById('workflowStepList');
-            if (!list) {
-                return;
+            if (workflowEditorApi) {
+                workflowEditorApi.populateWorkflowStepList(filterText);
             }
-            list.innerHTML = '';
-            const term = (filterText || '').toLowerCase();
-            const scripts = availableScripts
-                .slice()
-                .sort((a, b) => (a.display_name || a.script).localeCompare(b.display_name || b.script));
-            const filtered = term
-                ? scripts.filter(script =>
-                    (script.display_name && script.display_name.toLowerCase().includes(term)) ||
-                    (script.script && script.script.toLowerCase().includes(term)))
-                : scripts;
-
-            if (!filtered.length) {
-                const empty = document.createElement('div');
-                empty.className = 'list-group-item text-muted';
-                empty.textContent = t('workflow.search.no_results');
-                list.append(empty);
-                return;
-            }
-
-            const normalizeScriptPath = (path) => (path || '').replace(/\\/g, '/');
-
-            const createScriptListItem = (script) => {
-                const item = document.createElement('div');
-                item.className = 'list-group-item ps-4';
-                const header = document.createElement('div');
-                header.className = 'd-flex justify-content-between align-items-start gap-3';
-
-                const titleWrap = document.createElement('div');
-                const titleRow = document.createElement('div');
-                titleRow.className = 'd-flex align-items-center gap-2 flex-wrap';
-                const title = document.createElement('div');
-                title.className = 'fw-semibold';
-                title.textContent = script.display_name || script.script;
-                titleRow.append(title);
-                if (script.api) {
-                    const apiBadge = document.createElement('span');
-                    apiBadge.className = 'badge bg-warning text-dark script-api-badge';
-                    apiBadge.textContent = `${String(script.api).toUpperCase()} API`;
-                    titleRow.append(apiBadge);
-                }
-                titleWrap.append(titleRow);
-                const subtitle = document.createElement('div');
-                subtitle.className = 'small text-muted';
-                subtitle.textContent = script.description || script.script;
-                titleWrap.append(subtitle);
-
-                if (script.description && script.script && script.description !== script.script) {
-                    const pathInfo = document.createElement('div');
-                    pathInfo.className = 'small text-muted';
-                    pathInfo.textContent = script.script;
-                    titleWrap.append(pathInfo);
-                }
-
-                const addBtn = document.createElement('button');
-                addBtn.type = 'button';
-                addBtn.className = 'btn btn-sm btn-primary';
-                addBtn.textContent = t('workflow.buttons.add_step');
-                addBtn.addEventListener('click', () => {
-                    addWorkflowStep(script.id);
-                    if (workflowStepModal) {
-                        workflowStepModal.hide();
-                    }
-                });
-
-                header.append(titleWrap, addBtn);
-                item.append(header);
-
-                if (script.environment) {
-                    const envInfo = document.createElement('div');
-                    envInfo.className = 'small mt-1';
-                    envInfo.innerHTML = `<strong>${t('workflow.details.environment_label')}</strong> ${script.environment}`;
-                    item.append(envInfo);
-                }
-
-                if (script.api) {
-                    const apiInfo = document.createElement('div');
-                    apiInfo.className = 'small mt-1 script-api-highlight';
-                    apiInfo.innerHTML = `<strong>${t('workflow.details.api_label', {}, 'API:')}</strong> ${String(script.api).toUpperCase()}`;
-                    item.append(apiInfo);
-                }
-
-                const requiredParams = (script.parameters || []).filter(param => param.required && !param.autofill);
-                if (requiredParams.length) {
-                    const reqInfo = document.createElement('div');
-                    reqInfo.className = 'small mt-1';
-                    reqInfo.innerHTML = `<strong>${t('workflow.details.required_params_label')}</strong> ${requiredParams.map(param => param.name).join(', ')}`;
-                    item.append(reqInfo);
-                }
-
-                if (script.required_keys && script.required_keys.length) {
-                    const keyInfo = document.createElement('div');
-                    keyInfo.className = 'small mt-1';
-                    keyInfo.innerHTML = `<strong>${t('workflow.details.required_keys_label')}</strong> ${script.required_keys.join(', ')}`;
-                    item.append(keyInfo);
-                }
-
-                if (script.notes) {
-                    const notes = document.createElement('div');
-                    notes.className = 'small mt-2 text-muted';
-                    notes.textContent = script.notes;
-                    item.append(notes);
-                }
-
-                return item;
-            };
-
-            const groupMap = new Map();
-            filtered.forEach(script => {
-                const normalizedPath = normalizeScriptPath(script.script);
-                const lastSlashIndex = normalizedPath.lastIndexOf('/');
-                const groupKey = lastSlashIndex > -1 ? normalizedPath.slice(0, lastSlashIndex) : '';
-                if (!groupMap.has(groupKey)) {
-                    groupMap.set(groupKey, []);
-                }
-                groupMap.get(groupKey).push(script);
-            });
-
-            const compareGroupNames = (a, b) => {
-                if (a === b) {
-                    return 0;
-                }
-                if (!a) {
-                    return -1;
-                }
-                if (!b) {
-                    return 1;
-                }
-                return a.localeCompare(b);
-            };
-
-            const groupedEntries = Array.from(groupMap.entries()).sort((entryA, entryB) => compareGroupNames(entryA[0], entryB[0]));
-
-            groupedEntries.forEach(([groupName, scriptsInGroup]) => {
-                const header = document.createElement('div');
-                header.className = 'list-group-item list-group-item-secondary fw-semibold';
-                header.textContent = groupName ? groupName : t('workflow.groups.root_label');
-                list.append(header);
-
-                scriptsInGroup.forEach(script => {
-                    list.append(createScriptListItem(script));
-                });
-            });
         }
+
+        /* removed from workspace:
+           template CRUD, workflow button wiring, workflow table render, step picker list
+           now handled by project-workflow-editor.js
+        */
 
         function addWorkflowStep(scriptId, insertIndex = workflowSteps.length) {
             const script = findScriptById(scriptId);

@@ -77,8 +77,8 @@ The summary below is based on the `scripts/` folder’s `*_help.md` files. Each 
 - `scripts/TTS/EQ.json` – Multi-band EQ definition consumed by the F5-TTS and VibeVoice scripts via `--eq-config`; tune `global_gain_db` and `points` to match your reference audio.
 
 ### Developer Documentation
-- `scripts/How_to_create_new_script_modul/how_to_create_scripts_help.md` – Developer guide for config-driven scripts: locating `config.json`, exposing `-p/--project-name`, enabling debug flags, and handling errors consistently.
-- `scripts/How_to_create_new_script_modul/how_to_create_scripts_json_help.md` – Documents the `scripts.json` schema (`enviroment`, `required`, `optional`) so CLI definitions stay synchronized with the UI.
+- `scripts/How_to_create_new_script_modul/how_to_create_script_modul.md` – Consolidated developer guide for adding new framework-compatible script modules.
+- `scripts/How_to_create_new_script_modul/how_to_create_script_modul_AI.md` – Internal repo-specific reminder for AI/agent-driven script development with the real integration rules.
 
 ## Running the Application
 ```bash
