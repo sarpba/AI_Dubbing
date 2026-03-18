@@ -5,7 +5,7 @@ import logging
 import os
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from flask import jsonify, request
@@ -170,7 +170,7 @@ def register_workflow_api_routes(app, deps: Dict[str, Any]) -> None:
                         defaults_workflow,
                         selected_template,
                         config_snapshot=current_config,
-                        saved_at=datetime.utcnow().isoformat(),
+                        saved_at=datetime.now(timezone.utc).isoformat(),
                     )
                     if saved_state:
                         defaults_workflow = copy.deepcopy(saved_state.get('steps') or [])
@@ -236,7 +236,7 @@ def register_workflow_api_routes(app, deps: Dict[str, Any]) -> None:
             return jsonify({'success': False, 'error': str(exc)}), 400
 
         template_id = (payload.get('template_id') or '').strip() or None
-        saved_at = (payload.get('saved_at') or '').strip() or datetime.utcnow().isoformat()
+        saved_at = (payload.get('saved_at') or '').strip() or datetime.now(timezone.utc).isoformat()
 
         try:
             state = deps['save_project_workflow_state'](
@@ -305,7 +305,7 @@ def register_workflow_api_routes(app, deps: Dict[str, Any]) -> None:
 
         encoded_full_steps = deps['mask_workflow_secret_params'](normalized_full_steps)
         encoded_steps = deps['mask_workflow_secret_params'](normalized_steps)
-        saved_timestamp = datetime.utcnow().isoformat()
+        saved_timestamp = datetime.now(timezone.utc).isoformat()
         try:
             deps['save_project_workflow_state'](
                 sanitized_project,
@@ -325,7 +325,7 @@ def register_workflow_api_routes(app, deps: Dict[str, Any]) -> None:
             'job_id': job_id,
             'project': sanitized_project,
             'status': 'queued',
-            'created_at': datetime.utcnow().isoformat(),
+            'created_at': datetime.now(timezone.utc).isoformat(),
             'message': 'Feladat sorban áll.',
             'log': None,
             'cancel_requested': False,

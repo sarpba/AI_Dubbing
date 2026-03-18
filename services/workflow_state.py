@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -19,7 +19,7 @@ def sanitize_workflow_id(name: str, secure_filename: Callable[[str], str]) -> st
     candidate = secure_filename(name or '')
     candidate = candidate.replace(' ', '_').strip('_')
     if not candidate:
-        candidate = datetime.utcnow().strftime("workflow_%Y%m%d_%H%M%S")
+        candidate = datetime.now(timezone.utc).strftime("workflow_%Y%m%d_%H%M%S")
     return candidate.lower()
 
 

@@ -6,7 +6,7 @@ import math
 import os
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -498,7 +498,7 @@ def register_review_api_routes(app, deps: Dict[str, Any]) -> None:
             'job_id': job_id,
             'project': sanitized_project,
             'status': 'queued',
-            'created_at': datetime.utcnow().isoformat(),
+            'created_at': datetime.now(timezone.utc).isoformat(),
             'message': 'Regeneráció sorban áll.',
             'log': None,
             'cancel_requested': False,

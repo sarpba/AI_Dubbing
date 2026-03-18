@@ -9,7 +9,7 @@ import subprocess
 import tarfile
 import tempfile
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import after_this_request, jsonify, request, send_file
@@ -250,7 +250,7 @@ def register_files_api_routes(app, deps: Dict[str, Any]) -> None:
             return jsonify({'success': False, 'error': 'A projekt könyvtára nem található.'}), 404
 
         temp_dir = tempfile.mkdtemp(prefix='project-backup-')
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
         archive_base = os.path.join(temp_dir, f"{sanitized_project}_backup_{timestamp}")
         archive_path = f"{archive_base}.tar.gz"
 

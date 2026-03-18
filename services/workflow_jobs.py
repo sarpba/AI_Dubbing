@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
@@ -149,7 +149,7 @@ def run_workflow_job(
         update_workflow_job_fn(
             job_id,
             status=initial_status,
-            started_at=datetime.utcnow().isoformat(),
+            started_at=datetime.now(timezone.utc).isoformat(),
             message=initial_message,
             cancel_requested=should_stop(),
         )
@@ -194,7 +194,7 @@ def run_workflow_job(
                 update_workflow_job_fn(
                     job_id,
                     status='cancelled',
-                    finished_at=datetime.utcnow().isoformat(),
+                    finished_at=datetime.now(timezone.utc).isoformat(),
                     message='Workflow megszakítva.',
                     cancel_requested=False,
                     current_step=None,
@@ -238,7 +238,7 @@ def run_workflow_job(
                 update_workflow_job_fn(
                     job_id,
                     status='cancelled',
-                    finished_at=datetime.utcnow().isoformat(),
+                    finished_at=datetime.now(timezone.utc).isoformat(),
                     message='Workflow megszakítva.',
                     cancel_requested=False,
                     current_step=None,
@@ -253,7 +253,7 @@ def run_workflow_job(
                     update_workflow_job_fn(
                         job_id,
                         status='failed',
-                        finished_at=datetime.utcnow().isoformat(),
+                        finished_at=datetime.now(timezone.utc).isoformat(),
                         message=f"Hiba a(z) {script_meta['display_name']} lépés futtatása közben.",
                         cancel_requested=False,
                         current_step=None,
@@ -269,7 +269,7 @@ def run_workflow_job(
         update_workflow_job_fn(
             job_id,
             status='completed',
-            finished_at=datetime.utcnow().isoformat(),
+            finished_at=datetime.now(timezone.utc).isoformat(),
             message='Workflow sikeresen lefutott.',
             cancel_requested=False,
             current_step=None,
@@ -280,7 +280,7 @@ def run_workflow_job(
         update_workflow_job_fn(
             job_id,
             status='failed',
-            finished_at=datetime.utcnow().isoformat(),
+            finished_at=datetime.now(timezone.utc).isoformat(),
             message=str(exc),
             cancel_requested=False,
             current_step=None,
@@ -292,7 +292,7 @@ def run_workflow_job(
             update_workflow_job_fn(
                 job_id,
                 status='cancelled',
-                finished_at=datetime.utcnow().isoformat(),
+                finished_at=datetime.now(timezone.utc).isoformat(),
                 message='Workflow megszakítva.',
                 cancel_requested=False,
             )
@@ -300,7 +300,7 @@ def run_workflow_job(
             update_workflow_job_fn(
                 job_id,
                 status='failed',
-                finished_at=datetime.utcnow().isoformat(),
+                finished_at=datetime.now(timezone.utc).isoformat(),
                 message=f'Hiba: {exc}',
                 cancel_requested=False,
             )
