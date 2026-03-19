@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import datetime
 import importlib.util
 import json
@@ -12,15 +13,19 @@ import shutil
 import sys
 import tempfile
 import time
+import warnings
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
+
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 
 import numpy as np
 import soundfile as sf
 import torch
 import torch.multiprocessing as mp
-import tqdm
 from transformers.utils import is_flash_attn_2_available, logging as transformers_logging
 
 # Ensure project root is importable so we can reuse shared tooling.
@@ -240,6 +245,14 @@ def resample_audio(audio: np.ndarray, source_rate: int, target_rate: int) -> np.
 class PitchSummary:
     median_hz: float
     voiced_ratio: float
+
+
+@dataclass
+class SegmentProcessResult:
+    success: bool
+    error_message: Optional[str] = None
+    rejected_by_whisper: bool = False
+    rejected_by_pitch: bool = False
 
 
 def _prepare_signal_for_pitch(signal: np.ndarray) -> np.ndarray:
@@ -549,6 +562,69 @@ def increment_stat(stats, key: str, increment: int = 1, lock=None) -> None:
     stats[key] = current + increment
 
 
+def snapshot_stats(stats, lock=None) -> Dict[str, int]:
+    if lock is not None:
+        with lock:
+            return {key: int(value) for key, value in dict(stats).items()}
+    return {key: int(value) for key, value in dict(stats).items()}
+
+
+def render_status_line(stats_snapshot: Dict[str, int]) -> str:
+    total = int(stats_snapshot.get("total", 0))
+    successful = int(stats_snapshot.get("successful", 0))
+    failed = int(stats_snapshot.get("failed", 0))
+    whisper_rejected = int(stats_snapshot.get("whisper_rejected", 0))
+    pitch_rejected = int(stats_snapshot.get("pitch_rejected", 0))
+    processed = successful + failed
+    remaining = max(0, total - processed)
+    return (
+        f"Össz feladat / sikeres: {total}/{successful} | "
+        f"Elutasítva Whisper miatt: {whisper_rejected} | "
+        f"Elutasítva pitch miatt: {pitch_rejected} | "
+        f"Hátralévő: {remaining}"
+    )
+
+
+def emit_status_line(stats_snapshot: Dict[str, int], *, final: bool = False) -> None:
+    line = render_status_line(stats_snapshot)
+    if final:
+        print(line, flush=True)
+    else:
+        print(f"\r{line}", end="", flush=True)
+
+
+def configure_external_verbosity(debug_enabled: bool) -> None:
+    if debug_enabled:
+        transformers_logging.set_verbosity_info()
+        return
+
+    transformers_logging.set_verbosity_error()
+    transformers_logging.disable_progress_bar()
+    for noisy_logger_name in (
+        "transformers",
+        "transformers.modeling_utils",
+        "transformers.tokenization_utils_base",
+        "transformers.configuration_utils",
+        "transformers.utils.hub",
+        "huggingface_hub",
+        "torch",
+    ):
+        logging.getLogger(noisy_logger_name).setLevel(logging.ERROR)
+
+
+@contextlib.contextmanager
+def suppress_external_output(enabled: bool):
+    if not enabled:
+        yield
+        return
+
+    with open(os.devnull, "w", encoding="utf-8") as devnull, contextlib.redirect_stdout(
+        devnull
+    ), contextlib.redirect_stderr(devnull), warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        yield
+
+
 def log_generation_attempt(
     worker_label: str,
     filename: str,
@@ -668,19 +744,21 @@ def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[
         if device_for_pipeline.startswith("cuda"):
             # pipeline expects device index for cuda
             device_for_pipeline = int(device.split(":")[-1]) if ":" in device else device
-        transcriber = pipeline(
-            "automatic-speech-recognition",
-            model=args.whisper_model,
-            torch_dtype=torch.float16 if device != "cpu" else torch.float32,
-            device=device_for_pipeline,
-        )
+        with suppress_external_output(not args.debug):
+            transcriber = pipeline(
+                "automatic-speech-recognition",
+                model=args.whisper_model,
+                torch_dtype=torch.float16 if device != "cpu" else torch.float32,
+                device=device_for_pipeline,
+            )
 
         def run(audio_path: str) -> str:
             generate_kwargs = {
                 "language": WHISPER_LANG_CODE_TO_NAME.get(whisper_language),
                 "num_beams": args.beam_size,
             }
-            output = transcriber(audio_path, generate_kwargs=generate_kwargs)
+            with suppress_external_output(not args.debug):
+                output = transcriber(audio_path, generate_kwargs=generate_kwargs)
             if isinstance(output, dict):
                 return output.get("text", "")
             return str(output)
@@ -692,15 +770,17 @@ def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[
         return None, None
 
     model_name = args.whisper_model.replace("openai/", "")
-    transcriber = whisper.load_model(model_name, device=device)
+    with suppress_external_output(not args.debug):
+        transcriber = whisper.load_model(model_name, device=device)
 
     def run(audio_path: str) -> str:
-        result = transcriber.transcribe(
-            audio_path,
-            language=whisper_language,
-            fp16=torch.cuda.is_available(),
-            beam_size=args.beam_size,
-        )
+        with suppress_external_output(not args.debug):
+            result = transcriber.transcribe(
+                audio_path,
+                language=whisper_language,
+                fp16=torch.cuda.is_available(),
+                beam_size=args.beam_size,
+            )
         return result.get("text", "")
 
     return run, whisper_language
@@ -938,10 +1018,12 @@ def load_vibevoice_components(
     if not model_path:
         raise ValueError("A VibeVoice modell elérési útja nem lett megadva (--model_path).")
 
-    transformers_logging.set_verbosity_info()
+    if args.debug:
+        transformers_logging.set_verbosity_info()
 
     logger.info("Processor betöltése: %s", model_path)
-    processor = VibeVoiceProcessor.from_pretrained(model_path)
+    with suppress_external_output(not args.debug):
+        processor = VibeVoiceProcessor.from_pretrained(model_path)
 
     runtime_config = resolve_model_runtime_config(device)
     load_dtype = runtime_config.load_dtype
@@ -958,11 +1040,12 @@ def load_vibevoice_components(
     )
 
     try:
-        model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-            model_path,
-            torch_dtype=load_dtype,
-            attn_implementation=attn_impl_primary,
-        )
+        with suppress_external_output(not args.debug):
+            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                model_path,
+                torch_dtype=load_dtype,
+                attn_implementation=attn_impl_primary,
+            )
         if device_lower.startswith("cuda") or device_lower == "mps":
             model.to(device)
     except Exception as exc:  # pragma: no cover - environment dependent fallback
@@ -971,11 +1054,12 @@ def load_vibevoice_components(
                 "flash_attention_2 betöltése sikertelen (%s). SDPA-ra váltunk. Az audió minőség eltérhet.",
                 exc,
             )
-            model = VibeVoiceForConditionalGenerationInference.from_pretrained(
-                model_path,
-                torch_dtype=load_dtype,
-                attn_implementation="sdpa",
-            )
+            with suppress_external_output(not args.debug):
+                model = VibeVoiceForConditionalGenerationInference.from_pretrained(
+                    model_path,
+                    torch_dtype=load_dtype,
+                    attn_implementation="sdpa",
+                )
             if device_lower.startswith("cuda") or device_lower == "mps":
                 model.to(device)
         else:
@@ -1087,27 +1171,27 @@ def process_segment(
     normalize_fn: Optional[Callable[[str], str]],
     device: str,
     worker_label: str,
-) -> Tuple[bool, Optional[str]]:
+) -> SegmentProcessResult:
     start_time = segment.get("start")
     end_time = segment.get("end")
     original_gen_text = (segment.get("translated_text") or "").strip()
 
     if not all(isinstance(value, (int, float)) for value in (start_time, end_time)):
-        return False, "Hiányzó vagy érvénytelen időbélyeg."
+        return SegmentProcessResult(success=False, error_message="Hiányzó vagy érvénytelen időbélyeg.")
     if not original_gen_text:
-        return False, "Üres generálandó szöveg."
+        return SegmentProcessResult(success=False, error_message="Üres generálandó szöveg.")
 
     start_sample = int(start_time * sample_rate)
     end_sample = int(end_time * sample_rate)
     end_sample = min(end_sample, len(audio_data))
     if start_sample >= end_sample:
-        return False, "Érvénytelen audió intervallum."
+        return SegmentProcessResult(success=False, error_message="Érvénytelen audió intervallum.")
 
     filename = f"{time_to_filename_str(start_time)}_{time_to_filename_str(end_time)}.wav"
     output_path = Path(args.output_dir) / filename
     if output_path.exists() and not args.overwrite:
         logger.debug("Kihagyva (létező fájl): %s", output_path)
-        return True, None
+        return SegmentProcessResult(success=True)
 
     gen_text = original_gen_text
     if normalize_fn:
@@ -1115,11 +1199,11 @@ def process_segment(
             gen_text = normalize_fn(gen_text)
         except Exception as exc:
             logger.error("Szöveg normalizálása sikertelen '%s' szegmensnél: %s", filename, exc, exc_info=True)
-            return False, f"Normalizálási hiba: {exc}"
+            return SegmentProcessResult(success=False, error_message=f"Normalizálási hiba: {exc}")
 
     formatted_text = ensure_script_format(gen_text, args.speaker_name)
     if not formatted_text:
-        return False, "Üres generálandó szöveg."
+        return SegmentProcessResult(success=False, error_message="Üres generálandó szöveg.")
 
     ref_chunk = audio_data[start_sample:end_sample]
     ref_chunk = apply_eq_curve_to_audio(ref_chunk, sample_rate, eq_config)
@@ -1151,6 +1235,8 @@ def process_segment(
         best_transcribed: str = ""
         last_error: Optional[str] = None
         filename_stem = Path(filename).stem
+        segment_rejected_by_whisper = False
+        segment_rejected_by_pitch = False
 
         reference_pitch_summary: Optional[PitchSummary] = None
         if args.enable_pitch_check:
@@ -1181,16 +1267,17 @@ def process_segment(
             keep_temp = False
             try:
                 generation_start = time.time()
-                with torch.no_grad():
-                    outputs = model.generate(
-                        **inputs,
-                        max_new_tokens=None,
-                        cfg_scale=args.cfg_scale,
-                        tokenizer=processor.tokenizer,
-                        generation_config={"do_sample": False},
-                        verbose=False,
-                        is_prefill=not args.disable_prefill,
-                    )
+                with suppress_external_output(not args.debug):
+                    with torch.no_grad():
+                        outputs = model.generate(
+                            **inputs,
+                            max_new_tokens=None,
+                            cfg_scale=args.cfg_scale,
+                            tokenizer=processor.tokenizer,
+                            generation_config={"do_sample": False},
+                            verbose=False,
+                            is_prefill=not args.disable_prefill,
+                        )
                 generation_time = time.time() - generation_start
                 logger.debug("Generálás kész %.2f mp alatt: %s (attempt %s)", generation_time, filename, attempt)
 
@@ -1279,10 +1366,11 @@ def process_segment(
                     os.replace(temp_gen_path, output_path)
                     if best_temp_path and os.path.exists(best_temp_path):
                         os.remove(best_temp_path)
-                    return True, None
+                    return SegmentProcessResult(success=True)
 
                 attempt_reasons: List[str] = []
                 if not text_pass and transcribe_enabled:
+                    segment_rejected_by_whisper = True
                     last_error = f"Levenshtein távolság {distance}, tolerancia {final_tolerance}"
                     attempt_reasons.append(last_error)
                     if args.save_failures:
@@ -1301,6 +1389,7 @@ def process_segment(
                         )
 
                 if not pitch_pass and reference_pitch_summary is not None:
+                    segment_rejected_by_pitch = True
                     if math.isfinite(pitch_diff):
                         last_error = (
                             f"Pitch eltérés {pitch_diff:.2f} Hz meghaladja a toleranciát ({args.pitch_tolerance:.2f} Hz)"
@@ -1424,12 +1513,17 @@ def process_segment(
                 )
             output_path.parent.mkdir(parents=True, exist_ok=True)
             os.replace(best_temp_path, output_path)
-            return True, None
+            return SegmentProcessResult(success=True)
 
         if best_temp_path and os.path.exists(best_temp_path):
             os.remove(best_temp_path)
 
-        return False, last_error or "Generálás ellenőrzése sikertelen."
+        return SegmentProcessResult(
+            success=False,
+            error_message=last_error or "Generálás ellenőrzése sikertelen.",
+            rejected_by_whisper=segment_rejected_by_whisper,
+            rejected_by_pitch=segment_rejected_by_pitch,
+        )
     finally:
         try:
             os.remove(temp_ref_path)
@@ -1450,6 +1544,7 @@ def run_segments_on_device(
     prefetched_audio: Optional[Tuple[np.ndarray, int]] = None,
     shared_segments_queue=None,
     stats_lock=None,
+    emit_status: bool = False,
 ) -> None:
     if shared_segments_queue is None and not segments:
         return
@@ -1473,7 +1568,7 @@ def run_segments_on_device(
         start_time = segment.get("start", 0.0)
         end_time = segment.get("end", 0.0)
         filename = f"{time_to_filename_str(start_time)}_{time_to_filename_str(end_time)}.wav"
-        ok, error_msg = process_segment(
+        result = process_segment(
             segment=segment,
             args=args,
             audio_data=full_audio_data,
@@ -1487,44 +1582,34 @@ def run_segments_on_device(
             device=device,
             worker_label=worker_label,
         )
-        if ok:
+        if result.success:
             increment_stat(stats, "successful", lock=stats_lock)
         else:
             increment_stat(stats, "failed", lock=stats_lock)
+            if result.rejected_by_whisper:
+                increment_stat(stats, "whisper_rejected", lock=stats_lock)
+            if result.rejected_by_pitch:
+                increment_stat(stats, "pitch_rejected", lock=stats_lock)
             failed_segments_info.append(
                 {
                     "filename": filename,
                     "text": segment.get("translated_text") or "",
-                    "reason": error_msg or "",
+                    "reason": result.error_message or "",
                 }
             )
+        if emit_status:
+            emit_status_line(snapshot_stats(stats, lock=stats_lock))
 
     if shared_segments_queue is not None:
-        progress_bar = tqdm.tqdm(
-            desc=f"Processing on {worker_label}",
-            position=progress_position,
-            leave=False,
-            unit="segment",
-        )
-        try:
-            while True:
-                try:
-                    segment = shared_segments_queue.get_nowait()
-                except queue.Empty:
-                    break
-                process_single_segment(segment)
-                progress_bar.update(1)
-        finally:
-            progress_bar.close()
+        while True:
+            try:
+                segment = shared_segments_queue.get_nowait()
+            except queue.Empty:
+                break
+            process_single_segment(segment)
         return
 
-    progress_iter = tqdm.tqdm(
-        segments,
-        desc=f"Processing on {worker_label}",
-        position=progress_position,
-        leave=False,
-    )
-    for segment in progress_iter:
+    for segment in segments:
         process_single_segment(segment)
 
 
@@ -1644,7 +1729,13 @@ def process_project(args: argparse.Namespace) -> None:
     args.device = resolved_device
 
     total_segments = len(segments)
-    stats_summary: Dict[str, int] = {"successful": 0, "failed": 0, "total": total_segments}
+    stats_summary: Dict[str, int] = {
+        "successful": 0,
+        "failed": 0,
+        "total": total_segments,
+        "whisper_rejected": 0,
+        "pitch_rejected": 0,
+    }
     failed_segments: List[Dict[str, str]] = []
 
     input_wav_path_str = str(input_wav_path)
@@ -1663,13 +1754,21 @@ def process_project(args: argparse.Namespace) -> None:
             logger.info("Több-GPU feldolgozás %s workerrel közös queue-val: %s", num_workers, target_gpu_indices)
 
             with mp.Manager() as manager:
-                stats_proxy = manager.dict({"successful": 0, "failed": 0, "total": total_segments})
+                stats_proxy = manager.dict(
+                    {
+                        "successful": 0,
+                        "failed": 0,
+                        "total": total_segments,
+                        "whisper_rejected": 0,
+                        "pitch_rejected": 0,
+                    }
+                )
                 stats_lock = manager.Lock()
                 failed_proxy = manager.list()
                 shared_segments_queue = manager.Queue()
                 for segment in segments:
                     shared_segments_queue.put(segment)
-                mp.spawn(
+                process_context = mp.spawn(
                     gpu_worker,
                     nprocs=num_workers,
                     args=(
@@ -1682,8 +1781,21 @@ def process_project(args: argparse.Namespace) -> None:
                         stats_lock,
                         failed_proxy,
                     ),
-                    join=True,
+                    join=False,
                 )
+                last_status_line = ""
+                while not process_context.join(timeout=0.5):
+                    current_snapshot = snapshot_stats(stats_proxy, lock=stats_lock)
+                    current_line = render_status_line(current_snapshot)
+                    if current_line != last_status_line:
+                        emit_status_line(current_snapshot)
+                        last_status_line = current_line
+                final_snapshot = snapshot_stats(stats_proxy, lock=stats_lock)
+                final_line = render_status_line(final_snapshot)
+                if final_line != last_status_line:
+                    emit_status_line(final_snapshot, final=True)
+                else:
+                    print("", flush=True)
                 stats_summary = dict(stats_proxy)
                 failed_segments = list(failed_proxy)
         else:
@@ -1701,6 +1813,7 @@ def process_project(args: argparse.Namespace) -> None:
                 failed_segments_info=failed_segments,
                 progress_position=0,
                 prefetched_audio=(audio_data, sample_rate),
+                emit_status=not args.debug,
             )
     elif resolved_device.startswith("cuda") and torch.cuda.is_available():
         target_idx = extract_cuda_index(resolved_device)
@@ -1734,6 +1847,7 @@ def process_project(args: argparse.Namespace) -> None:
             failed_segments_info=failed_segments,
             progress_position=0,
             prefetched_audio=(audio_data, sample_rate),
+            emit_status=not args.debug,
         )
     else:
         worker_label = resolved_device.upper()
@@ -1748,31 +1862,44 @@ def process_project(args: argparse.Namespace) -> None:
             failed_segments_info=failed_segments,
             progress_position=0,
             prefetched_audio=(audio_data, sample_rate),
+            emit_status=not args.debug,
         )
 
     successful = int(stats_summary.get("successful", 0))
     failed = int(stats_summary.get("failed", 0))
     total = int(stats_summary.get("total", total_segments))
+    whisper_rejected = int(stats_summary.get("whisper_rejected", 0))
+    pitch_rejected = int(stats_summary.get("pitch_rejected", 0))
     processed = successful + failed
 
-    logger.info("=" * 50)
-    logger.info(
-        "Összegzés\n  - Összes szegmens: %s\n  - Feldolgozott: %s\n  - Sikeres: %s\n  - Sikertelen: %s",
-        total,
-        processed,
-        successful,
-        failed,
-    )
-    if failed_segments:
-        logger.info("Sikertelen szegmensek listája:")
-        for item in sorted(failed_segments, key=lambda x: x.get("filename", "")):
-            logger.info("  * %s -> %s", item.get("filename"), item.get("reason"))
-    logger.info("=" * 50)
+    if not args.debug:
+        print()
+        print("Végső statisztika:", flush=True)
+        print(f"Össz feladat / sikeres: {total}/{successful}", flush=True)
+        print(f"Feldolgozott / sikertelen: {processed}/{failed}", flush=True)
+        print(f"Elutasítva Whisper miatt: {whisper_rejected}", flush=True)
+        print(f"Elutasítva pitch miatt: {pitch_rejected}", flush=True)
+    else:
+        logger.info("=" * 50)
+        logger.info(
+            "Összegzés\n  - Összes szegmens: %s\n  - Feldolgozott: %s\n  - Sikeres: %s\n  - Sikertelen: %s\n  - Whisper elutasítás: %s\n  - Pitch elutasítás: %s",
+            total,
+            processed,
+            successful,
+            failed,
+            whisper_rejected,
+            pitch_rejected,
+        )
+        if failed_segments:
+            logger.info("Sikertelen szegmensek listája:")
+            for item in sorted(failed_segments, key=lambda x: x.get("filename", "")):
+                logger.info("  * %s -> %s", item.get("filename"), item.get("reason"))
+        logger.info("=" * 50)
 
 
 def main() -> None:
     args = parse_arguments()
-    log_level = configure_debug_mode(args.debug)
+    log_level = configure_debug_mode(args.debug, default_level=logging.CRITICAL)
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -1782,6 +1909,7 @@ def main() -> None:
         ],
         force=True,
     )
+    configure_external_verbosity(args.debug)
     logger.setLevel(log_level)
     logger.info("VibeVoice TTS script indul. Projekt: %s", args.project_name)
 
