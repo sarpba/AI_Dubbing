@@ -3,7 +3,7 @@
   "steps": [
     {
       "script": "AUDIO-VIDEO/unpack_srt_from_mkv/unpack_srt_from_mkv_easy.py",
-      "enabled": true,
+      "enabled": false,
       "halt_on_fail": true,
       "params": {}
     },
@@ -59,9 +59,17 @@
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "norm": "hun",
         "enable_pitch_check": true,
+        "norm": "hun",
         "save_failures": true
+      }
+    },
+    {
+      "type": "widget",
+      "widget": "translatedSplitLoopWidget",
+      "enabled": true,
+      "params": {
+        "allowed_missing_segments": 0
       }
     },
     {
