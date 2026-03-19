@@ -532,6 +532,11 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ translate('general.close_aria') }}"></button>
                 </div>
                 <div class="modal-body">
+                    <div class="d-none mb-3" id="videoPreviewTrackControls">
+                        <label for="videoPreviewTrackSelect" class="form-label mb-1">Audio track</label>
+                        <select id="videoPreviewTrackSelect" class="form-select form-select-sm"></select>
+                        <div class="form-text" id="videoPreviewTrackHint">Select which audio track should be used during playback.</div>
+                    </div>
                     <video id="videoPreviewPlayer" class="w-100" controls preload="metadata" playsinline style="max-height: 70vh;"></video>
                 </div>
             </div>

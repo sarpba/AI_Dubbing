@@ -2,6 +2,7 @@
     function createProjectFileBrowser(ctx) {
         let videoPreviewModal = null;
         let jsonPreviewModal = null;
+        let activeVideoPreviewState = null;
 
         function createFileTreeList(entries) {
             const list = document.createElement('ul');
@@ -518,7 +519,155 @@
             }
         }
 
-        function showVideoPreview(fileName, fileUrl) {
+        function buildVideoPreviewUrl(filePath, audioStreamIndex = null) {
+            if (!filePath) {
+                return '';
+            }
+            if (filePath.startsWith('/workdir/') || filePath.startsWith('http://') || filePath.startsWith('https://')) {
+                return filePath;
+            }
+            if (audioStreamIndex === null || audioStreamIndex === undefined || audioStreamIndex === '') {
+                return ctx.buildWorkdirUrl(filePath);
+            }
+            return `/api/video-preview/${encodeURIComponent(ctx.projectName)}?path=${encodeURIComponent(filePath)}&audio_stream=${encodeURIComponent(audioStreamIndex)}`;
+        }
+
+        async function fetchVideoAudioTracks(filePath) {
+            const response = await fetch(`/api/video-audio-tracks/${encodeURIComponent(ctx.projectName)}?path=${encodeURIComponent(filePath)}`);
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to load video audio tracks.');
+            }
+            return result;
+        }
+
+        function formatVideoTrackLabel(track, orderIndex) {
+            const parts = [`Track ${orderIndex + 1}`];
+            if (track.is_default) {
+                parts.push('default');
+            }
+            if (track.language) {
+                parts.push(track.language);
+            }
+            if (track.title) {
+                parts.push(track.title);
+            }
+            if (track.codec) {
+                parts.push(track.codec);
+            }
+            if (track.channels) {
+                parts.push(`${track.channels}ch`);
+            }
+            return parts.join(' • ');
+        }
+
+        function resetVideoTrackControls() {
+            const controls = document.getElementById('videoPreviewTrackControls');
+            const select = document.getElementById('videoPreviewTrackSelect');
+            const hint = document.getElementById('videoPreviewTrackHint');
+            if (controls) {
+                controls.classList.add('d-none');
+            }
+            if (select) {
+                select.innerHTML = '';
+                select.disabled = true;
+            }
+            if (hint) {
+                hint.textContent = 'Select which audio track should be used during playback.';
+            }
+        }
+
+        function setVideoPreviewSource(filePath, audioStreamIndex = null, options = {}) {
+            const videoElement = document.getElementById('videoPreviewPlayer');
+            if (!videoElement || !filePath) {
+                return;
+            }
+            const resumeTime = Number.isFinite(options.resumeTime) ? options.resumeTime : 0;
+            const shouldAutoplay = options.autoplay !== false;
+            const nextUrl = buildVideoPreviewUrl(filePath, audioStreamIndex);
+            if (!nextUrl) {
+                return;
+            }
+            videoElement.pause();
+            videoElement.src = nextUrl;
+            videoElement.load();
+
+            const restorePlayback = () => {
+                if (resumeTime > 0) {
+                    try {
+                        const duration = Number.isFinite(videoElement.duration) ? videoElement.duration : null;
+                        videoElement.currentTime = duration ? Math.min(resumeTime, Math.max(duration - 0.25, 0)) : resumeTime;
+                    } catch (error) {}
+                }
+                if (shouldAutoplay) {
+                    videoElement.play().catch(() => {});
+                }
+            };
+
+            if (videoElement.readyState >= 1) {
+                restorePlayback();
+            } else {
+                videoElement.addEventListener('loadedmetadata', restorePlayback, { once: true });
+            }
+
+            activeVideoPreviewState = {
+                ...(activeVideoPreviewState || {}),
+                filePath,
+                audioStreamIndex,
+            };
+        }
+
+        function applyVideoTrackSelection(audioStreamIndex) {
+            if (!activeVideoPreviewState || !activeVideoPreviewState.filePath) {
+                return;
+            }
+            const videoElement = document.getElementById('videoPreviewPlayer');
+            const resumeTime = videoElement && Number.isFinite(videoElement.currentTime) ? videoElement.currentTime : 0;
+            setVideoPreviewSource(activeVideoPreviewState.filePath, audioStreamIndex, {
+                resumeTime,
+                autoplay: true
+            });
+        }
+
+        function updateVideoTrackControls(trackPayload) {
+            const controls = document.getElementById('videoPreviewTrackControls');
+            const select = document.getElementById('videoPreviewTrackSelect');
+            const hint = document.getElementById('videoPreviewTrackHint');
+            if (!controls || !select) {
+                return;
+            }
+
+            const tracks = Array.isArray(trackPayload?.tracks) ? trackPayload.tracks : [];
+            select.innerHTML = '';
+
+            if (tracks.length <= 1) {
+                controls.classList.add('d-none');
+                select.disabled = true;
+                if (hint) {
+                    hint.textContent = tracks.length === 1
+                        ? 'This video contains a single audio track.'
+                        : 'Audio track selection is not available for this video.';
+                }
+                return;
+            }
+
+            tracks.forEach((track, index) => {
+                const option = document.createElement('option');
+                option.value = String(track.stream_index);
+                option.textContent = formatVideoTrackLabel(track, index);
+                if (trackPayload.default_stream_index === track.stream_index) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+            select.disabled = false;
+            controls.classList.remove('d-none');
+            if (hint) {
+                hint.textContent = 'Select which audio track should be used during playback.';
+            }
+        }
+
+        async function showVideoPreview(fileName, fileUrl, filePath) {
             const modalElement = document.getElementById('videoPreviewModal');
             if (!modalElement) {
                 window.open(fileUrl, '_blank');
@@ -536,18 +685,34 @@
                 window.open(fileUrl, '_blank');
                 return;
             }
-            videoElement.pause();
-            videoElement.src = fileUrl;
-            videoElement.load();
-            const handleShown = () => {
-                videoElement.play().catch(() => {});
+            activeVideoPreviewState = {
+                fileName,
+                filePath,
+                fileUrl,
+                audioStreamIndex: null,
             };
-            if (modalElement.classList.contains('show')) {
-                handleShown();
-            } else {
-                modalElement.addEventListener('shown.bs.modal', handleShown, { once: true });
-            }
+            resetVideoTrackControls();
+            setVideoPreviewSource(filePath || fileUrl, null, { autoplay: false });
             videoPreviewModal.show();
+            try {
+                if (!filePath) {
+                    throw new Error('Missing file path for track selection.');
+                }
+                const trackPayload = await fetchVideoAudioTracks(filePath);
+                updateVideoTrackControls(trackPayload);
+                if (trackPayload && trackPayload.default_stream_index !== undefined && trackPayload.default_stream_index !== null) {
+                    setVideoPreviewSource(filePath, trackPayload.default_stream_index, { autoplay: true });
+                } else {
+                    setVideoPreviewSource(filePath || fileUrl, null, { autoplay: true });
+                }
+            } catch (error) {
+                console.warn('Video track metadata unavailable:', error);
+                const hint = document.getElementById('videoPreviewTrackHint');
+                if (hint) {
+                    hint.textContent = 'Audio track selection is unavailable for this file.';
+                }
+                setVideoPreviewSource(filePath || fileUrl, null, { autoplay: true });
+            }
         }
 
         async function showTextPreview(fileName, fileUrl, extension) {
@@ -604,6 +769,13 @@
             const videoModalElement = document.getElementById('videoPreviewModal');
             if (videoModalElement) {
                 videoPreviewModal = new bootstrap.Modal(videoModalElement);
+                const trackSelect = document.getElementById('videoPreviewTrackSelect');
+                if (trackSelect) {
+                    trackSelect.addEventListener('change', () => {
+                        const selectedValue = trackSelect.value;
+                        applyVideoTrackSelection(selectedValue ? Number(selectedValue) : null);
+                    });
+                }
                 videoModalElement.addEventListener('hidden.bs.modal', () => {
                     const videoElement = document.getElementById('videoPreviewPlayer');
                     if (videoElement) {
@@ -611,6 +783,8 @@
                         videoElement.removeAttribute('src');
                         videoElement.load();
                     }
+                    activeVideoPreviewState = null;
+                    resetVideoTrackControls();
                     const titleElement = document.getElementById('videoPreviewTitle');
                     if (titleElement) {
                         titleElement.textContent = '';
@@ -782,7 +956,7 @@
                     if (ctx.videoExtensions.has(extension)) {
                         event.preventDefault();
                         event.stopPropagation();
-                        showVideoPreview(fileName, ctx.buildWorkdirUrl(filePath));
+                        showVideoPreview(fileName, ctx.buildWorkdirUrl(filePath), filePath);
                         return;
                     }
                     if (ctx.textPreviewExtensions.has(extension)) {

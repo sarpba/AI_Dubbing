@@ -5,12 +5,19 @@ import json
 from datetime import datetime
 from pathlib import Path
 from pydub import AudioSegment
+from pydub.silence import detect_nonsilent
 import math
 import sys
 
 # A time-stretching funkcióhoz szükséges importok
 import numpy as np
 import pyrubberband as pyrb
+
+
+MAX_STRETCH_RATE = 1.18
+MIN_NONSILENT_CHUNK_MS = 80
+TAIL_FADE_MS = 12
+SILENCE_THRESHOLD_OFFSET_DB = 18
 
 
 for candidate in Path(__file__).resolve().parents:
@@ -80,6 +87,69 @@ def apply_volume_percent(audio_segment, percent):
     gain_db = 20 * math.log10(percent / 100.0)
     return audio_segment.apply_gain(gain_db)
 
+def trim_trailing_silence(audio_segment):
+    """
+    Levágja a klip végéről a hosszabb csendet, hogy ne kelljen feleslegesen
+    a beszédet összenyomni.
+    """
+    if len(audio_segment) < MIN_NONSILENT_CHUNK_MS:
+        return audio_segment
+
+    silence_thresh = audio_segment.dBFS - SILENCE_THRESHOLD_OFFSET_DB
+    if not math.isfinite(silence_thresh):
+        return audio_segment
+
+    nonsilent_ranges = detect_nonsilent(
+        audio_segment,
+        min_silence_len=MIN_NONSILENT_CHUNK_MS,
+        silence_thresh=silence_thresh,
+    )
+    if not nonsilent_ranges:
+        return audio_segment
+
+    last_end_ms = nonsilent_ranges[-1][1]
+    if last_end_ms >= len(audio_segment):
+        return audio_segment
+
+    trimmed = audio_segment[:last_end_ms]
+    return trimmed.fade_out(min(TAIL_FADE_MS, len(trimmed)))
+
+def audiosegment_to_float32(audio_segment):
+    """
+    AudioSegment -> float32 numpy tömb [-1, 1] tartományban.
+    """
+    sample_width = audio_segment.sample_width
+    dtype = np.dtype(f"int{sample_width * 8}")
+    scale = float(1 << (sample_width * 8 - 1))
+
+    samples = np.array(audio_segment.get_array_of_samples(), dtype=dtype)
+    if audio_segment.channels > 1:
+        samples = samples.reshape((-1, audio_segment.channels))
+
+    return samples.astype(np.float32) / scale
+
+def float32_to_audiosegment(samples, reference_segment):
+    """
+    float32 numpy tömb [-1, 1] tartományból vissza AudioSegment.
+    """
+    sample_width = reference_segment.sample_width
+    dtype = np.dtype(f"int{sample_width * 8}")
+    max_int = np.iinfo(dtype).max
+    min_int = np.iinfo(dtype).min
+    scale = float(1 << (sample_width * 8 - 1))
+
+    samples = np.asarray(samples, dtype=np.float32)
+    samples = np.nan_to_num(samples, nan=0.0, posinf=1.0, neginf=-1.0)
+    samples = np.clip(samples, -1.0, max_int / scale)
+    samples_int = np.rint(samples * scale).clip(min_int, max_int).astype(dtype)
+
+    return AudioSegment(
+        samples_int.tobytes(),
+        frame_rate=reference_segment.frame_rate,
+        sample_width=reference_segment.sample_width,
+        channels=reference_segment.channels
+    )
+
 def speed_up_audio(audio_segment, target_duration_ms):
     """
     Felgyorsít egy pydub AudioSegment-et egy célértékre a pyrubberband segítségével
@@ -90,29 +160,28 @@ def speed_up_audio(audio_segment, target_duration_ms):
         return audio_segment
 
     rate = original_duration_ms / target_duration_ms
-    
-    # 1. pydub AudioSegment konvertálása numpy tömbbé
-    samples = np.array(audio_segment.get_array_of_samples())
-    # Sztereó hang kezelése
-    if audio_segment.channels > 1:
-        samples = samples.reshape((-1, audio_segment.channels))
+    effective_rate = min(rate, MAX_STRETCH_RATE)
 
-    # 2. Time-stretching alkalmazása a pyrubberband segítségével
-    # A pyrubberband a mintavételezési frekvenciát is paraméterként várja
-    stretched_samples = pyrb.time_stretch(samples, audio_segment.frame_rate, rate)
+    samples = audiosegment_to_float32(audio_segment)
 
-    # 3. A numpy tömb visszaalakítása pydub AudioSegment-té
-    # A pyrubberband float tömböt ad vissza, ezt vissza kell alakítani az eredeti integer típusra
-    dtype = f"int{audio_segment.sample_width * 8}"
-    stretched_samples_int = stretched_samples.astype(getattr(np, dtype))
-    
-    # Az új AudioSegment létrehozása a feldolgozott bájtokból
-    new_audio = AudioSegment(
-        stretched_samples_int.tobytes(),
-        frame_rate=audio_segment.frame_rate,
-        sample_width=audio_segment.sample_width,
-        channels=audio_segment.channels
-    )
+    try:
+        stretched_samples = pyrb.time_stretch(
+            samples,
+            audio_segment.frame_rate,
+            effective_rate,
+            rbargs={"--fine": "", "--formant": ""},
+        )
+    except TypeError:
+        stretched_samples = pyrb.time_stretch(samples, audio_segment.frame_rate, effective_rate)
+
+    new_audio = float32_to_audiosegment(stretched_samples, audio_segment)
+
+    if len(new_audio) > target_duration_ms:
+        new_audio = new_audio[:target_duration_ms]
+
+    fade_ms = min(TAIL_FADE_MS, len(new_audio) // 2)
+    if fade_ms > 0:
+        new_audio = new_audio.fade_in(fade_ms).fade_out(fade_ms)
 
     return new_audio
 
@@ -134,6 +203,7 @@ def merge_wav_files(input_folder, output_file, background_file=None, background_
                 start_time, end_time = parse_filename(filename)
                 filepath = os.path.join(input_folder, filename)
                 audio = AudioSegment.from_wav(filepath)
+                audio = trim_trailing_silence(audio)
                 expected_duration = end_time - start_time
                 actual_duration = len(audio)
                 if actual_duration - expected_duration > 10:

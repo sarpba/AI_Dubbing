@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import glob
+import json
 import logging
 import os
 import re
@@ -12,11 +13,42 @@ import zipfile
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import after_this_request, jsonify, request, send_file
+from flask import Response, after_this_request, jsonify, request, send_file, stream_with_context
 from pydub import AudioSegment
 
 
 def register_files_api_routes(app, deps: Dict[str, Any]) -> None:
+    def resolve_project_root(project_name: str) -> Tuple[Optional[str], Optional[str], Optional[Any]]:
+        sanitized_project = deps['secure_filename'](project_name)
+        if not sanitized_project:
+            return None, None, jsonify({'success': False, 'error': 'A projektnév érvénytelen karaktereket tartalmaz.'}), 400
+
+        config_snapshot = deps['get_config_copy']()
+        workdir_path = config_snapshot['DIRECTORIES']['workdir']
+        project_root_abs = os.path.abspath(os.path.join(workdir_path, sanitized_project))
+        workdir_abs = os.path.abspath(workdir_path)
+        if not deps['is_subpath'](project_root_abs, workdir_abs):
+            return None, None, jsonify({'success': False, 'error': 'Érvénytelen projekt útvonal.'}), 400
+        if not os.path.isdir(project_root_abs):
+            return None, None, jsonify({'success': False, 'error': 'A projekt könyvtára nem található.'}), 404
+        return sanitized_project, project_root_abs, None
+
+    def resolve_project_file(project_name: str, relative_path: str) -> Tuple[Optional[str], Optional[str], Optional[Any]]:
+        sanitized_project, project_root_abs, error_response = resolve_project_root(project_name)
+        if error_response is not None:
+            return None, None, error_response
+
+        normalized_relative = (relative_path or '').strip().strip('/\\')
+        if not normalized_relative:
+            return None, None, jsonify({'success': False, 'error': 'Hiányzó fájl elérési útvonal.'}), 400
+
+        target_abs = os.path.abspath(os.path.join(project_root_abs, normalized_relative))
+        if not deps['is_subpath'](target_abs, project_root_abs):
+            return None, None, jsonify({'success': False, 'error': 'Érvénytelen fájl útvonal.'}), 400
+        if not os.path.isfile(target_abs):
+            return None, None, jsonify({'success': False, 'error': 'A megadott fájl nem található.'}), 404
+        return sanitized_project, target_abs, None
+
     @app.route('/api/project/<project_name>', methods=['DELETE'])
     def delete_project(project_name):
         sanitized_project = deps['secure_filename'](project_name)
@@ -228,6 +260,151 @@ def register_files_api_routes(app, deps: Dict[str, Any]) -> None:
 
         relative_destination = os.path.relpath(destination_abs, project_root_abs).replace('\\', '/')
         return jsonify({'success': True, 'message': 'Fájl sikeresen áthelyezve.', 'destination_path': relative_destination})
+
+    @app.route('/api/video-audio-tracks/<project_name>', methods=['GET'])
+    def get_video_audio_tracks(project_name):
+        relative_path = (request.args.get('path') or '').strip()
+        _, file_path, error_response = resolve_project_file(project_name, relative_path)
+        if error_response is not None:
+            return error_response
+
+        command = [
+            'ffprobe',
+            '-v',
+            'error',
+            '-print_format',
+            'json',
+            '-show_streams',
+            str(file_path),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            payload = json.loads(result.stdout or '{}')
+        except FileNotFoundError:
+            return jsonify({'success': False, 'error': 'Az ffprobe nem érhető el a szerveren.'}), 500
+        except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+            logging.exception("Nem sikerült kiolvasni a videó stream metaadatait: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült beolvasni a videó stream metaadatait.'}), 500
+
+        audio_tracks: List[Dict[str, Any]] = []
+        default_stream_index: Optional[int] = None
+        streams = payload.get('streams') if isinstance(payload, dict) else []
+        for stream in streams or []:
+            if not isinstance(stream, dict) or stream.get('codec_type') != 'audio':
+                continue
+            stream_index = stream.get('index')
+            if not isinstance(stream_index, int):
+                continue
+            disposition = stream.get('disposition') if isinstance(stream.get('disposition'), dict) else {}
+            tags = stream.get('tags') if isinstance(stream.get('tags'), dict) else {}
+            language = tags.get('language') or tags.get('LANGUAGE')
+            title = tags.get('title') or tags.get('handler_name') or tags.get('HANDLER_NAME')
+            codec_name = stream.get('codec_name')
+            channels = stream.get('channels')
+            is_default = bool(disposition.get('default'))
+            if is_default and default_stream_index is None:
+                default_stream_index = stream_index
+            audio_tracks.append({
+                'stream_index': stream_index,
+                'language': language,
+                'title': title,
+                'codec': codec_name,
+                'channels': channels,
+                'is_default': is_default,
+            })
+
+        if default_stream_index is None and audio_tracks:
+            default_stream_index = audio_tracks[0]['stream_index']
+
+        return jsonify({
+            'success': True,
+            'tracks': audio_tracks,
+            'default_stream_index': default_stream_index,
+        })
+
+    @app.route('/api/video-preview/<project_name>', methods=['GET'])
+    def stream_video_preview(project_name):
+        relative_path = (request.args.get('path') or '').strip()
+        _, file_path, error_response = resolve_project_file(project_name, relative_path)
+        if error_response is not None:
+            return error_response
+
+        audio_stream_raw = (request.args.get('audio_stream') or '').strip()
+        if not audio_stream_raw:
+            return send_file(file_path, conditional=True)
+
+        try:
+            audio_stream_index = int(audio_stream_raw)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Érvénytelen audio stream index.'}), 400
+
+        command = [
+            'ffmpeg',
+            '-v',
+            'error',
+            '-i',
+            str(file_path),
+            '-map',
+            '0:v:0',
+            '-map',
+            f'0:{audio_stream_index}',
+            '-c:v',
+            'copy',
+            '-c:a',
+            'aac',
+            '-movflags',
+            'frag_keyframe+empty_moov',
+            '-f',
+            'mp4',
+            'pipe:1',
+        ]
+
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+            )
+        except FileNotFoundError:
+            return jsonify({'success': False, 'error': 'Az ffmpeg nem érhető el a szerveren.'}), 500
+        except OSError as exc:
+            logging.exception("Nem sikerült elindítani a videó preview streamet: %s", exc)
+            return jsonify({'success': False, 'error': 'Nem sikerült elindítani a videó preview streamet.'}), 500
+
+        @stream_with_context
+        def generate():
+            try:
+                while True:
+                    chunk = process.stdout.read(1024 * 64) if process.stdout else b''
+                    if not chunk:
+                        break
+                    yield chunk
+                process.wait(timeout=5)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                if process.stdout:
+                    process.stdout.close()
+                if process.stderr:
+                    error_output = process.stderr.read().decode('utf-8', errors='replace').strip()
+                    process.stderr.close()
+                    if error_output:
+                        logging.warning("Videó preview ffmpeg hibaüzenet (%s): %s", file_path, error_output)
+
+        response = Response(generate(), mimetype='video/mp4')
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Accept-Ranges'] = 'none'
+        return response
 
     @app.route('/api/project-backup', methods=['POST'])
     def create_project_backup():
