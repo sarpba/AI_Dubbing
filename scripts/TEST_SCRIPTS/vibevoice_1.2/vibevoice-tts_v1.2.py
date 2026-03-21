@@ -36,13 +36,9 @@ for candidate in Path(__file__).resolve().parents:
         break
 
 try:
-    import whisper
+    from faster_whisper import WhisperModel
 except ImportError:  # pragma: no cover
-    whisper = None
-try:
-    from transformers import pipeline
-except ImportError:  # pragma: no cover
-    pipeline = None
+    WhisperModel = None
 try:
     from num2words import num2words
 except ImportError:  # pragma: no cover
@@ -253,6 +249,19 @@ class SegmentProcessResult:
     error_message: Optional[str] = None
     rejected_by_whisper: bool = False
     rejected_by_pitch: bool = False
+
+
+@dataclass(frozen=True)
+class WhisperWordTimestamp:
+    text: str
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
+class TranscriptionResult:
+    text: str
+    words: List[WhisperWordTimestamp]
 
 
 def _prepare_signal_for_pitch(signal: np.ndarray) -> np.ndarray:
@@ -529,6 +538,66 @@ def convert_numbers_to_words(text: str, lang: str) -> str:
     return re.sub(r"\b\d+\b", replace_match, text)
 
 
+def extract_words_from_faster_whisper_segments(segments) -> List[WhisperWordTimestamp]:
+    words: List[WhisperWordTimestamp] = []
+    for segment in segments:
+        segment_words = getattr(segment, "words", None)
+        if segment_words is None:
+            continue
+        for word in segment_words:
+            start_time = getattr(word, "start", None)
+            end_time = getattr(word, "end", None)
+            if not isinstance(start_time, (int, float)) or not isinstance(end_time, (int, float)):
+                continue
+            if not math.isfinite(start_time) or not math.isfinite(end_time) or end_time <= start_time:
+                continue
+            word_text = str(getattr(word, "word", "") or "").strip()
+            if not word_text:
+                continue
+            words.append(WhisperWordTimestamp(text=word_text, start=float(start_time), end=float(end_time)))
+    return words
+
+
+def trim_audio_with_word_timestamps(
+    audio_path: str,
+    words: List[WhisperWordTimestamp],
+    padding_seconds: float,
+) -> bool:
+    valid_words = [word for word in words if word.end > word.start]
+    if not valid_words:
+        return False
+
+    audio, sample_rate = sf.read(audio_path)
+    if sample_rate <= 0 or len(audio) == 0:
+        return False
+
+    duration_seconds = len(audio) / float(sample_rate)
+    first_word_start = max(0.0, valid_words[0].start)
+    last_word_end = min(duration_seconds, valid_words[-1].end)
+    if last_word_end <= first_word_start:
+        return False
+
+    padding = min(max(0.0, padding_seconds), 0.5)
+    trim_start = max(0.0, first_word_start - padding)
+    trim_end = min(duration_seconds, last_word_end + padding)
+    if trim_end <= trim_start:
+        return False
+
+    start_sample = max(0, int(math.floor(trim_start * sample_rate)))
+    end_sample = min(len(audio), int(math.ceil(trim_end * sample_rate)))
+    if end_sample <= start_sample:
+        return False
+    if start_sample == 0 and end_sample == len(audio):
+        return False
+
+    trimmed_audio = audio[start_sample:end_sample]
+    if len(trimmed_audio) == 0:
+        return False
+
+    sf.write(audio_path, trimmed_audio, sample_rate)
+    return True
+
+
 def load_normalizer(normaliser_path: Path) -> Optional[Callable[[str], str]]:
     if not normaliser_path.exists():
         return None
@@ -673,6 +742,7 @@ def save_failed_attempt(
     temp_gen_path: str,
     original_text: str,
     transcribed_text: Optional[str],
+    transcription_result: Optional[TranscriptionResult],
     reference_audio_path: Optional[str],
     failure_type: str = "text",
     extra_metadata: Optional[Dict[str, object]] = None,
@@ -699,6 +769,29 @@ def save_failed_attempt(
 
         attempt_filename = f"{filename_stem}_attempt_{attempt_num}{filename_suffix}.wav"
         shutil.copy(temp_gen_path, debug_segment_dir / attempt_filename)
+        transcript_filename = f"{Path(attempt_filename).stem}_transcript.json"
+        transcript_path = debug_segment_dir / transcript_filename
+
+        transcript_payload: Dict[str, object] = {
+            "attempt": attempt_num,
+            "failure_type": failure_type,
+            "audio_filename": attempt_filename,
+            "original_text": original_text,
+            "transcribed_text": transcribed_text or "",
+            "raw_transcribed_text": transcription_result.text if transcription_result else "",
+            "words": [],
+        }
+        if transcription_result is not None:
+            transcript_payload["words"] = [
+                {
+                    "text": word.text,
+                    "start": word.start,
+                    "end": word.end,
+                }
+                for word in transcription_result.words
+            ]
+        with open(transcript_path, "w", encoding="utf-8") as fh:
+            json.dump(transcript_payload, fh, ensure_ascii=False, indent=2)
 
         if reference_audio_path and os.path.exists(reference_audio_path):
             reference_filename = "reference.wav"
@@ -716,6 +809,7 @@ def save_failed_attempt(
                 "original_text": original_text,
                 "transcribed_text": transcribed_text or "",
                 "saved_audio_filename": attempt_filename,
+                "transcript_json_filename": transcript_filename,
                 "failure_type": failure_type,
             }
             if extra_metadata:
@@ -731,7 +825,22 @@ def save_failed_attempt(
         logger.error("Failed to save debug information for %s: %s", filename_stem, exc, exc_info=True)
 
 
-def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[Callable[[str], str]], Optional[str]]:
+def resolve_faster_whisper_runtime(device: str) -> Tuple[str, object, str]:
+    normalized = (device or "").lower()
+    if normalized.startswith("cuda"):
+        device_index: object = extract_cuda_index(device)
+        runtime_config = resolve_model_runtime_config(device)
+        compute_type = "float16" if runtime_config.load_dtype in {torch.float16, torch.bfloat16} else "float32"
+        return "cuda", device_index, compute_type
+    if normalized == "mps":
+        logger.warning("A faster-whisper nem támogatja az MPS backendet. CPU-ra váltunk az ASR-hez.")
+    return "cpu", 0, "float32"
+
+
+def create_transcriber(
+    args: argparse.Namespace,
+    device: str,
+) -> Tuple[Optional[Callable[[str], TranscriptionResult]], Optional[str]]:
     if args.seed != -1:
         return None, None
 
@@ -747,57 +856,42 @@ def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[
         logger.error("No Whisper language mapping found for normalizer '%s'.", args.norm)
         return None, None
 
-    is_hf_model = "/" in args.whisper_model
-    if is_hf_model:
-        if pipeline is None:
-            logger.error(
-                "transformers.pipeline is unavailable, cannot load Hugging Face ASR model '%s'.",
-                args.whisper_model,
-            )
-            return None, None
-
-        device_for_pipeline = device
-        if device_for_pipeline.startswith("cuda"):
-            # pipeline expects device index for cuda
-            device_for_pipeline = int(device.split(":")[-1]) if ":" in device else device
-        with suppress_external_output(not args.debug):
-            transcriber = pipeline(
-                "automatic-speech-recognition",
-                model=args.whisper_model,
-                torch_dtype=torch.float16 if device != "cpu" else torch.float32,
-                device=device_for_pipeline,
-            )
-
-        def run(audio_path: str) -> str:
-            generate_kwargs = {
-                "language": WHISPER_LANG_CODE_TO_NAME.get(whisper_language),
-                "num_beams": args.beam_size,
-            }
-            with suppress_external_output(not args.debug):
-                output = transcriber(audio_path, generate_kwargs=generate_kwargs)
-            if isinstance(output, dict):
-                return output.get("text", "")
-            return str(output)
-
-        return run, whisper_language
-
-    if whisper is None:
-        logger.error("openai-whisper is unavailable, cannot load model '%s'.", args.whisper_model)
+    if WhisperModel is None:
+        logger.error(
+            "A faster-whisper csomag nem érhető el, nem tölthető be az ASR modell: '%s'.",
+            args.whisper_model,
+        )
         return None, None
 
-    model_name = args.whisper_model.replace("openai/", "")
+    fw_device, fw_device_index, fw_compute_type = resolve_faster_whisper_runtime(device)
+    logger.info(
+        "faster-whisper betöltés: model=%s | device=%s | device_index=%s | compute_type=%s",
+        args.whisper_model,
+        fw_device,
+        fw_device_index,
+        fw_compute_type,
+    )
     with suppress_external_output(not args.debug):
-        transcriber = whisper.load_model(model_name, device=device)
+        transcriber = WhisperModel(
+            args.whisper_model,
+            device=fw_device,
+            device_index=fw_device_index,
+            compute_type=fw_compute_type,
+        )
 
-    def run(audio_path: str) -> str:
+    def run(audio_path: str) -> TranscriptionResult:
         with suppress_external_output(not args.debug):
-            result = transcriber.transcribe(
+            segments_iter, _info = transcriber.transcribe(
                 audio_path,
                 language=whisper_language,
-                fp16=torch.cuda.is_available(),
                 beam_size=args.beam_size,
+                word_timestamps=True,
             )
-        return result.get("text", "")
+            segments = list(segments_iter)
+        return TranscriptionResult(
+            text=" ".join(str(getattr(segment, "text", "") or "").strip() for segment in segments).strip(),
+            words=extract_words_from_faster_whisper_segments(segments),
+        )
 
     return run, whisper_language
 def parse_arguments() -> argparse.Namespace:
@@ -938,14 +1032,20 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--whisper_model",
         type=str,
-        default="openai/whisper-large-v3",
-        help="Whisper modell az ellenőrzéshez (HF azonosító vagy openai/ prefix).",
+        default="large-v3",
+        help="faster-whisper kompatibilis Whisper modell vagy CTranslate2 modellkönyvtár az ellenőrzéshez.",
     )
     parser.add_argument(
         "--beam_size",
         type=int,
         default=5,
         help="Whisper dekódolás nyalábszélessége.",
+    )
+    parser.add_argument(
+        "--whisper_word_trim_padding",
+        type=float,
+        default=0.15,
+        help="Elfogadott szegmensnél a szó szintű Whisper időbélyegek alapján ennyi ráhagyással vágjuk le az elejét és végét (max. 0.5 mp).",
     )
     parser.add_argument(
         "--max_segments",
@@ -1182,7 +1282,7 @@ def process_segment(
     processor: VibeVoiceProcessor,
     model: VibeVoiceForConditionalGenerationInference,
     eq_config: Optional[Dict[str, object]],
-    transcribe_fn: Optional[Callable[[str], str]],
+    transcribe_fn: Optional[Callable[[str], TranscriptionResult]],
     whisper_language: Optional[str],
     normalize_fn: Optional[Callable[[str], str]],
     device: str,
@@ -1309,8 +1409,10 @@ def process_segment(
                 distance = 0
                 text_pass = True
 
+                transcription_result = TranscriptionResult(text="", words=[])
                 if transcribe_enabled:
-                    raw_transcribed = transcribe_fn(temp_gen_path)
+                    transcription_result = transcribe_fn(temp_gen_path)
+                    raw_transcribed = transcription_result.text
                     converted_transcribed = convert_numbers_to_words(
                         raw_transcribed,
                         lang=whisper_language or "",
@@ -1378,6 +1480,26 @@ def process_segment(
                         pitch_failures += 1
 
                 if text_pass and pitch_pass:
+                    if transcription_result.words:
+                        try:
+                            trimmed = trim_audio_with_word_timestamps(
+                                temp_gen_path,
+                                transcription_result.words,
+                                args.whisper_word_trim_padding,
+                            )
+                            if trimmed:
+                                logger.debug(
+                                    "%s: Word timestamp trim alkalmazva -> %s",
+                                    worker_label,
+                                    filename,
+                                )
+                        except Exception as exc:
+                            logger.warning(
+                                "%s: Word timestamp trim sikertelen, az eredeti audió marad -> %s | %s",
+                                worker_label,
+                                filename,
+                                exc,
+                            )
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     os.replace(temp_gen_path, output_path)
                     if best_temp_path and os.path.exists(best_temp_path):
@@ -1399,6 +1521,7 @@ def process_segment(
                             temp_gen_path=temp_gen_path,
                             original_text=gen_text,
                             transcribed_text=converted_transcribed,
+                            transcription_result=transcription_result,
                             reference_audio_path=temp_ref_path,
                             failure_type="text",
                             extra_metadata={"normalized_transcribed": normalized_transcribed},
@@ -1432,6 +1555,7 @@ def process_segment(
                             temp_gen_path=temp_gen_path,
                             original_text=gen_text,
                             transcribed_text=converted_transcribed,
+                            transcription_result=transcription_result,
                             reference_audio_path=temp_ref_path,
                             failure_type="pitch",
                             extra_metadata=extra_meta,

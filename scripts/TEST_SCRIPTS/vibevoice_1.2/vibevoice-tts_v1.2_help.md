@@ -1,0 +1,49 @@
+# vibevoice-tts_v1.2
+
+**Futtatási környezet:** `vibevoice`  
+**Belépési pont:** `scripts/TEST_SCRIPTS/vibevoice_1.2/vibevoice-tts_v1.2.py`
+
+## Mit csinál?
+A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból, faster-whisper alapú szövegellenőrzéssel, szó szintű időbélyeges finom vágással, továbbfejlesztett több-GPU kezeléssel és opcionális szegmensenkénti pitch ellenőrzéssel.
+
+A script a lefordított szegmensekből generál szinkronhangot, faster-whisperrel visszaellenőrzi a szöveget, és ha a szegmens megfelel, akkor a szó szintű időbélyegek alapján levágja a generált audió elejét és végét egy kis ráhagyással. A létrejött hangfájlokat a projekt TTS kimenetei közé menti.
+
+## Kötelező paraméterek
+- `project_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
+- `norm` (opció;  kapcsoló: `--norm`; alapértelmezés: nincs): A használt normalizálási profil neve. Ez határozza meg a szöveg-előkészítés nyelvi szabályait.
+
+## Opcionális paraméterek
+- `model_path` (opció;  kapcsoló: `--model_path`; alapértelmezés: `sarpba/VibeVoice-large-HUN`): A betöltendő modell Hugging Face azonosítója vagy lokális útvonala.
+- `model_dir` (opció;  kapcsoló: `--model_dir`; alapértelmezés: nincs): Lokális modellkönyvtár. Ha meg van adva, a script ezt részesíti előnyben a távoli modellazonosítóval szemben.
+- `checkpoint_path` (opció;  kapcsoló: `--checkpoint_path`; alapértelmezés: nincs): Opcionális checkpoint vagy adapter fájl, amelyet a script az alapmodell fölé tölt be.
+- `device` (opció;  kapcsoló: `--device`; alapértelmezés: `auto`): A futtatás eszköze, például `cpu`, `cuda`, `cuda:0` vagy `mps`.
+- `cfg_scale` (opció;  kapcsoló: `--cfg_scale`; alapértelmezés: `1.3`): A stílus- és tartalomkövetés erőssége generálás közben.
+- `disable_prefill` (kapcsoló;  kapcsoló: `--disable_prefill`; alapértelmezés: `false`): Kikapcsolja az előfeltöltési vagy voice-cloning előkészítő lépést. Alapállapotban ki van kapcsolva.
+- `ddpm_steps` (opció;  kapcsoló: `--ddpm_steps`; alapértelmezés: `10`): A diffúziós generálás lépésszáma.
+- `eq_config` (opció;  kapcsoló: `--eq_config`; alapértelmezés: nincs): EQ beállításokat tartalmazó JSON fájl a referenciahang előkészítéséhez.
+- `normalize_ref_audio` (kapcsoló;  kapcsoló: `--normalize_ref_audio`; alapértelmezés: `false`): A referenciahangot egységes hangerőre normalizálja a generálás előtt. Alapállapotban ki van kapcsolva.
+- `ref_audio_peak` (opció;  kapcsoló: `--ref_audio_peak`; alapértelmezés: `0.95`): A referenciahang cél csúcsszintje normalizáláskor.
+- `target_sample_rate` (opció;  kapcsoló: `--target_sample_rate`; alapértelmezés: `16000`): A referenciahang cél mintavételi frekvenciája.
+- `speaker_name` (opció;  kapcsoló: `--speaker_name`; alapértelmezés: `Speaker 1`): A generált szöveghez és hanghoz használt beszélőnév vagy címke.
+- `max_retries` (opció;  kapcsoló: `--max_retries`; alapértelmezés: `5`): Ennyiszer próbálkozik újra, ha az ellenőrzés vagy a generálás nem ad elfogadható eredményt.
+- `enable_pitch_check` (kapcsoló;  kapcsoló: `--enable_pitch_check`; alapértelmezés: `false`): Bekapcsolja a hangmagasság-ellenőrzést a referencia és a generált hang között. Alapállapotban ki van kapcsolva.
+- `pitch_tolerance` (opció;  kapcsoló: `--pitch_tolerance`; alapértelmezés: `20.0`): A megengedett pitch eltérés mértéke.
+- `pitch_min_frequency` (opció;  kapcsoló: `--pitch_min_frequency`; alapértelmezés: `60.0`): A pitch-elemzés alsó frekvenciahatára.
+- `pitch_max_frequency` (opció;  kapcsoló: `--pitch_max_frequency`; alapértelmezés: `400.0`): A pitch-elemzés felső frekvenciahatára.
+- `pitch_retry` (opció;  kapcsoló: `--pitch_retry`; alapértelmezés: `3`): Hangmagasság-eltérés esetén ennyi külön újrapróbálkozást enged.
+- `tolerance_factor` (opció;  kapcsoló: `--tolerance_factor`; alapértelmezés: `1.0`): Az ellenőrző összehasonlítás tűrésének szorzója.
+- `min_tolerance` (opció;  kapcsoló: `--min_tolerance`; alapértelmezés: `2`): A minimálisan megengedett tűrés.
+- `whisper_model` (opció;  kapcsoló: `--whisper_model`; alapértelmezés: `large-v3`): A belső ellenőrzéshez használt faster-whisper kompatibilis modellnév vagy CTranslate2 modellkönyvtár.
+- `beam_size` (opció;  kapcsoló: `--beam_size`; alapértelmezés: `5`): A keresés szélessége. Nagyobb érték jobb minőséget, de lassabb futást eredményezhet.
+- `whisper_word_trim_padding` (opció;  kapcsoló: `--whisper_word_trim_padding`; alapértelmezés: `0.15`): Sikeres Whisper ellenőrzés után a szó szintű időbélyegek alapján ennyi ráhagyással vágja le a generált audió elejét és végét. A tényleges maximum `0.5` másodperc.
+- `seed` (opció;  kapcsoló: `--seed`; alapértelmezés: `-1`): A véletlenmag. Fix értékkel reprodukálhatóbb, `-1` esetén változatosabb eredmény várható.
+- `input_directory_override` (kapcsoló;  kapcsoló: `--input_directory_override`; alapértelmezés: `false`): A forrás JSON-okat a szokásos könyvtár helyett a `temp` mappából olvassa. Alapállapotban ki van kapcsolva.
+- `max_segments` (opció;  kapcsoló: `--max_segments`; alapértelmezés: nincs): A feldolgozható szegmensek számát korlátozza teszteléshez vagy gyors próbafutáshoz.
+- `overwrite` (kapcsoló;  kapcsoló: `--overwrite`; alapértelmezés: `false`): A már meglévő kimeneti fájlokat is újragenerálja vagy felülírja. Alapállapotban ki van kapcsolva.
+- `save_failures` (kapcsoló;  kapcsoló: `--save_failures`; alapértelmezés: `false`): Elmenti a sikertelen vagy elutasított generálásokat további elemzésre. A mentett WAV mellé transcript JSON is készül a visszaolvasott szöveggel és a szó szintű időbélyegekkel. Alapállapotban ki van kapcsolva.
+- `keep_best_over_tolerance` (kapcsoló;  kapcsoló: `--keep_best_over_tolerance`; alapértelmezés: `false`): Ha nincs teljesen megfelelő eredmény, megtartja a legjobb próbálkozást is. Alapállapotban ki van kapcsolva.
+- `max_workers` (opció;  kapcsoló: `--max_workers`; alapértelmezés: nincs): A párhuzamosan dolgozó munkafolyamatok maximális száma.
+- `debug` (kapcsoló;  kapcsoló: `--debug`; alapértelmezés: `false`): Részletes naplózást kapcsol be hibakereséshez. Alapállapotban ki van kapcsolva.
+
+## Megjegyzés
+A felületen a kapcsolók az alapértelmezett működési állapotot mutatják. Ha egy opció negatív CLI kapcsolóval működik, a webes jelölő ettől függetlenül a tényleges funkció állapotát jelzi.

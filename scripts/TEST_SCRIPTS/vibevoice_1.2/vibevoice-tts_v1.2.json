@@ -1,0 +1,274 @@
+{
+  "script": "TEST_SCRIPTS/vibevoice_1.2/vibevoice-tts_v1.2.py",
+  "description": "A VibeVoice modellt és opcionális LoRA adaptereket használva hozza létre a szinkron szegmenseket a fordított állományból, faster-whisper alapú szövegellenőrzéssel, szó szintű időbélyeges finom vágással, valamint opcionális pitch ellenőrzéssel.",
+  "required": [
+    {
+      "name": "project_name",
+      "type": "positional",
+      "default": null
+    },
+    {
+      "name": "norm",
+      "flags": [
+        "--norm"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "model_path",
+      "flags": [
+        "--model_path"
+      ],
+      "type": "option",
+      "default": "sarpba/VibeVoice-large-HUN"
+    },
+    {
+      "name": "model_dir",
+      "flags": [
+        "--model_dir"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "checkpoint_path",
+      "flags": [
+        "--checkpoint_path"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "device",
+      "flags": [
+        "--device"
+      ],
+      "type": "option",
+      "default": "auto"
+    },
+    {
+      "name": "cfg_scale",
+      "flags": [
+        "--cfg_scale"
+      ],
+      "type": "option",
+      "default": 1.3
+    },
+    {
+      "name": "disable_prefill",
+      "flags": [
+        "--disable_prefill"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "ddpm_steps",
+      "flags": [
+        "--ddpm_steps"
+      ],
+      "type": "option",
+      "default": 10
+    },
+    {
+      "name": "eq_config",
+      "flags": [
+        "--eq_config"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "normalize_ref_audio",
+      "flags": [
+        "--normalize_ref_audio"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "ref_audio_peak",
+      "flags": [
+        "--ref_audio_peak"
+      ],
+      "type": "option",
+      "default": 0.95
+    },
+    {
+      "name": "target_sample_rate",
+      "flags": [
+        "--target_sample_rate"
+      ],
+      "type": "option",
+      "default": 16000
+    },
+    {
+      "name": "speaker_name",
+      "flags": [
+        "--speaker_name"
+      ],
+      "type": "option",
+      "default": "Speaker 1"
+    },
+    {
+      "name": "max_retries",
+      "flags": [
+        "--max_retries"
+      ],
+      "type": "option",
+      "default": 5
+    },
+    {
+      "name": "enable_pitch_check",
+      "flags": [
+        "--enable_pitch_check"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "pitch_tolerance",
+      "flags": [
+        "--pitch_tolerance"
+      ],
+      "type": "option",
+      "default": 20.0
+    },
+    {
+      "name": "pitch_min_frequency",
+      "flags": [
+        "--pitch_min_frequency"
+      ],
+      "type": "option",
+      "default": 60.0
+    },
+    {
+      "name": "pitch_max_frequency",
+      "flags": [
+        "--pitch_max_frequency"
+      ],
+      "type": "option",
+      "default": 400.0
+    },
+    {
+      "name": "pitch_retry",
+      "flags": [
+        "--pitch_retry"
+      ],
+      "type": "option",
+      "default": 3
+    },
+    {
+      "name": "tolerance_factor",
+      "flags": [
+        "--tolerance_factor"
+      ],
+      "type": "option",
+      "default": 1.0
+    },
+    {
+      "name": "min_tolerance",
+      "flags": [
+        "--min_tolerance"
+      ],
+      "type": "option",
+      "default": 2
+    },
+    {
+      "name": "whisper_model",
+      "flags": [
+        "--whisper_model"
+      ],
+      "type": "option",
+      "default": "large-v3",
+      "description": "faster-whisper kompatibilis Whisper modellnév vagy CTranslate2 modellkönyvtár az ellenőrzéshez."
+    },
+    {
+      "name": "beam_size",
+      "flags": [
+        "--beam_size"
+      ],
+      "type": "option",
+      "default": 5
+    },
+    {
+      "name": "whisper_word_trim_padding",
+      "flags": [
+        "--whisper_word_trim_padding"
+      ],
+      "type": "option",
+      "default": 0.15,
+      "description": "Sikeres Whisper ellenőrzés után a szó szintű időbélyegek alapján ennyi ráhagyással vágja le a generált audió elejét és végét. A tényleges maximum 0.5 mp."
+    },
+    {
+      "name": "seed",
+      "flags": [
+        "--seed"
+      ],
+      "type": "option",
+      "default": -1
+    },
+    {
+      "name": "input_directory_override",
+      "flags": [
+        "--input_directory_override"
+      ],
+      "type": "flag",
+      "default": false,
+      "description": "A translated helyett a temp alkönyvtárból olvassa a forrás JSON-okat."
+    },
+    {
+      "name": "max_segments",
+      "flags": [
+        "--max_segments"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "overwrite",
+      "flags": [
+        "--overwrite"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "save_failures",
+      "flags": [
+        "--save_failures"
+      ],
+      "type": "flag",
+      "default": false,
+      "description": "Elmenti a sikertelen vagy elutasított generálásokat, és a WAV mellé transcript JSON-t is készít a visszaolvasott szöveggel és a szó szintű időbélyegekkel."
+    },
+    {
+      "name": "keep_best_over_tolerance",
+      "flags": [
+        "--keep_best_over_tolerance"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "max_workers",
+      "flags": [
+        "--max_workers"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ],
+  "environment": "vibevoice"
+}

@@ -4,7 +4,6 @@ import json
 import os
 import sys
 import glob
-import tempfile
 from pathlib import Path
 
 # Hozzáadja a 'tools' könyvtárat a Python útvonalhoz
@@ -39,22 +38,6 @@ def get_target_sample_rate(video_file):
     except Exception:
         return '48000'
 
-def process_audio_to_raw_aac(audio_wav_file, target_sample_rate):
-    fd, processed_audio_path = tempfile.mkstemp(prefix="processed_audio_", suffix=".aac")
-    os.close(fd)
-    try:
-        cmd = ['ffmpeg', '-y', '-i', audio_wav_file, '-c:a', 'aac', '-b:a', '128k', '-ar', str(target_sample_rate), '-ac', '2', processed_audio_path]
-        print("\n--- FFMPEG LOG START (Creating raw .aac) ---")
-        subprocess.run(cmd, check=True)
-        print("--- FFMPEG LOG END (Creating raw .aac) ---\n")
-        return processed_audio_path
-    except subprocess.CalledProcessError:
-        if os.path.exists(processed_audio_path):
-            os.remove(processed_audio_path)
-        print("Hiba az audió AAC formátumra alakítása során.")
-        sys.exit(1)
-
-
 def get_project_root() -> Path:
     """
     Felkeresi a projekt gyökerét a config.json alapján.
@@ -73,11 +56,24 @@ def get_stream_info(video_file):
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
     return json.loads(result.stdout)['streams']
 
-def merge_video_with_new_audio(video_file, streams, new_audio_file, language, output_file, include_original_audio=True):
-    """Az eredeti videó minden sávját megtartja, és új audiosávot fűz hozzá."""
+
+def get_container_specific_mux_options(output_file):
+    """Container-specifikus mux opciók a jobb lejátszó-kompatibilitásért."""
+    output_ext = Path(output_file).suffix.lower()
+    if output_ext in {'.mp4', '.m4v', '.mov'}:
+        return ['-movflags', '+faststart']
+    return []
+
+def merge_video_with_new_audio(video_file, streams, new_audio_file, language, output_file, target_sample_rate, include_original_audio=True):
+    """Az eredeti videó minden sávját megtartja, és új, kompatibilis AAC hangsávot fűz hozzá."""
     print("\n--- STARTING MUXING (Új audiosáv hozzáadása) ---")
 
-    cmd = ['ffmpeg', '-y', '-i', video_file, '-i', new_audio_file]
+    cmd = [
+        'ffmpeg', '-y',
+        '-fflags', '+genpts',
+        '-i', video_file,
+        '-i', new_audio_file,
+    ]
     cmd.extend(['-map_metadata', '0', '-map_chapters', '0'])
 
     if include_original_audio:
@@ -94,9 +90,21 @@ def merge_video_with_new_audio(video_file, streams, new_audio_file, language, ou
         for audio_index in range(original_audio_count):
             cmd.extend([f'-disposition:a:{audio_index}', '0'])
 
+    # A hozzáadott dub sávot újrakódoljuk stabil AAC-LC formátumba, tiszta kezdő PTS-sel.
+    cmd.extend([
+        f'-c:a:{original_audio_count}', 'aac',
+        f'-profile:a:{original_audio_count}', 'aac_low',
+        f'-b:a:{original_audio_count}', '192k',
+        f'-ar:a:{original_audio_count}', str(target_sample_rate),
+        f'-ac:a:{original_audio_count}', '2',
+        f'-filter:a:{original_audio_count}', 'aresample=async=1:first_pts=0',
+    ])
+
     cmd.extend([f'-metadata:s:a:{original_audio_count}', f'language={language}'])
     cmd.extend([f'-metadata:s:a:{original_audio_count}', f'title={language.upper()} dub'])
     cmd.extend([f'-disposition:a:{original_audio_count}', 'default+dub'])
+    cmd.extend(['-max_interleave_delta', '0', '-avoid_negative_ts', 'make_zero'])
+    cmd.extend(get_container_specific_mux_options(output_file))
     cmd.append(output_file)
 
     print(f"FFmpeg parancs futtatása:\n{' '.join(cmd)}")
@@ -159,24 +167,24 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     streams = get_stream_info(input_video)
-    processed_aac_path = None
-    try:
-        target_sample_rate = get_target_sample_rate(input_video)
-        processed_aac_path = process_audio_to_raw_aac(input_wav_audio, target_sample_rate)
-        
-        video_basename = os.path.basename(input_video)
-        video_name, video_ext = os.path.splitext(video_basename)
-        output_file = str(output_dir / f"{video_name}_with_{args.language}_dub{video_ext}")
-        
-        include_original_audio = not args.only_new_audio
-        merge_video_with_new_audio(input_video, streams, processed_aac_path, args.language, output_file, include_original_audio=include_original_audio)
-            
-        print(f"\nSikeres végrehajtás! A kimeneti fájl itt található: {output_file}")
+    target_sample_rate = get_target_sample_rate(input_video)
 
-    finally:
-        if processed_aac_path and os.path.exists(processed_aac_path):
-            os.remove(processed_aac_path)
-            print(f"Ideiglenes audiófájl törölve: {processed_aac_path}")
+    video_basename = os.path.basename(input_video)
+    video_name, video_ext = os.path.splitext(video_basename)
+    output_file = str(output_dir / f"{video_name}_with_{args.language}_dub{video_ext}")
+
+    include_original_audio = not args.only_new_audio
+    merge_video_with_new_audio(
+        input_video,
+        streams,
+        input_wav_audio,
+        args.language,
+        output_file,
+        target_sample_rate,
+        include_original_audio=include_original_audio,
+    )
+
+    print(f"\nSikeres végrehajtás! A kimeneti fájl itt található: {output_file}")
 
 if __name__ == "__main__":
     main()
