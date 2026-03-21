@@ -1,0 +1,266 @@
+{
+  "script": "TEST_SCRIPTS/audio_separator/audio_separator.json",
+  "description": "python-audio-separator alapú beszéd- és háttérsáv-szeparálás külön workflow-kkal.",
+  "required": [
+    {
+      "name": "project",
+      "flags": [
+        "-p",
+        "--project"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "speech_models",
+      "flags": [
+        "--speech_models"
+      ],
+      "type": "option",
+      "default": "htdemucs_ft.yaml,UVR-MDX-NET-Voc_FT.onnx"
+    },
+    {
+      "name": "speech_ensemble_algorithm",
+      "flags": [
+        "--speech_ensemble_algorithm"
+      ],
+      "type": "option",
+      "default": "avg_wave"
+    },
+    {
+      "name": "background_models",
+      "flags": [
+        "--background_models"
+      ],
+      "type": "option",
+      "default": "htdemucs_ft.yaml"
+    },
+    {
+      "name": "background_ensemble_algorithm",
+      "flags": [
+        "--background_ensemble_algorithm"
+      ],
+      "type": "option",
+      "default": "avg_wave"
+    },
+    {
+      "name": "background_blend",
+      "flags": [
+        "--background_blend"
+      ],
+      "type": "option",
+      "default": 0.2
+    },
+    {
+      "name": "non_speech_silence",
+      "flags": [
+        "--non_speech_silence"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "speech_acceleration",
+      "flags": [
+        "--speech_acceleration"
+      ],
+      "type": "option",
+      "default": "auto"
+    },
+    {
+      "name": "background_acceleration",
+      "flags": [
+        "--background_acceleration"
+      ],
+      "type": "option",
+      "default": "auto"
+    },
+    {
+      "name": "run_sequentially",
+      "flags": [
+        "--run_sequentially"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "model_file_dir",
+      "flags": [
+        "--model_file_dir"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "chunk_duration",
+      "flags": [
+        "--chunk_duration"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "sample_rate",
+      "flags": [
+        "--sample_rate"
+      ],
+      "type": "option",
+      "default": 44100
+    },
+    {
+      "name": "use_soundfile",
+      "flags": [
+        "--use_soundfile"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "use_autocast",
+      "flags": [
+        "--use_autocast"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "keep_intermediate_stems",
+      "flags": [
+        "--keep_intermediate_stems"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "mdx_segment_size",
+      "flags": [
+        "--mdx_segment_size"
+      ],
+      "type": "option",
+      "default": 256
+    },
+    {
+      "name": "mdx_overlap",
+      "flags": [
+        "--mdx_overlap"
+      ],
+      "type": "option",
+      "default": 0.25
+    },
+    {
+      "name": "mdx_batch_size",
+      "flags": [
+        "--mdx_batch_size"
+      ],
+      "type": "option",
+      "default": 1
+    },
+    {
+      "name": "mdx_enable_denoise",
+      "flags": [
+        "--mdx_enable_denoise"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "vr_batch_size",
+      "flags": [
+        "--vr_batch_size"
+      ],
+      "type": "option",
+      "default": 1
+    },
+    {
+      "name": "vr_window_size",
+      "flags": [
+        "--vr_window_size"
+      ],
+      "type": "option",
+      "default": 512
+    },
+    {
+      "name": "vr_aggression",
+      "flags": [
+        "--vr_aggression"
+      ],
+      "type": "option",
+      "default": 5
+    },
+    {
+      "name": "vr_enable_tta",
+      "flags": [
+        "--vr_enable_tta"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "demucs_segment_size",
+      "flags": [
+        "--demucs_segment_size"
+      ],
+      "type": "option",
+      "default": "Default"
+    },
+    {
+      "name": "demucs_shifts",
+      "flags": [
+        "--demucs_shifts"
+      ],
+      "type": "option",
+      "default": 2
+    },
+    {
+      "name": "demucs_overlap",
+      "flags": [
+        "--demucs_overlap"
+      ],
+      "type": "option",
+      "default": 0.25
+    },
+    {
+      "name": "no_demucs_segments",
+      "flags": [
+        "--no_demucs_segments"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "mdxc_segment_size",
+      "flags": [
+        "--mdxc_segment_size"
+      ],
+      "type": "option",
+      "default": 256
+    },
+    {
+      "name": "mdxc_overlap",
+      "flags": [
+        "--mdxc_overlap"
+      ],
+      "type": "option",
+      "default": 8
+    },
+    {
+      "name": "mdxc_batch_size",
+      "flags": [
+        "--mdxc_batch_size"
+      ],
+      "type": "option",
+      "default": 1
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ],
+  "environment": "demucs"
+}

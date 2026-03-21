@@ -1,0 +1,6 @@
+numpy
+soundfile
+torch
+torchaudio
+pyannote.audio
+huggingface_hub

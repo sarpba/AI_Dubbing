@@ -53,7 +53,7 @@ RUN conda create -n sync python=3.10 \
 RUN conda create -n demucs python=3.10 \
     && conda run -n demucs python -m pip install --upgrade pip \
     && conda run -n demucs python -m pip install torch==2.4.0+cu124 torchvision==0.19.0+cu124 torchaudio==2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124 \
-    && conda run -n demucs python -m pip install demucs numpy soundfile
+    && conda run -n demucs python -m pip install demucs numpy soundfile "audio-separator[gpu]"
 
 # --- f5-tts environment ---
 # CUDA-enabled PyTorch wheels by default; override if you need a different CUDA build.

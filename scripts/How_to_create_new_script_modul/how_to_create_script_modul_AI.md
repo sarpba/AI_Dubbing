@@ -484,3 +484,5 @@ Ha gyorsan kell eldönteni, hogy egy új script "keretrendszer-kompatibilis-e", 
 - ha kell API kulcs, a backend mapping is frissült
 
 Ha ez mind teljesül, az új modul nagy valószínűséggel elsőre beilleszthető lesz.
+
+Tegyél fel pontosító kérdéseket addig, amíg legalább 95%-ban biztos nem vagy benne, hogy sikeresen el tudod végezni a feladatot.
