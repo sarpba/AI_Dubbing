@@ -76,8 +76,16 @@ def find_project_root() -> Path:
 
 PROJECT_ROOT = find_project_root()
 DEFAULT_EQ_CONFIG_PATH = PROJECT_ROOT / "scripts" / "TTS" / "EQ.json"
-NORMALIZER_TO_WHISPER_LANG = {"hun": "hu", "eng": "en"}
-WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
+WHISPER_LANGUAGE_ALIASES = {
+    "hu": "hu",
+    "hun": "hu",
+    "hungarian": "hu",
+    "magyar": "hu",
+    "en": "en",
+    "eng": "en",
+    "english": "en",
+    "angol": "en",
+}
 
 
 @dataclass(frozen=True)
@@ -525,8 +533,8 @@ def normalize_text_for_comparison(text: str) -> str:
     return text
 
 
-def convert_numbers_to_words(text: str, lang: str) -> str:
-    if num2words is None:
+def convert_numbers_to_words(text: str, lang: Optional[str]) -> str:
+    if num2words is None or not lang:
         return text
 
     def replace_match(match: re.Match[str]) -> str:
@@ -536,6 +544,13 @@ def convert_numbers_to_words(text: str, lang: str) -> str:
             return match.group(0)
 
     return re.sub(r"\b\d+\b", replace_match, text)
+
+
+def normalize_whisper_language(language: str) -> str:
+    normalized = (language or "").strip().lower()
+    if not normalized:
+        raise ValueError("A --whisper_language paraméter nem lehet üres.")
+    return WHISPER_LANGUAGE_ALIASES.get(normalized, normalized)
 
 
 def extract_words_from_faster_whisper_segments(segments) -> List[WhisperWordTimestamp]:
@@ -840,28 +855,23 @@ def resolve_faster_whisper_runtime(device: str) -> Tuple[str, object, str]:
 def create_transcriber(
     args: argparse.Namespace,
     device: str,
-) -> Tuple[Optional[Callable[[str], TranscriptionResult]], Optional[str]]:
-    if args.seed != -1:
-        return None, None
+) -> Optional[Callable[[str], TranscriptionResult]]:
+    if not args.enable_whisper_check:
+        return None
 
     if levenshtein_distance is None:
         logger.error("Verification requires the 'python-Levenshtein' package.")
-        return None, None
+        return None
     if num2words is None:
         logger.error("Verification requires the 'num2words' package.")
-        return None, None
-
-    whisper_language = NORMALIZER_TO_WHISPER_LANG.get(args.norm.lower())
-    if not whisper_language:
-        logger.error("No Whisper language mapping found for normalizer '%s'.", args.norm)
-        return None, None
+        return None
 
     if WhisperModel is None:
         logger.error(
             "A faster-whisper csomag nem érhető el, nem tölthető be az ASR modell: '%s'.",
             args.whisper_model,
         )
-        return None, None
+        return None
 
     fw_device, fw_device_index, fw_compute_type = resolve_faster_whisper_runtime(device)
     logger.info(
@@ -883,7 +893,7 @@ def create_transcriber(
         with suppress_external_output(not args.debug):
             segments_iter, _info = transcriber.transcribe(
                 audio_path,
-                language=whisper_language,
+                language=normalize_whisper_language(args.whisper_language),
                 beam_size=args.beam_size,
                 word_timestamps=True,
             )
@@ -893,7 +903,7 @@ def create_transcriber(
             words=extract_words_from_faster_whisper_segments(segments),
         )
 
-    return run, whisper_language
+    return run
 def parse_arguments() -> argparse.Namespace:
     default_device = "cuda" if torch.cuda.is_available() else "cpu"
     parser = argparse.ArgumentParser(
@@ -905,6 +915,17 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         required=True,
         help="Normalizálási profil azonosító (pl. 'hun', 'eng').",
+    )
+    parser.add_argument(
+        "--enable_whisper_check",
+        action="store_true",
+        help="Whisper alapú szövegellenőrzés bekapcsolása a generálás utáni verifikációhoz.",
+    )
+    parser.add_argument(
+        "--whisper_language",
+        type=str,
+        default=None,
+        help="Whisper nyelv az ellenőrzéshez, pl. 'hu', 'en', 'hungarian', 'english'.",
     )
     parser.add_argument(
         "--model_path",
@@ -980,7 +1001,7 @@ def parse_arguments() -> argparse.Namespace:
         "--seed",
         type=int,
         default=-1,
-        help="Véletlenszám-generátor magja (-1 esetén véletlen és Whisper ellenőrzés).",
+        help="Véletlenszám-generátor magja (-1 esetén véletlen érték).",
     )
     parser.add_argument(
         "--max_retries",
@@ -1080,7 +1101,10 @@ def parse_arguments() -> argparse.Namespace:
         help="Párhuzamos GPU workerek maximális száma.",
     )
     add_debug_argument(parser)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.enable_whisper_check and not args.whisper_language:
+        parser.error("A --whisper_language megadása kötelező, ha az --enable_whisper_check aktív.")
+    return args
 
 
 def resolve_device(device: str) -> str:
@@ -1283,7 +1307,6 @@ def process_segment(
     model: VibeVoiceForConditionalGenerationInference,
     eq_config: Optional[Dict[str, object]],
     transcribe_fn: Optional[Callable[[str], TranscriptionResult]],
-    whisper_language: Optional[str],
     normalize_fn: Optional[Callable[[str], str]],
     device: str,
     worker_label: str,
@@ -1415,7 +1438,7 @@ def process_segment(
                     raw_transcribed = transcription_result.text
                     converted_transcribed = convert_numbers_to_words(
                         raw_transcribed,
-                        lang=whisper_language or "",
+                        lang=normalize_whisper_language(args.whisper_language),
                     )
                     normalized_transcribed = normalize_text_for_comparison(converted_transcribed)
                     final_tolerance = compute_tolerance(
@@ -1690,8 +1713,8 @@ def run_segments_on_device(
         return
 
     set_random_seeds(args.seed, device)
-    transcribe_fn, whisper_language = create_transcriber(args, device)
-    if args.seed == -1 and transcribe_fn is None:
+    transcribe_fn = create_transcriber(args, device)
+    if args.enable_whisper_check and transcribe_fn is None:
         logger.error("%s: Whisper alapú ellenőrzés szükséges, de nem betölthető.", worker_label)
         return
 
@@ -1720,7 +1743,6 @@ def run_segments_on_device(
             model=model,
             eq_config=eq_config,
             transcribe_fn=transcribe_fn,
-            whisper_language=whisper_language,
             normalize_fn=normalize_fn,
             device=device,
             worker_label=worker_label,

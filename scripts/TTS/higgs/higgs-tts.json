@@ -1,0 +1,223 @@
+{
+  "environment": "higgs-tts-gradio",
+  "script": "TTS/higgs/higgs-tts.py",
+  "description": "A Higgs TTS 3 modellt használva hozza létre a szinkron szegmenseket, automatikus rövid referenciahang-bővítéssel a stabilabb voice cloning érdekében.",
+  "required": [
+    {
+      "name": "project_name",
+      "type": "positional",
+      "default": null
+    },
+    {
+      "name": "norm",
+      "flags": [
+        "--norm"
+      ],
+      "type": "option",
+      "default": null
+    }
+  ],
+  "optional": [
+    {
+      "name": "model_path",
+      "flags": [
+        "--model_path"
+      ],
+      "type": "option",
+      "default": "bosonai/higgs-tts-3-4b"
+    },
+    {
+      "name": "model_dir",
+      "flags": [
+        "--model_dir"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "device",
+      "flags": [
+        "--device"
+      ],
+      "type": "option",
+      "default": "auto"
+    },
+    {
+      "name": "temperature",
+      "flags": [
+        "--temperature"
+      ],
+      "type": "option",
+      "default": 0.8
+    },
+    {
+      "name": "top_p",
+      "flags": [
+        "--top_p"
+      ],
+      "type": "option",
+      "default": 0.95
+    },
+    {
+      "name": "top_k",
+      "flags": [
+        "--top_k"
+      ],
+      "type": "option",
+      "default": 50
+    },
+    {
+      "name": "max_new_tokens",
+      "flags": [
+        "--max_new_tokens"
+      ],
+      "type": "option",
+      "default": 1024
+    },
+    {
+      "name": "seed",
+      "flags": [
+        "--seed"
+      ],
+      "type": "option",
+      "default": -1
+    },
+    {
+      "name": "eq_config",
+      "flags": [
+        "--eq_config"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "normalize_ref_audio",
+      "flags": [
+        "--normalize_ref_audio"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "ref_audio_peak",
+      "flags": [
+        "--ref_audio_peak"
+      ],
+      "type": "option",
+      "default": 0.95
+    },
+    {
+      "name": "disable_short_ref_expansion",
+      "flags": [
+        "--disable_short_ref_expansion"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "short_ref_threshold",
+      "flags": [
+        "--short_ref_threshold"
+      ],
+      "type": "option",
+      "default": 2.0
+    },
+    {
+      "name": "short_ref_target_seconds",
+      "flags": [
+        "--short_ref_target_seconds"
+      ],
+      "type": "option",
+      "default": 4.0
+    },
+    {
+      "name": "emotion",
+      "flags": [
+        "--emotion"
+      ],
+      "type": "option",
+      "default": "none"
+    },
+    {
+      "name": "style",
+      "flags": [
+        "--style"
+      ],
+      "type": "option",
+      "default": ""
+    },
+    {
+      "name": "speed",
+      "flags": [
+        "--speed"
+      ],
+      "type": "option",
+      "default": "none"
+    },
+    {
+      "name": "pitch",
+      "flags": [
+        "--pitch"
+      ],
+      "type": "option",
+      "default": "none"
+    },
+    {
+      "name": "expressive",
+      "flags": [
+        "--expressive"
+      ],
+      "type": "option",
+      "default": "none"
+    },
+    {
+      "name": "manual_prefix",
+      "flags": [
+        "--manual_prefix"
+      ],
+      "type": "option",
+      "default": ""
+    },
+    {
+      "name": "raw_json",
+      "flags": [
+        "--raw_json"
+      ],
+      "type": "option",
+      "default": ""
+    },
+    {
+      "name": "input_directory_override",
+      "flags": [
+        "--input_directory_override"
+      ],
+      "type": "flag",
+      "default": false,
+      "description": "A translated helyett a temp alkönyvtárból olvassa a forrás JSON-okat."
+    },
+    {
+      "name": "max_segments",
+      "flags": [
+        "--max_segments"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "overwrite",
+      "flags": [
+        "--overwrite"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "debug",
+      "flags": [
+        "--debug"
+      ],
+      "type": "flag",
+      "default": false
+    }
+  ]
+}

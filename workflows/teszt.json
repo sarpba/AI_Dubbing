@@ -64,7 +64,9 @@
         "norm": "hun",
         "save_failures": true,
         "whisper_model": "Systran/faster-whisper-large-v3",
-        "whisper_word_trim_padding": "0.2"
+        "whisper_word_trim_padding": "0.2",
+        "whisper_language": "hu",
+        "enable_whisper_check": true
       }
     },
     {
@@ -82,7 +84,9 @@
       "params": {
         "enable_pitch_check": true,
         "norm": "hun",
-        "save_failures": true
+        "save_failures": true,
+        "whisper_language": "hu",
+        "enable_whisper_check": true
       }
     },
     {

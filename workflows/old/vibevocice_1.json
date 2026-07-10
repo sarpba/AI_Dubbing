@@ -46,7 +46,9 @@
       "params": {
         "norm": "hun",
         "enable_pitch_check": true,
-        "save_failures": true
+        "save_failures": true,
+        "whisper_language": "hu",
+        "enable_whisper_check": true
       }
     },
     {

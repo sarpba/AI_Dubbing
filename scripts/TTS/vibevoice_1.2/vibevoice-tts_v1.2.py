@@ -80,8 +80,20 @@ def find_project_root() -> Path:
 
 PROJECT_ROOT = find_project_root()
 DEFAULT_EQ_CONFIG_PATH = PROJECT_ROOT / "scripts" / "TTS" / "EQ.json"
-NORMALIZER_TO_WHISPER_LANG = {"hun": "hu", "eng": "en"}
-WHISPER_LANG_CODE_TO_NAME = {"hu": "hungarian", "en": "english"}
+WHISPER_LANGUAGE_ALIASES = {
+    "hu": "hu",
+    "hun": "hu",
+    "hungarian": "hu",
+    "magyar": "hu",
+    "en": "en",
+    "eng": "en",
+    "english": "en",
+    "angol": "en",
+}
+WHISPER_LANGUAGE_NAMES = {
+    "hu": "hungarian",
+    "en": "english",
+}
 
 
 @dataclass(frozen=True)
@@ -516,8 +528,8 @@ def normalize_text_for_comparison(text: str) -> str:
     return text
 
 
-def convert_numbers_to_words(text: str, lang: str) -> str:
-    if num2words is None:
+def convert_numbers_to_words(text: str, lang: Optional[str]) -> str:
+    if num2words is None or not lang:
         return text
 
     def replace_match(match: re.Match[str]) -> str:
@@ -527,6 +539,18 @@ def convert_numbers_to_words(text: str, lang: str) -> str:
             return match.group(0)
 
     return re.sub(r"\b\d+\b", replace_match, text)
+
+
+def normalize_whisper_language(language: str) -> str:
+    normalized = (language or "").strip().lower()
+    if not normalized:
+        raise ValueError("A --whisper_language paraméter nem lehet üres.")
+    return WHISPER_LANGUAGE_ALIASES.get(normalized, normalized)
+
+
+def get_transformers_whisper_language(language: str) -> str:
+    normalized = normalize_whisper_language(language)
+    return WHISPER_LANGUAGE_NAMES.get(normalized, normalized)
 
 
 def load_normalizer(normaliser_path: Path) -> Optional[Callable[[str], str]]:
@@ -731,21 +755,16 @@ def save_failed_attempt(
         logger.error("Failed to save debug information for %s: %s", filename_stem, exc, exc_info=True)
 
 
-def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[Callable[[str], str]], Optional[str]]:
-    if args.seed != -1:
-        return None, None
+def create_transcriber(args: argparse.Namespace, device: str) -> Optional[Callable[[str], str]]:
+    if not args.enable_whisper_check:
+        return None
 
     if levenshtein_distance is None:
         logger.error("Verification requires the 'python-Levenshtein' package.")
-        return None, None
+        return None
     if num2words is None:
         logger.error("Verification requires the 'num2words' package.")
-        return None, None
-
-    whisper_language = NORMALIZER_TO_WHISPER_LANG.get(args.norm.lower())
-    if not whisper_language:
-        logger.error("No Whisper language mapping found for normalizer '%s'.", args.norm)
-        return None, None
+        return None
 
     is_hf_model = "/" in args.whisper_model
     if is_hf_model:
@@ -754,7 +773,7 @@ def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[
                 "transformers.pipeline is unavailable, cannot load Hugging Face ASR model '%s'.",
                 args.whisper_model,
             )
-            return None, None
+            return None
 
         device_for_pipeline = device
         if device_for_pipeline.startswith("cuda"):
@@ -770,7 +789,7 @@ def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[
 
         def run(audio_path: str) -> str:
             generate_kwargs = {
-                "language": WHISPER_LANG_CODE_TO_NAME.get(whisper_language),
+                "language": get_transformers_whisper_language(args.whisper_language),
                 "num_beams": args.beam_size,
             }
             with suppress_external_output(not args.debug):
@@ -779,11 +798,11 @@ def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[
                 return output.get("text", "")
             return str(output)
 
-        return run, whisper_language
+        return run
 
     if whisper is None:
         logger.error("openai-whisper is unavailable, cannot load model '%s'.", args.whisper_model)
-        return None, None
+        return None
 
     model_name = args.whisper_model.replace("openai/", "")
     with suppress_external_output(not args.debug):
@@ -793,13 +812,13 @@ def create_transcriber(args: argparse.Namespace, device: str) -> Tuple[Optional[
         with suppress_external_output(not args.debug):
             result = transcriber.transcribe(
                 audio_path,
-                language=whisper_language,
+                language=normalize_whisper_language(args.whisper_language),
                 fp16=torch.cuda.is_available(),
                 beam_size=args.beam_size,
             )
         return result.get("text", "")
 
-    return run, whisper_language
+    return run
 def parse_arguments() -> argparse.Namespace:
     default_device = "cuda" if torch.cuda.is_available() else "cpu"
     parser = argparse.ArgumentParser(
@@ -811,6 +830,17 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         required=True,
         help="Normalizálási profil azonosító (pl. 'hun', 'eng').",
+    )
+    parser.add_argument(
+        "--enable_whisper_check",
+        action="store_true",
+        help="Whisper alapú szövegellenőrzés bekapcsolása a generálás utáni verifikációhoz.",
+    )
+    parser.add_argument(
+        "--whisper_language",
+        type=str,
+        default=None,
+        help="Whisper nyelv az ellenőrzéshez, pl. 'hu', 'en', 'hungarian', 'english'.",
     )
     parser.add_argument(
         "--model_path",
@@ -886,7 +916,7 @@ def parse_arguments() -> argparse.Namespace:
         "--seed",
         type=int,
         default=-1,
-        help="Véletlenszám-generátor magja (-1 esetén véletlen és Whisper ellenőrzés).",
+        help="Véletlenszám-generátor magja (-1 esetén véletlen érték).",
     )
     parser.add_argument(
         "--max_retries",
@@ -980,7 +1010,10 @@ def parse_arguments() -> argparse.Namespace:
         help="Párhuzamos GPU workerek maximális száma.",
     )
     add_debug_argument(parser)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.enable_whisper_check and not args.whisper_language:
+        parser.error("A --whisper_language megadása kötelező, ha az --enable_whisper_check aktív.")
+    return args
 
 
 def resolve_device(device: str) -> str:
@@ -1139,8 +1172,8 @@ def ensure_script_format(text: str, speaker_label: str) -> str:
     if not stripped:
         return stripped
 
-    first_line = stripped.splitlines()[0]
-    if ":" in first_line:
+    non_empty_lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    if non_empty_lines and all(re.match(r"^Speaker\s+\d+\s*:", line, re.IGNORECASE) for line in non_empty_lines):
         return stripped
     return f"{speaker_label}: {stripped}"
 
@@ -1183,7 +1216,6 @@ def process_segment(
     model: VibeVoiceForConditionalGenerationInference,
     eq_config: Optional[Dict[str, object]],
     transcribe_fn: Optional[Callable[[str], str]],
-    whisper_language: Optional[str],
     normalize_fn: Optional[Callable[[str], str]],
     device: str,
     worker_label: str,
@@ -1235,12 +1267,16 @@ def process_segment(
     try:
         sf.write(temp_ref_path, ref_chunk, ref_sample_rate)
 
-        inputs = prepare_inputs(
-            processor=processor,
-            text=formatted_text,
-            voice_sample_paths=[temp_ref_path],
-            device=device,
-        )
+        try:
+            inputs = prepare_inputs(
+                processor=processor,
+                text=formatted_text,
+                voice_sample_paths=[temp_ref_path],
+                device=device,
+            )
+        except ValueError as exc:
+            logger.error("Szkript előfeldolgozás sikertelen '%s' szegmensnél: %s | text=%r", filename, exc, formatted_text)
+            return SegmentProcessResult(success=False, error_message=f"Szkript előfeldolgozási hiba: {exc}")
 
         transcribe_enabled = transcribe_fn is not None
         normalized_original = normalize_text_for_comparison(gen_text) if transcribe_enabled else ""
@@ -1313,7 +1349,7 @@ def process_segment(
                     raw_transcribed = transcribe_fn(temp_gen_path)
                     converted_transcribed = convert_numbers_to_words(
                         raw_transcribed,
-                        lang=whisper_language or "",
+                        lang=normalize_whisper_language(args.whisper_language),
                     )
                     normalized_transcribed = normalize_text_for_comparison(converted_transcribed)
                     final_tolerance = compute_tolerance(
@@ -1566,8 +1602,8 @@ def run_segments_on_device(
         return
 
     set_random_seeds(args.seed, device)
-    transcribe_fn, whisper_language = create_transcriber(args, device)
-    if args.seed == -1 and transcribe_fn is None:
+    transcribe_fn = create_transcriber(args, device)
+    if args.enable_whisper_check and transcribe_fn is None:
         logger.error("%s: Whisper alapú ellenőrzés szükséges, de nem betölthető.", worker_label)
         return
 
@@ -1596,7 +1632,6 @@ def run_segments_on_device(
             model=model,
             eq_config=eq_config,
             transcribe_fn=transcribe_fn,
-            whisper_language=whisper_language,
             normalize_fn=normalize_fn,
             device=device,
             worker_label=worker_label,

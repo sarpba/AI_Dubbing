@@ -74,7 +74,9 @@
         "cfg_scale": "3",
         "model_path": "/home/sarpba/VibeVoice/teszt_out",
         "norm": "hun",
-        "save_failures": true
+        "save_failures": true,
+        "whisper_language": "hu",
+        "enable_whisper_check": true
       }
     },
     {

@@ -19,7 +19,7 @@
         "--max-pause"
       ],
       "type": "option",
-      "default": 0.8
+      "default": 0.3
     },
     {
       "name": "timestamp_padding",
@@ -46,17 +46,9 @@
       "default": false
     },
     {
-      "name": "backup",
+      "name": "backup_disable",
       "flags": [
-        "--backup"
-      ],
-      "type": "flag",
-      "default": true
-    },
-    {
-      "name": "no_backup",
-      "flags": [
-        "--no-backup"
+        "--backup_disable"
       ],
       "type": "flag",
       "default": false
@@ -73,6 +65,62 @@
       "name": "word_by_word_segments",
       "flags": [
         "--word-by-word-segments"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "detect_speaker_changes",
+      "flags": [
+        "--detect-speaker-changes"
+      ],
+      "type": "flag",
+      "default": false
+    },
+    {
+      "name": "hf_token",
+      "flags": [
+        "--hf-token"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "speaker_change_preset",
+      "flags": [
+        "--speaker-change-preset"
+      ],
+      "type": "option",
+      "default": "balanced"
+    },
+    {
+      "name": "speaker_change_device",
+      "flags": [
+        "--speaker-change-device"
+      ],
+      "type": "option",
+      "default": "cuda"
+    },
+    {
+      "name": "speaker_change_max_speakers",
+      "flags": [
+        "--speaker-change-max-speakers"
+      ],
+      "type": "option",
+      "default": 50
+    },
+    {
+      "name": "speaker_change_min_region",
+      "flags": [
+        "--speaker-change-min-region"
+      ],
+      "type": "option",
+      "default": null
+    },
+    {
+      "name": "speaker_change_no_refine",
+      "flags": [
+        "--speaker-change-no-refine"
       ],
       "type": "flag",
       "default": false

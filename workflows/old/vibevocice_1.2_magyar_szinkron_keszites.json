@@ -44,7 +44,9 @@
       "enabled": true,
       "halt_on_fail": true,
       "params": {
-        "norm": "hun"
+        "norm": "hun",
+        "whisper_language": "hu",
+        "enable_whisper_check": true
       }
     },
     {

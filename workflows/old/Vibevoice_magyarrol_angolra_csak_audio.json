@@ -42,7 +42,9 @@
         "device": "cuda",
         "model_path": "vibevoice/VibeVoice-7B",
         "norm": "eng",
-        "speaker_name": "Speaker 1"
+        "speaker_name": "Speaker 1",
+        "whisper_language": "en",
+        "enable_whisper_check": true
       }
     },
     {

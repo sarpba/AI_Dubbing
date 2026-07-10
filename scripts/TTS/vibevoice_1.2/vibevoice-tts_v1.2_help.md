@@ -10,9 +10,11 @@ A script a lefordított szegmensekből generál szinkronhangot, és a létrejöt
 
 ## Kötelező paraméterek
 - `project_name` (pozicionális;  kapcsoló: pozicionális; alapértelmezés: nincs): A feldolgozandó projekt neve a `workdir` alatt.
-- `norm` (opció;  kapcsoló: `--norm`; alapértelmezés: nincs): A használt normalizálási profil neve. Ez határozza meg a szöveg-előkészítés nyelvi szabályait.
+- `norm` (opció;  kapcsoló: `--norm`; alapértelmezés: nincs): A használt normalizálási profil neve. Ez csak a normalizálót választja ki a szöveg-előkészítéshez.
 
 ## Opcionális paraméterek
+- `enable_whisper_check` (kapcsoló;  kapcsoló: `--enable_whisper_check`; alapértelmezés: `false`): Bekapcsolja a Whisper alapú utóellenőrzést. Ha aktív, a `whisper_language` megadása kötelező. Alapállapotban ki van kapcsolva.
+- `whisper_language` (opció;  kapcsoló: `--whisper_language`; alapértelmezés: nincs): A Whisper ellenőrzés nyelve, külön a normalizálótól. Példák: `hu`, `en`, `hungarian`, `english`. Csak `enable_whisper_check` mellett kötelező.
 - `model_path` (opció;  kapcsoló: `--model_path`; alapértelmezés: `sarpba/VibeVoice-large-HUN`): A betöltendő modell Hugging Face azonosítója vagy lokális útvonala.
 - `model_dir` (opció;  kapcsoló: `--model_dir`; alapértelmezés: nincs): Lokális modellkönyvtár. Ha meg van adva, a script ezt részesíti előnyben a távoli modellazonosítóval szemben.
 - `checkpoint_path` (opció;  kapcsoló: `--checkpoint_path`; alapértelmezés: nincs): Opcionális checkpoint vagy adapter fájl, amelyet a script az alapmodell fölé tölt be.

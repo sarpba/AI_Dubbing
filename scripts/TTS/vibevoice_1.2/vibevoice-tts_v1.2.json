@@ -18,6 +18,24 @@
   ],
   "optional": [
     {
+      "name": "enable_whisper_check",
+      "flags": [
+        "--enable_whisper_check"
+      ],
+      "type": "flag",
+      "default": false,
+      "description": "Bekapcsolja a Whisper alapú szövegellenőrzést. Ha aktív, a whisper_language megadása kötelező."
+    },
+    {
+      "name": "whisper_language",
+      "flags": [
+        "--whisper_language"
+      ],
+      "type": "option",
+      "default": null,
+      "description": "A Whisper ellenőrzés nyelve, külön megadva a normalizálótól. Csak enable_whisper_check mellett kötelező."
+    },
+    {
       "name": "model_path",
       "flags": [
         "--model_path"
